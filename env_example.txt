@@ -1,0 +1,37 @@
+# =========================================
+#  CONFIGURACAO DE AMBIENTE
+#  Exemplo - NAO inclua senhas reais aqui!
+# =========================================
+
+# Banco de Dados
+# Para SQLite local (desenvolvimento):
+DB_URL=
+
+# Para PostgreSQL no VPS (producao):
+# DB_URL=postgresql://postgres:SUA_SENHA@db:5432/clinica
+
+# Senha do PostgreSQL (apenas para Docker)
+# POSTGRES_PASSWORD=SUA_SENHA_AQUI
+
+# =========================================
+#  GOOGLE FORMS (Sincronizacao de Clientes)
+# =========================================
+GOOGLE_CREDENTIALS_PATH=service_account.json
+GOOGLE_FORM_LINK=https://forms.gle/mBuxyP37Ysk5KtMHA
+
+# =========================================
+#  SEGURANCA
+# =========================================
+SECRET_KEY=troque-por-uma-chave-segura-aleatoria
+
+# =========================================
+#  IDENTIDADE DO SISTEMA
+# =========================================
+APP_NAME=Gabriela Franco Saude Integrativa
+
+# =========================================
+#  CORES DO SISTEMA
+# =========================================
+PALETA_ROSA="#D59C9C"
+PALETA_ROSA_CLARO="#E2B3A5"
+PALETA_BRANCO="#FFFFFF"

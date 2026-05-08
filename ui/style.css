@@ -1,0 +1,520 @@
+/* =============================================
+   GABRIELA FRANCO SAÚDE INTEGRATIVA
+   Cores extraídas do logo oficial:
+     Fundo logo:  #e0dbd8  →  bg do sistema
+     Marrom:      #D59C9C  →  accent principal
+     Rosê:        #E2B3A5  →  accent secundário
+   ============================================= */
+
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600;700&family=DM+Sans:wght@300;400;500;600&display=swap');
+
+:root {
+    --bg:        #fdf8f7;
+    --sidebar:   #fff0ee;
+    --accent:    #D59C9C;
+    --accent2:   #E2B3A5;
+    --accent-dk: #b87575;
+    --white:     #ffffff;
+    --card:      #fff5f3;
+    --card2:     #ffffff;
+    --text:      #4a3030;
+    --muted:     #9e7575;
+    --border:    #f0d5ce;
+    --shadow:    rgba(213,156,156,0.18);
+    --shadow2:   rgba(213,156,156,0.08);
+    --radius:    14px;
+    --radius-sm: 8px;
+    --font-body: 'DM Sans', sans-serif;
+    --font-head: 'Cormorant Garamond', serif;
+}
+
+/* ── GLOBAL ── */
+html, body, [data-testid="stAppViewContainer"], .main {
+    background-color: var(--bg) !important;
+    font-family: var(--font-body) !important;
+    color: var(--text) !important;
+}
+
+/* ── HIDE STREAMLIT DEFAULT HEADER / FOOTER / MENU ── */
+[data-testid="stHeader"] { display: none !important; }
+[data-testid="stToolbar"] { display: none !important; }
+footer { visibility: hidden !important; }
+#MainMenu { visibility: hidden !important; }
+
+/* ── MAIN BLOCK CONTAINER ── */
+.block-container {
+    padding: 1.5rem 2rem 2rem 2rem !important;
+    max-width: 1400px !important;
+}
+
+/* ── SIDEBAR ── */
+[data-testid="stSidebar"] {
+    background: var(--sidebar) !important;
+    border-right: 1px solid var(--border) !important;
+    box-shadow: 2px 0 18px var(--shadow2) !important;
+}
+
+[data-testid="stSidebar"] > div:first-child {
+    padding: 0 !important;
+}
+
+section[data-testid="stSidebar"] .block-container {
+    padding: 0 !important;
+}
+
+/* ── SIDEBAR NAV RADIO (hidden, replaced by buttons) ── */
+[data-testid="stSidebar"] .stRadio { display: none !important; }
+
+/* ── SIDEBAR MENU BUTTONS ── */
+[data-testid="stSidebar"] .stButton > button {
+    width: 100% !important;
+    text-align: left !important;
+    background: transparent !important;
+    border: none !important;
+    border-radius: var(--radius-sm) !important;
+    color: var(--text) !important;
+    font-family: var(--font-body) !important;
+    font-size: 0.88rem !important;
+    font-weight: 500 !important;
+    padding: 0.6rem 1rem !important;
+    margin: 0.15rem 0 !important;
+    cursor: pointer !important;
+    transition: background 0.18s, color 0.18s, box-shadow 0.18s !important;
+    box-shadow: none !important;
+}
+
+[data-testid="stSidebar"] .stButton > button:hover {
+    background: rgba(155,126,105,0.18) !important;
+    color: var(--accent-dk) !important;
+    box-shadow: 0 2px 8px var(--shadow) !important;
+}
+
+[data-testid="stSidebar"] .stButton > button[kind="primary"] {
+    background: var(--accent) !important;
+    color: var(--white) !important;
+    box-shadow: 0 3px 12px var(--shadow) !important;
+}
+
+[data-testid="stSidebar"] .stButton > button[kind="primary"]:hover {
+    background: var(--accent-dk) !important;
+    color: var(--white) !important;
+}
+
+[data-testid="stSidebar"] hr {
+    border-color: var(--border) !important;
+    margin: 0.5rem 0 !important;
+}
+
+[data-testid="stSidebar"] .stCaption {
+    color: var(--muted) !important;
+    font-size: 0.78rem !important;
+}
+
+/* ── METRIC CARDS ── */
+[data-testid="stMetric"] {
+    background: var(--card2) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: var(--radius) !important;
+    padding: 1.1rem 1.2rem !important;
+    box-shadow: 0 2px 12px var(--shadow2) !important;
+    transition: box-shadow 0.2s !important;
+}
+
+[data-testid="stMetric"]:hover {
+    box-shadow: 0 6px 20px var(--shadow) !important;
+}
+
+[data-testid="stMetricLabel"] {
+    color: var(--muted) !important;
+    font-family: var(--font-body) !important;
+    font-size: 0.78rem !important;
+    font-weight: 600 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.04em !important;
+}
+
+[data-testid="stMetricValue"] {
+    color: var(--accent) !important;
+    font-family: var(--font-head) !important;
+    font-size: 2rem !important;
+    font-weight: 700 !important;
+}
+
+[data-testid="stMetricDelta"] {
+    color: var(--accent2) !important;
+    font-size: 0.8rem !important;
+}
+
+/* ── GENERAL BUTTONS ── */
+.stButton > button {
+    background: var(--accent) !important;
+    color: var(--white) !important;
+    border: none !important;
+    border-radius: var(--radius-sm) !important;
+    font-family: var(--font-body) !important;
+    font-size: 0.87rem !important;
+    font-weight: 500 !important;
+    padding: 0.5rem 1.2rem !important;
+    transition: background 0.18s, box-shadow 0.18s, transform 0.1s !important;
+    box-shadow: 0 2px 8px var(--shadow) !important;
+    cursor: pointer !important;
+}
+
+.stButton > button:hover {
+    background: var(--accent-dk) !important;
+    box-shadow: 0 4px 16px var(--shadow) !important;
+    transform: translateY(-1px) !important;
+}
+
+.stButton > button:active {
+    transform: translateY(0) !important;
+}
+
+.stButton > button[kind="secondary"] {
+    background: var(--card) !important;
+    color: var(--accent) !important;
+    border: 1px solid var(--accent2) !important;
+    box-shadow: none !important;
+}
+
+.stButton > button[kind="secondary"]:hover {
+    background: var(--accent) !important;
+    color: var(--white) !important;
+}
+
+/* ── INPUTS / TEXTBOX ── */
+div[data-baseweb="input"] input,
+div[data-baseweb="base-input"] input,
+div[data-baseweb="textarea"] textarea {
+    background: var(--white) !important;
+    border: 1.5px solid var(--border) !important;
+    border-radius: var(--radius-sm) !important;
+    color: var(--text) !important;
+    font-family: var(--font-body) !important;
+    font-size: 0.88rem !important;
+    transition: border-color 0.18s, box-shadow 0.18s !important;
+}
+
+div[data-baseweb="input"] input:focus,
+div[data-baseweb="base-input"] input:focus,
+div[data-baseweb="textarea"] textarea:focus {
+    border-color: var(--accent) !important;
+    box-shadow: 0 0 0 3px rgba(213,156,156,0.2) !important;
+    outline: none !important;
+}
+
+div[data-baseweb="input"] input:disabled,
+div[data-baseweb="base-input"] input:disabled,
+div[data-baseweb="textarea"] textarea:disabled {
+    background-color: var(--card) !important;
+    color: var(--muted) !important;
+    -webkit-text-fill-color: var(--muted) !important;
+    opacity: 1 !important;
+    cursor: not-allowed !important;
+    border-radius: var(--radius-sm) !important;
+}
+
+input[disabled], textarea[disabled] {
+    background-color: var(--card) !important;
+    color: var(--muted) !important;
+    -webkit-text-fill-color: var(--muted) !important;
+    opacity: 1 !important;
+}
+
+input[type="checkbox"][disabled] {
+    opacity: 0.85 !important;
+}
+
+/* ── SELECTBOX ── */
+div[data-baseweb="select"] > div {
+    background: var(--white) !important;
+    border: 1.5px solid var(--border) !important;
+    border-radius: var(--radius-sm) !important;
+    font-family: var(--font-body) !important;
+    color: var(--text) !important;
+    transition: border-color 0.18s !important;
+}
+
+div[data-baseweb="select"] > div:hover {
+    border-color: var(--accent2) !important;
+}
+
+li[role="option"] {
+    font-family: var(--font-body) !important;
+    font-size: 0.87rem !important;
+}
+
+li[role="option"]:hover {
+    background: rgba(213,156,156,0.12) !important;
+    color: var(--accent-dk) !important;
+}
+
+/* ── LABELS ── */
+label, .stSelectbox label, .stTextInput label, .stTextArea label,
+.stDateInput label, .stNumberInput label, .stCheckbox label {
+    font-family: var(--font-body) !important;
+    font-size: 0.82rem !important;
+    font-weight: 600 !important;
+    color: var(--muted) !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.04em !important;
+}
+
+/* ── DATAFRAME / TABLE ── */
+[data-testid="stDataFrame"] {
+    border-radius: var(--radius) !important;
+    overflow: hidden !important;
+    box-shadow: 0 2px 12px var(--shadow2) !important;
+}
+
+/* ── TABS ── */
+button[data-baseweb="tab"] {
+    font-family: var(--font-body) !important;
+    font-size: 0.87rem !important;
+    font-weight: 500 !important;
+    color: var(--muted) !important;
+    border-radius: var(--radius-sm) var(--radius-sm) 0 0 !important;
+    transition: color 0.18s !important;
+}
+
+button[data-baseweb="tab"][aria-selected="true"] {
+    color: var(--accent) !important;
+    border-bottom-color: var(--accent) !important;
+}
+
+/* ── MARKDOWN HEADINGS ── */
+h1, h2, h3, h4 {
+    font-family: var(--font-head) !important;
+    color: var(--accent-dk) !important;
+    font-weight: 600 !important;
+}
+
+h1 { font-size: 2.2rem !important; letter-spacing: -0.02em !important; }
+h2 { font-size: 1.6rem !important; }
+h3 { font-size: 1.3rem !important; }
+
+/* ── SEPARATOR / HR ── */
+hr {
+    border: none !important;
+    border-top: 1.5px solid var(--border) !important;
+    margin: 1rem 0 !important;
+}
+
+/* ── EXPANDER ── */
+details[data-testid="stExpander"] summary {
+    font-family: var(--font-body) !important;
+    font-weight: 600 !important;
+    color: var(--accent) !important;
+}
+
+/* ── HEADER BANNER ── */
+.gf-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: linear-gradient(135deg, #D59C9C 0%, #E2B3A5 100%);
+    border-radius: 14px;
+    padding: 0.9rem 1.5rem;
+    margin-bottom: 1.4rem;
+    box-shadow: 0 4px 18px rgba(213,156,156,0.25);
+}
+
+.gf-header-left { display: flex; flex-direction: column; }
+
+.gf-header-greeting {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.78rem;
+    color: rgba(255,255,255,0.75);
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.gf-header-name {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 1.35rem;
+    color: #ffffff;
+    font-weight: 600;
+    line-height: 1.2;
+}
+
+.gf-header-clinic {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.75rem;
+    color: rgba(255,255,255,0.65);
+    margin-top: 0.1rem;
+}
+
+.gf-header-right {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 2px;
+    text-align: right;
+}
+
+.gf-header-date {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: rgba(255,255,255,0.92);
+    letter-spacing: 0.03em;
+}
+
+.gf-header-time {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.78rem;
+    font-weight: 400;
+    color: rgba(255,255,255,0.72);
+    letter-spacing: 0.02em;
+}
+
+/* ── PAGE TITLE ── */
+.gf-page-title { display: flex; flex-direction: column; margin-bottom: 1.2rem; }
+.gf-page-title h2 {
+    font-family: 'Cormorant Garamond', serif !important;
+    font-size: 1.8rem !important;
+    color: #b87575 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    line-height: 1.2 !important;
+}
+.gf-page-title .subtitle {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.83rem;
+    color: #9e7575;
+    margin-top: 0.15rem;
+    letter-spacing: 0.03em;
+}
+.gf-divider {
+    height: 2px;
+    background: linear-gradient(90deg, #D59C9C, transparent);
+    border: none;
+    margin: 0.6rem 0 1.2rem 0;
+    border-radius: 2px;
+}
+
+/* ── SIDEBAR LOGO BLOCK ── */
+.gf-sidebar-logo {
+    background: linear-gradient(180deg, #D59C9C 0%, #E2B3A5 100%);
+    padding: 1.5rem 1rem 1.2rem 1rem;
+    text-align: center;
+    border-bottom: 1px solid #f0d5ce;
+    margin-bottom: 0.5rem;
+}
+.gf-sidebar-logo h3 {
+    font-family: 'Cormorant Garamond', serif !important;
+    color: #fff !important;
+    font-size: 1.05rem !important;
+    font-weight: 700 !important;
+    line-height: 1.3 !important;
+    margin: 0 !important;
+}
+.gf-sidebar-logo small {
+    font-family: 'DM Sans', sans-serif;
+    color: rgba(255,255,255,0.7);
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+/* ── SIDEBAR SECTION LABELS ── */
+.gf-sidebar-section {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #9e7575;
+    padding: 0.8rem 1rem 0.25rem 1rem;
+}
+
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #fdf8f7; }
+::-webkit-scrollbar-thumb { background: #E2B3A5; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #D59C9C; }
+
+/* ── COLOR PICKER ── */
+div[data-testid="stColorPicker"] {
+    background: #ffffff !important;
+    border: 1.5px solid #f0d5ce !important;
+    border-radius: 8px !important;
+}
+
+/* ── RADIO (fora da sidebar) ── */
+.main .stRadio label {
+    background: #f5f2f0 !important;
+    border: 1.5px solid #f0d5ce !important;
+    border-radius: 8px !important;
+    padding: 0.35rem 0.85rem !important;
+    font-family: 'DM Sans', sans-serif !important;
+    font-size: 0.85rem !important;
+    font-weight: 500 !important;
+    cursor: pointer !important;
+    transition: background 0.18s, border-color 0.18s !important;
+    text-transform: none !important;
+    letter-spacing: 0 !important;
+    color: #4a3030 !important;
+}
+
+.main .stRadio label:hover {
+    border-color: #E2B3A5 !important;
+    background: rgba(213,156,156,0.1) !important;
+}
+
+/* ── KILL STREAMLIT BLUE — override focus rings, active borders, etc ── */
+*:focus, *:focus-visible {
+    outline-color: var(--accent) !important;
+    box-shadow: 0 0 0 3px rgba(213,156,156,0.22) !important;
+}
+
+/* Inputs focus border override */
+div[data-baseweb="base-input"]:focus-within,
+div[data-baseweb="input"]:focus-within {
+    border-color: var(--accent) !important;
+    box-shadow: 0 0 0 3px rgba(213,156,156,0.18) !important;
+}
+
+/* Streamlit uses --primary for most blue */
+:root {
+    --primary-color: var(--accent) !important;
+}
+
+/* Checkbox accent */
+input[type="checkbox"]:checked {
+    accent-color: var(--accent) !important;
+}
+
+/* Searchbox component label override */
+div[data-testid="stCustomComponentV1"] label,
+.stTextInput > label, .stSelectbox > label,
+.stTextArea > label, .stDateInput > label,
+.stNumberInput > label, .stCheckbox > label,
+.stMultiSelect > label {
+    color: var(--muted) !important;
+    font-family: var(--font-body) !important;
+    font-size: 0.82rem !important;
+    font-weight: 600 !important;
+}
+
+/* Searchbox container — remove blue border */
+div[class*="searchbox"] input,
+div[class*="searchbox"] div[data-baseweb="base-input"] {
+    border-color: var(--border) !important;
+}
+
+/* Tab active indicator remove blue */
+button[data-baseweb="tab"][aria-selected="true"] {
+    border-bottom-color: var(--accent) !important;
+    color: var(--accent) !important;
+}
+
+/* Streamlit progress + slider */
+div[data-testid="stProgress"] > div > div > div {
+    background-color: var(--accent) !important;
+}
+
+/* Any remaining blue links */
+a { color: var(--accent-dk) !important; }
+a:hover { color: var(--accent) !important; }
