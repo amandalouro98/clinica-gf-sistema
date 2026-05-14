@@ -1,7 +1,16 @@
 import streamlit as st
 import pandas as pd
 import altair as alt
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
+
+# Fuso horário de Brasília (GMT-3)
+BR_TZ = timezone(timedelta(hours=-3))
+
+def _hoje():
+    return datetime.now(BR_TZ).date()
+
+def _agora():
+    return datetime.now(BR_TZ)
 from dotenv import load_dotenv
 from streamlit_searchbox import st_searchbox
 
@@ -234,7 +243,7 @@ def _render_calendario(dias: list, ags_por_dia: dict, semana: bool = False) -> s
     # Colunas de dias
     colunas = ""
     nomes_sem = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
-    hoje = date.today()
+    hoje = _hoje()
     for dia in dias:
         ags = ags_por_dia.get(dia, [])
         col_html = _coluna_html(ags, col_w_est)
@@ -583,7 +592,7 @@ def tela_dashboard():
     header_titulo("ACOMPANHAMENTO GERAL", "Visão geral da clínica")
     db = SessionLocal()
     try:
-        _hoje = date.today()
+        _hoje = _hoje()
         _ini_mes = _hoje.replace(day=1)
         from datetime import timedelta
         
@@ -755,7 +764,7 @@ def _init_agenda_state():
         "ag_cliente": "— selecione —",
         "ag_prof": "— selecione —",
         "ag_proc": "",
-        "ag_data": date.today(),
+        "ag_data": _hoje(),
         "ag_hora_ini": "08:00",
         "ag_duracao": 60,
         "ag_obs": "",
@@ -1068,11 +1077,11 @@ def tela_agenda():
 
         if vista == "Dia":
             with ctrl2:
-                data_ref = st.date_input("Data", value=date.today(), format="DD/MM/YYYY", key="ag_data_ref")
+                data_ref = st.date_input("Data", value=_hoje(), format="DD/MM/YYYY", key="ag_data_ref")
             dias = [data_ref]
         else:
             with ctrl2:
-                data_ref = st.date_input("Qualquer data da semana", value=date.today(),
+                data_ref = st.date_input("Qualquer data da semana", value=_hoje(),
                                          format="DD/MM/YYYY", key="ag_data_ref")
             monday = data_ref - timedelta(days=data_ref.weekday())
             sunday = monday + timedelta(days=6)
@@ -1300,7 +1309,7 @@ def tela_agenda():
                     st.error("Informe o nome.")
 
         # ── Histórico de Agendamentos ───────────────────────────────────────
-        _hoje = date.today()
+        _hoje = _hoje()
         _ini_mes = _hoje.replace(day=1)
         st.markdown("---")
         with st.expander("📋 Histórico de agendamentos", expanded=False):
@@ -1389,7 +1398,7 @@ def _modal_cliente(titulo: str, cliente_id: int = 0):
             with col_a:
                 nome   = st.text_input("Nome completo*",      value=v("nome"),      key=f"{prefix}nome")
                 cpf    = st.text_input("CPF",                 value=v("cpf"),       key=f"{prefix}cpf")
-                nasc_default = c.data_nascimento if (c and c.data_nascimento) else date.today()
+                nasc_default = c.data_nascimento if (c and c.data_nascimento) else _hoje()
                 nasc   = st.date_input("Data de nascimento",  value=nasc_default,   key=f"{prefix}nasc",   format="DD/MM/YYYY")
                 tel    = st.text_input("Telefone",            value=v("telefone"),  key=f"{prefix}tel")
                 email  = st.text_input("E-mail",              value=v("email"),     key=f"{prefix}email")
@@ -2002,7 +2011,7 @@ def _modal_receituario_popup():
                 with col1:
                     st.markdown(f"**Paciente:** {cliente.nome}")
                 with col2:
-                    data_rec = st.date_input("Data", value=date.today(), key="rec_popup_data")
+                    data_rec = st.date_input("Data", value=_hoje(), key="rec_popup_data")
                 
                 receituario_txt = st.text_area(
                     "Receituário (Indicação de Tratamento)",
@@ -2149,7 +2158,7 @@ def _modal_receituario(cliente_id=None, cliente_nome=None, receituario_texto=Non
             return
         
         st.markdown(f"**Paciente:** {cliente_at_nome}")
-        st.markdown(f"**Data:** {date.today().strftime('%d/%m/%Y')}")
+        st.markdown(f"**Data:** {_hoje().strftime('%d/%m/%Y')}")
         st.markdown("---")
         st.markdown("### Receituário (Indicação de Tratamento)")
         st.markdown(receituario_txt)
@@ -2178,7 +2187,7 @@ def _modal_receituario(cliente_id=None, cliente_nome=None, receituario_texto=Non
             
             pdf.set_font("Helvetica", "B", 11)
             pdf.cell(0, 7, f"Paciente: {cliente_at_nome}", ln=True)
-            pdf.cell(0, 7, f"Data: {date.today().strftime('%d/%m/%Y')}", ln=True)
+            pdf.cell(0, 7, f"Data: {_hoje().strftime('%d/%m/%Y')}", ln=True)
             pdf.ln(4)
             
             pdf.set_font("Helvetica", "B", 11)
@@ -2191,7 +2200,7 @@ def _modal_receituario(cliente_id=None, cliente_nome=None, receituario_texto=Non
             st.download_button(
                 "⬇️ Baixar PDF",
                 data=pdf_bytes,
-                file_name=f"receituario_{cliente_at_nome.replace(' ', '_')}_{date.today().strftime('%Y%m%d')}.pdf",
+                file_name=f"receituario_{cliente_at_nome.replace(' ', '_')}_{_hoje().strftime('%Y%m%d')}.pdf",
                 mime="application/pdf",
                 use_container_width=True,
                 key="rec_download"
@@ -2226,7 +2235,7 @@ def _modal_tabela_doses():
                 via = st.text_input("Via", key="dose_via")
             with col3:
                 peso = st.number_input("Peso (kg)", min_value=0.0, step=0.1, key="dose_peso")
-                data_dose = st.date_input("Data", value=date.today(), key="dose_data")
+                data_dose = st.date_input("Data", value=_hoje(), key="dose_data")
             
             if st.button("➕ Adicionar à tabela", use_container_width=True, key="dose_add"):
                 if not cliente_id:
@@ -2525,7 +2534,7 @@ def tela_atendimentos():
 
         col1, col2 = st.columns(2)
         with col1:
-            data_at = st.date_input("Data", value=date.today(), format="DD/MM/YYYY", key="at_data")
+            data_at = st.date_input("Data", value=_hoje(), format="DD/MM/YYYY", key="at_data")
             queixa = st.text_area("Queixa da consulta", key="at_queixa")
         with col2:
             # Lista suspensa de tratamentos cadastrados
@@ -2643,9 +2652,9 @@ def tela_atendimentos():
         # Filtro de datas
         col_filtro1, col_filtro2, col_filtro3, col_filtro4, col_filtro5 = st.columns([2, 2, 1, 1, 1])
         with col_filtro1:
-            data_inicio = st.date_input("Data início", value=date.today() - timedelta(days=30), key="at_hist_inicio")
+            data_inicio = st.date_input("Data início", value=_hoje() - timedelta(days=30), key="at_hist_inicio")
         with col_filtro2:
-            data_fim = st.date_input("Data fim", value=date.today(), key="at_hist_fim")
+            data_fim = st.date_input("Data fim", value=_hoje(), key="at_hist_fim")
         with col_filtro3:
             st.markdown("<br>", unsafe_allow_html=True)
             filtrar_hoje = st.button("Hoje", key="at_hist_hoje")
@@ -2657,8 +2666,8 @@ def tela_atendimentos():
             excluir_at_btn = st.button("🗑️ Excluir", key="at_hist_excluir")
 
         if filtrar_hoje:
-            data_inicio = date.today()
-            data_fim = date.today()
+            data_inicio = _hoje()
+            data_fim = _hoje()
 
         # Buscar atendimentos no período
         atendimentos = (
@@ -2768,7 +2777,7 @@ def tela_biometria():
         with col_cli:
             cliente_sel = st.selectbox("Cliente", list(mapa.keys()) if mapa else ["—"])
         with col_data:
-            data_m = st.date_input("Data da medição", value=date.today(), format="DD/MM/YYYY")
+            data_m = st.date_input("Data da medição", value=_hoje(), format="DD/MM/YYYY")
 
         if cliente_sel and cliente_sel != "—":
             cid = mapa[cliente_sel]
@@ -2848,9 +2857,9 @@ def tela_estoque():
                     qtd_compra = st.number_input("Quantidade", min_value=0.0, step=1.0)
                     qtd_min_compra = st.number_input("Quantidade mínima", min_value=0.0, step=1.0)
                 with col2:
-                    validade_compra = st.date_input("Data de validade", value=date.today(), format="DD/MM/YYYY")
+                    validade_compra = st.date_input("Data de validade", value=_hoje(), format="DD/MM/YYYY")
                     fornecedor_compra = st.text_input("Fornecedor")
-                    data_ent_compra = st.date_input("Data de entrada", value=date.today(), format="DD/MM/YYYY")
+                    data_ent_compra = st.date_input("Data de entrada", value=_hoje(), format="DD/MM/YYYY")
 
                 salvar_compra = st.form_submit_button("Registrar compra", use_container_width=True)
 
@@ -2994,7 +3003,7 @@ def tela_relatorios():
     header_titulo("Relatórios", "Análise, exportações e insights da clínica")
     db = SessionLocal()
     try:
-        _hoje = date.today()
+        _hoje = _hoje()
         _ini_mes = _hoje.replace(day=1)
 
         aba_analise, aba_vendas, aba_estoque, aba_clientes = st.tabs([
@@ -3489,7 +3498,7 @@ def tela_vendas():
 
         col_v1, col_v2 = st.columns(2)
         with col_v1:
-            data_venda = st.date_input("Data da venda", value=date.today(), key="venda_data", format="DD/MM/YYYY")
+            data_venda = st.date_input("Data da venda", value=_hoje(), key="venda_data", format="DD/MM/YYYY")
         with col_v2:
             pagamento = st.selectbox("Forma de pagamento*", ["Cartão de Crédito", "Cartão de Débito", "Pix"], key="venda_pag")
 
@@ -3841,10 +3850,10 @@ def main():
 
     # ── Header global com saudação ──
     user = st.session_state.user
-    hora = datetime.now().hour
+    hora = _agora().hour
     saudacao = "Bom dia" if hora < 12 else ("Boa tarde" if hora < 18 else "Boa noite")
-    data_hoje = datetime.now().strftime("%d/%m/%Y")
-    hora_agora = datetime.now().strftime("%H:%M")
+    data_hoje = _agora().strftime("%d/%m/%Y")
+    hora_agora = _agora().strftime("%H:%M")
     st.markdown(f"""
     <div class="gf-header">
         <div class="gf-header-left">
