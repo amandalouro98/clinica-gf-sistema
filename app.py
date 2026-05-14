@@ -2641,7 +2641,7 @@ def tela_atendimentos():
         st.markdown("### Histórico de Atendimentos")
 
         # Filtro de datas
-        col_filtro1, col_filtro2, col_filtro3, col_filtro4 = st.columns([2, 2, 1, 1])
+        col_filtro1, col_filtro2, col_filtro3, col_filtro4, col_filtro5 = st.columns([2, 2, 1, 1, 1])
         with col_filtro1:
             data_inicio = st.date_input("Data início", value=date.today() - timedelta(days=30), key="at_hist_inicio")
         with col_filtro2:
@@ -2651,17 +2651,14 @@ def tela_atendimentos():
             filtrar_hoje = st.button("Hoje", key="at_hist_hoje")
         with col_filtro4:
             st.markdown("<br>", unsafe_allow_html=True)
-            limpar_filtro = st.button("🗑️ Limpar", key="at_hist_limpar")
+            editar_at_btn = st.button("✏️ Editar", key="at_hist_editar")
+        with col_filtro5:
+            st.markdown("<br>", unsafe_allow_html=True)
+            excluir_at_btn = st.button("🗑️ Excluir", key="at_hist_excluir")
 
         if filtrar_hoje:
             data_inicio = date.today()
             data_fim = date.today()
-
-        if limpar_filtro:
-            # Resetar filtros para o padrão (últimos 30 dias)
-            st.session_state.pop("at_hist_inicio", None)
-            st.session_state.pop("at_hist_fim", None)
-            st.rerun()
 
         # Buscar atendimentos no período
         atendimentos = (
@@ -2674,16 +2671,84 @@ def tela_atendimentos():
         )
 
         if atendimentos:
+            import pandas as pd
             dados_tabela = []
+            ids_atendimentos = []
             for at, cli in atendimentos:
+                ids_atendimentos.append(at.id)
                 dados_tabela.append({
+                    "Selecionar": False,
                     "Data": at.data.strftime("%d/%m/%Y") if at.data else "—",
                     "Cliente": cli.nome if cli else "—",
                     "Queixa": (at.queixa_consulta[:50] + "...") if at.queixa_consulta and len(at.queixa_consulta) > 50 else (at.queixa_consulta or "—"),
                     "Tipo Tratamento": at.tipo_tratamento or "—",
                     "Observações": (at.observacoes[:50] + "...") if at.observacoes and len(at.observacoes) > 50 else (at.observacoes or "—"),
                 })
-            st.dataframe(dados_tabela, use_container_width=True, hide_index=True)
+
+            df_hist = pd.DataFrame(dados_tabela)
+            edited_df = st.data_editor(
+                df_hist,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "Selecionar": st.column_config.CheckboxColumn("Selecionar", default=False),
+                },
+                disabled=["Data", "Cliente", "Queixa", "Tipo Tratamento", "Observações"],
+                key="at_hist_editor"
+            )
+
+            # Identificar linha selecionada
+            selecionados = edited_df[edited_df["Selecionar"] == True]
+            if len(selecionados) > 1:
+                st.warning("Selecione apenas 1 atendimento por vez.")
+            elif len(selecionados) == 1:
+                idx_selecionado = selecionados.index[0]
+                at_id_selecionado = ids_atendimentos[idx_selecionado]
+
+                if excluir_at_btn:
+                    at_del = db.query(Appointment).filter(Appointment.id == at_id_selecionado).first()
+                    if at_del:
+                        db.delete(at_del)
+                        db.commit()
+                        st.success("Atendimento excluído com sucesso!")
+                        st.rerun()
+
+                if editar_at_btn:
+                    st.session_state["editar_atendimento_id"] = at_id_selecionado
+                    st.rerun()
+            else:
+                if editar_at_btn or excluir_at_btn:
+                    st.warning("Selecione um atendimento na tabela primeiro.")
+
+            # Modal de edição
+            if "editar_atendimento_id" in st.session_state:
+                at_edit = db.query(Appointment).filter(Appointment.id == st.session_state["editar_atendimento_id"]).first()
+                if at_edit:
+                    st.markdown("---")
+                    st.markdown("#### Editar Atendimento")
+                    with st.form("form_editar_atendimento", clear_on_submit=False):
+                        edit_data = st.date_input("Data", value=at_edit.data, format="DD/MM/YYYY")
+                        edit_queixa = st.text_area("Queixa", value=at_edit.queixa_consulta or "")
+                        edit_tipo = st.text_input("Tipo Tratamento", value=at_edit.tipo_tratamento or "")
+                        edit_obs = st.text_area("Observações", value=at_edit.observacoes or "")
+                        col_salvar, col_cancelar = st.columns(2)
+                        with col_salvar:
+                            salvar_edicao = st.form_submit_button("Salvar", use_container_width=True)
+                        with col_cancelar:
+                            cancelar_edicao = st.form_submit_button("Cancelar", use_container_width=True)
+
+                    if salvar_edicao:
+                        at_edit.data = edit_data
+                        at_edit.queixa_consulta = edit_queixa
+                        at_edit.tipo_tratamento = edit_tipo
+                        at_edit.observacoes = edit_obs
+                        db.commit()
+                        st.success("Atendimento atualizado!")
+                        st.session_state.pop("editar_atendimento_id", None)
+                        st.rerun()
+                    if cancelar_edicao:
+                        st.session_state.pop("editar_atendimento_id", None)
+                        st.rerun()
         else:
             st.info("Nenhum atendimento encontrado no período selecionado.")
 
