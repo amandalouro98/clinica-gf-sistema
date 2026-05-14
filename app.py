@@ -592,8 +592,8 @@ def tela_dashboard():
     header_titulo("ACOMPANHAMENTO GERAL", "Visão geral da clínica")
     db = SessionLocal()
     try:
-        _hoje = _hoje()
-        _ini_mes = _hoje.replace(day=1)
+        _data_hoje = _hoje()
+        _ini_mes = _data_hoje.replace(day=1)
         from datetime import timedelta
         
         # Cards atualizados
@@ -602,7 +602,7 @@ def tela_dashboard():
         # Atendimentos no mês
         atendimentos_mes = db.query(Appointment).filter(
             Appointment.data >= _ini_mes,
-            Appointment.data <= _hoje
+            Appointment.data <= _data_hoje
         ).count()
         
         # Agendamentos totais (todos os futuros e passados do mês)
@@ -612,7 +612,7 @@ def tela_dashboard():
         
         # Atendimentos hoje
         atendimentos_hoje = db.query(Appointment).filter(
-            Appointment.data == _hoje
+            Appointment.data == _data_hoje
         ).count()
         
         # Agendamentos cancelados/excluídos (busca no log por acao='excluido' no mês)
@@ -626,10 +626,10 @@ def tela_dashboard():
         
         # Produtos com vencimento crítico (próximos 30 dias)
         try:
-            data_critica = _hoje + timedelta(days=30)
+            data_critica = _data_hoje + timedelta(days=30)
             produtos_vencimento_critico = db.query(StockLote).filter(
                 StockLote.data_validade <= data_critica,
-                StockLote.data_validade >= _hoje
+                StockLote.data_validade >= _data_hoje
             ).count()
         except:
             produtos_vencimento_critico = 0
@@ -645,7 +645,7 @@ def tela_dashboard():
         st.markdown("---")
 
         # --- A confirmar AMANHÃ ---
-        _amanha = _hoje + timedelta(days=1)
+        _amanha = _data_hoje + timedelta(days=1)
         st.markdown("### Clientes a confirmar (amanhã)")
         pendentes = (
             db.query(ScheduledAppointment)
@@ -686,7 +686,7 @@ def tela_dashboard():
         confirmados = (
             db.query(ScheduledAppointment)
             .filter(
-                ScheduledAppointment.data == _hoje,
+                ScheduledAppointment.data == _data_hoje,
                 ScheduledAppointment.confirmado == True,
             )
             .order_by(ScheduledAppointment.hora_inicio.asc())
@@ -713,7 +713,7 @@ def tela_dashboard():
         df_at = pd.read_sql(
             db.query(Appointment).filter(
                 Appointment.data >= _ini_mes,
-                Appointment.data <= _hoje
+                Appointment.data <= _data_hoje
             ).statement, db.bind
         )
         if not df_at.empty and "tipo_tratamento" in df_at.columns:
@@ -1309,15 +1309,15 @@ def tela_agenda():
                     st.error("Informe o nome.")
 
         # ── Histórico de Agendamentos ───────────────────────────────────────
-        _hoje = _hoje()
-        _ini_mes = _hoje.replace(day=1)
+        _data_hoje = _hoje()
+        _ini_mes = _data_hoje.replace(day=1)
         st.markdown("---")
         with st.expander("📋 Histórico de agendamentos", expanded=False):
             col_hi, col_hf, col_att = st.columns([1, 1, 1])
             with col_hi:
                 _log_ini = st.date_input("De", value=_ini_mes, key="log_ini", format="DD/MM/YYYY")
             with col_hf:
-                _log_fim = st.date_input("Até", value=_hoje, key="log_fim", format="DD/MM/YYYY")
+                _log_fim = st.date_input("Até", value=_data_hoje, key="log_fim", format="DD/MM/YYYY")
             with col_att:
                 st.markdown("&nbsp;", unsafe_allow_html=True)
                 if st.button("🔄 Atualizar", use_container_width=True, key="log_refresh"):
@@ -3003,9 +3003,8 @@ def tela_relatorios():
     header_titulo("Relatórios", "Análise, exportações e insights da clínica")
     db = SessionLocal()
     try:
-        _hoje = _hoje()
-        _ini_mes = _hoje.replace(day=1)
-
+        _data_hoje = _hoje()
+        _ini_mes = _data_hoje.replace(day=1)
         aba_analise, aba_vendas, aba_estoque, aba_clientes = st.tabs([
             "📊 Análise Geral", "💰 Vendas", "📦 Estoque", "👤 Clientes"
         ])
@@ -3018,7 +3017,7 @@ def tela_relatorios():
             with col_di:
                 _r_ini = st.date_input("De", value=_ini_mes, key="rel_ini", format="DD/MM/YYYY")
             with col_df:
-                _r_fim = st.date_input("Até", value=_hoje, key="rel_fim", format="DD/MM/YYYY")
+                _r_fim = st.date_input("Até", value=_data_hoje, key="rel_fim", format="DD/MM/YYYY")
 
             # ── Totais ───────────────────────────────────────────────
             try:
@@ -3195,7 +3194,7 @@ def tela_relatorios():
             with col_vd:
                 _v_ini = st.date_input("De", value=_ini_mes, key="rel_v_ini", format="DD/MM/YYYY")
             with col_vf:
-                _v_fim = st.date_input("Até", value=_hoje, key="rel_v_fim", format="DD/MM/YYYY")
+                _v_fim = st.date_input("Até", value=_data_hoje, key="rel_v_fim", format="DD/MM/YYYY")
             with col_vp:
                 _v_pag = st.selectbox("Forma de pagamento", ["Todas", "pix", "credito", "debito", "dinheiro"], key="rel_v_pag")
 
