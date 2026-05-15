@@ -15,7 +15,7 @@ from dotenv import load_dotenv
 from streamlit_searchbox import st_searchbox
 
 # ====== CONFIGURAÇÃO INICIAL ======
-st.set_page_config(page_title="Clínica Gestão", page_icon="💆‍♀️", layout="wide")
+st.set_page_config(page_title="Gabriela Franco Saúde", page_icon="ui/favicon.png", layout="wide")
 load_dotenv()
 
 # ====== IMPORTS DO PROJETO ======
