@@ -1,4 +1,5 @@
 """Migração: adicionar campos valor_unitario, valor_pacote, sessoes_pacote na tabela tratamentos"""
+from sqlalchemy import text
 from utils.db import engine
 
 def migrate():
@@ -11,7 +12,7 @@ def migrate():
         ]
         for col_name, col_type in cols:
             try:
-                conn.execute(f"ALTER TABLE tratamentos ADD COLUMN {col_name} {col_type}")
+                conn.execute(text(f"ALTER TABLE tratamentos ADD COLUMN {col_name} {col_type}"))
                 conn.commit()
                 print(f"Coluna '{col_name}' adicionada.")
             except Exception as e:
