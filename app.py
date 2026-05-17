@@ -181,6 +181,7 @@ def _coluna_html(ags_dia: list, col_w: int) -> str:
         left = ci * (card_w + 2)
         cor  = ag.cor_profissional or "#E3A5C7"
         icone = "✅" if ag.confirmado else "⏳"
+        pacote_flag = " 📦" if getattr(ag, "_tem_pacote", False) else ""
 
         if h >= 80:
             sala_txt = f" · {ag.sala}" if getattr(ag, "sala", None) else ""
@@ -191,7 +192,7 @@ def _coluna_html(ags_dia: list, col_w: int) -> str:
                 f'<div style="font-size:10px;overflow:hidden;white-space:nowrap;'
                 f'text-overflow:ellipsis;">{ag.procedimento or ""}{sala_txt}</div>'
                 f'<div style="font-size:10px;color:rgba(0,0,0,0.55);">'
-                f'{ag.hora_inicio}–{ag.hora_fim} {icone}</div>'
+                f'{ag.hora_inicio}–{ag.hora_fim} {icone}{pacote_flag}</div>'
             )
         elif h >= 40:
             sala_txt = f" · {ag.sala}" if getattr(ag, "sala", None) else ""
@@ -200,13 +201,13 @@ def _coluna_html(ags_dia: list, col_w: int) -> str:
                 f'white-space:nowrap;text-overflow:ellipsis;">'
                 f'{ag.cliente_nome or "Sem cliente"}</div>'
                 f'<div style="font-size:10px;overflow:hidden;white-space:nowrap;'
-                f'text-overflow:ellipsis;">{ag.procedimento or ""}{sala_txt} {icone}</div>'
+                f'text-overflow:ellipsis;">{ag.procedimento or ""}{sala_txt} {icone}{pacote_flag}</div>'
             )
         else:
             inner = (
                 f'<div style="font-size:10px;overflow:hidden;white-space:nowrap;'
                 f'text-overflow:ellipsis;">'
-                f'{ag.cliente_nome or "Sem cliente"} {icone}</div>'
+                f'{ag.cliente_nome or "Sem cliente"} {icone}{pacote_flag}</div>'
             )
 
         html += (
@@ -303,9 +304,12 @@ def login_screen():
             unsafe_allow_html=True,
         )
 
-        email = st.text_input("E-mail")
-        senha = st.text_input("Senha", type="password")
-        if st.button("Entrar", use_container_width=True):
+        # Form com autocomplete para iPhone salvar credenciais
+        with st.form("login_form", clear_on_submit=False):
+            email = st.text_input("E-mail", key="login_email", autocomplete="username")
+            senha = st.text_input("Senha", type="password", key="login_senha", autocomplete="current-password")
+            entrar = st.form_submit_button("Entrar", use_container_width=True)
+        if entrar:
             user = authenticate(email, senha)
             if user:
                 st.session_state.user = {"id": user.id, "nome": user.nome, "perfil": user.perfil}
@@ -894,7 +898,18 @@ def tela_agenda():
                 # Calcula hora fim e exibe em tempo real
                 hora_fim_calc = calcular_hora_fim(hora_inicio, duracao)
                 st.markdown(f"**Hora fim:** {hora_fim_calc}")
-                observacoes_ag = st.text_area("Observações", key="ag_obs", height=200)
+                observacoes_ag = st.text_area("Observações", key="ag_obs", height=150)
+
+                # Recorrência
+                if not modo_edicao:
+                    recorrente = st.checkbox("Repetir semanalmente", key="ag_recorrente")
+                    if recorrente:
+                        num_semanas = st.number_input("Quantas semanas?", min_value=2, max_value=52, value=4, step=1, key="ag_num_semanas")
+                    else:
+                        num_semanas = 1
+                else:
+                    recorrente = False
+                    num_semanas = 1
 
             btn_label = "💾 Salvar alterações" if modo_edicao else "💾 Salvar agendamento"
             if st.button(btn_label, use_container_width=True, key="ag_salvar"):
@@ -949,46 +964,51 @@ def tela_agenda():
                         st.success("Agendamento atualizado!")
                     else:
                         _pacote_item_id = st.session_state.pop("ag_pacote_item_id", None)
-                        novo = ScheduledAppointment(
-                            data=data_ag,
-                            hora_inicio=hora_inicio,
-                            hora_fim=hora_fim_calc,
-                            duracao_min=duracao,
-                            cliente_id=cli_id,
-                            cliente_nome=cli_nome,
-                            profissional=prof_sel,
-                            procedimento=procedimento.strip(),
-                            observacoes=observacoes_ag,
-                            confirmado=False,
-                            sala=sala_val,
-                            cor_profissional=cor_por_prof.get(prof_sel, "#E3A5C7"),
-                        )
-                        db.add(novo)
-                        db.flush()
-                        if _pacote_item_id and hasattr(novo, "sale_item_id"):
-                            novo.sale_item_id = _pacote_item_id
+                        # Criar agendamentos (1 ou múltiplos se recorrente)
+                        for _sem_i in range(int(num_semanas)):
+                            _data_sem = data_ag + timedelta(weeks=_sem_i)
+                            novo = ScheduledAppointment(
+                                data=_data_sem,
+                                hora_inicio=hora_inicio,
+                                hora_fim=hora_fim_calc,
+                                duracao_min=duracao,
+                                cliente_id=cli_id,
+                                cliente_nome=cli_nome,
+                                profissional=prof_sel,
+                                procedimento=procedimento.strip(),
+                                observacoes=observacoes_ag,
+                                confirmado=False,
+                                sala=sala_val,
+                                cor_profissional=cor_por_prof.get(prof_sel, "#E3A5C7"),
+                            )
+                            db.add(novo)
+                            db.flush()
+                            if _pacote_item_id and hasattr(novo, "sale_item_id") and _sem_i == 0:
+                                novo.sale_item_id = _pacote_item_id
+                            try:
+                                _ulog = st.session_state.get("user", {})
+                                db.add(AgendaLog(
+                                    agendamento_id=novo.id,
+                                    acao="criado",
+                                    usuario_id=_ulog.get("id"),
+                                    usuario_nome=_ulog.get("nome", ""),
+                                    dados_depois=__import__("json").dumps({
+                                        "data": str(novo.data), "hora_inicio": novo.hora_inicio,
+                                        "hora_fim": novo.hora_fim, "cliente": novo.cliente_nome,
+                                        "profissional": novo.profissional, "procedimento": novo.procedimento,
+                                        "sala": novo.sala, "duracao_min": novo.duracao_min,
+                                    }, ensure_ascii=False),
+                                ))
+                            except Exception:
+                                pass
                         db.commit()
-                        try:
-                            _ulog = st.session_state.get("user", {})
-                            db.add(AgendaLog(
-                                agendamento_id=novo.id,
-                                acao="criado",
-                                usuario_id=_ulog.get("id"),
-                                usuario_nome=_ulog.get("nome", ""),
-                                dados_depois=__import__("json").dumps({
-                                    "data": str(novo.data), "hora_inicio": novo.hora_inicio,
-                                    "hora_fim": novo.hora_fim, "cliente": novo.cliente_nome,
-                                    "profissional": novo.profissional, "procedimento": novo.procedimento,
-                                    "sala": novo.sala, "duracao_min": novo.duracao_min,
-                                }, ensure_ascii=False),
-                            ))
-                            db.commit()
-                        except Exception:
-                            pass
-                        st.success("Agendamento salvo!")
+                        if int(num_semanas) > 1:
+                            st.success(f"{int(num_semanas)} agendamentos criados (recorrência semanal)!")
+                        else:
+                            st.success("Agendamento salvo!")
                         for _k in ["ag_cliente","ag_prof","ag_proc","ag_hora_ini",
                                     "ag_duracao","ag_obs","ag_sala","ag_data",
-                                    "ag_pacote_item_id"]:
+                                    "ag_pacote_item_id","ag_recorrente","ag_num_semanas"]:
                             st.session_state.pop(_k, None)
                     st.rerun()
 
@@ -1073,13 +1093,13 @@ def tela_agenda():
         # ── Controles do calendário ─────────────────────────────────────────
         ctrl1, ctrl2, ctrl3, ctrl4 = st.columns([1, 1, 1, 1])
         with ctrl1:
-            vista = st.radio("Visualizar", ["Dia", "Semana"], horizontal=True, key="ag_vista")
+            vista = st.radio("Visualizar", ["Dia", "Semana", "Mês"], horizontal=True, key="ag_vista")
 
         if vista == "Dia":
             with ctrl2:
                 data_ref = st.date_input("Data", value=_hoje(), format="DD/MM/YYYY", key="ag_data_ref")
             dias = [data_ref]
-        else:
+        elif vista == "Semana":
             with ctrl2:
                 data_ref = st.date_input("Qualquer data da semana", value=_hoje(),
                                          format="DD/MM/YYYY", key="ag_data_ref")
@@ -1092,6 +1112,19 @@ def tela_agenda():
                 st.date_input("Fim (Dom)", value=sunday, format="DD/MM/YYYY",
                               disabled=True, key="ag_sem_fim")
             dias = [monday + timedelta(days=i) for i in range(7)]
+        else:  # Mês
+            with ctrl2:
+                data_ref = st.date_input("Qualquer data do mês", value=_hoje(),
+                                         format="DD/MM/YYYY", key="ag_data_ref")
+            import calendar
+            primeiro_dia_mes = data_ref.replace(day=1)
+            _, dias_no_mes = calendar.monthrange(data_ref.year, data_ref.month)
+            ultimo_dia_mes = data_ref.replace(day=dias_no_mes)
+            # Começa na segunda da primeira semana
+            inicio_cal = primeiro_dia_mes - timedelta(days=primeiro_dia_mes.weekday())
+            # Termina no domingo da última semana
+            fim_cal = ultimo_dia_mes + timedelta(days=(6 - ultimo_dia_mes.weekday()))
+            dias = [inicio_cal + timedelta(days=i) for i in range((fim_cal - inicio_cal).days + 1)]
 
         # Filtro por profissional
         col_filt, _ = st.columns([1, 3])
@@ -1119,6 +1152,26 @@ def tela_agenda():
         for ag in ags_periodo:
             ags_por_dia[ag.data].append(ag)
 
+        # Marcar quais agendamentos têm pacote ativo
+        try:
+            from models.sale import Sale, SaleItem
+            for ag in ags_periodo:
+                ag._tem_pacote = False
+                if ag.cliente_id:
+                    _pac = (
+                        db.query(SaleItem)
+                        .join(Sale)
+                        .filter(
+                            Sale.cliente_id == ag.cliente_id,
+                            SaleItem.tipo == "pacote",
+                            SaleItem.sessoes_usadas < SaleItem.sessoes_total,
+                        ).first()
+                    )
+                    if _pac:
+                        ag._tem_pacote = True
+        except Exception:
+            pass
+
         # Legenda de profissionais — compacta, numa só linha
         prof_vistos: dict = {}
         for ag in ags_periodo:
@@ -1132,21 +1185,59 @@ def tela_agenda():
             st.markdown(f'<div style="margin-bottom:6px;">{badges}</div>', unsafe_allow_html=True)
 
         # Calendário proporcional
-        cal_html = _render_calendario(dias, ags_por_dia, semana=(vista == "Semana"))
-        st.markdown(cal_html, unsafe_allow_html=True)
+        if vista == "Mês":
+            # Renderizar grid mensal simplificado
+            nomes_sem = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
+            hoje = _hoje()
+            mes_html = '<table style="width:100%;border-collapse:collapse;font-family:sans-serif;font-size:12px;">'
+            mes_html += '<tr>'
+            for ns in nomes_sem:
+                mes_html += f'<th style="padding:6px;text-align:center;background:#f3f4f6;border:1px solid #e5e7eb;">{ns}</th>'
+            mes_html += '</tr>'
+            for i in range(0, len(dias), 7):
+                mes_html += '<tr>'
+                for dia in dias[i:i+7]:
+                    bg = "#fef2f2" if dia == hoje else ("#f9fafb" if dia.month == data_ref.month else "#fff")
+                    ags_dia = ags_por_dia.get(dia, [])
+                    cell_content = f'<div style="font-weight:700;margin-bottom:2px;">{dia.day}</div>'
+                    for ag in ags_dia[:3]:
+                        cor = ag.cor_profissional or "#E3A5C7"
+                        cell_content += (
+                            f'<div style="font-size:10px;background:{cor};color:#fff;'
+                            f'padding:1px 4px;border-radius:3px;margin-bottom:1px;'
+                            f'overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">'
+                            f'{ag.hora_inicio} {ag.cliente_nome or ""}</div>'
+                        )
+                    if len(ags_dia) > 3:
+                        cell_content += f'<div style="font-size:9px;color:#666;">+{len(ags_dia)-3} mais</div>'
+                    mes_html += (
+                        f'<td style="padding:4px;border:1px solid #e5e7eb;vertical-align:top;'
+                        f'background:{bg};min-height:60px;width:14.28%;">{cell_content}</td>'
+                    )
+                mes_html += '</tr>'
+            mes_html += '</table>'
+            st.markdown(mes_html, unsafe_allow_html=True)
+        else:
+            cal_html = _render_calendario(dias, ags_por_dia, semana=(vista == "Semana"))
+            st.markdown(cal_html, unsafe_allow_html=True)
 
         # ── Confirmação e ações ─────────────────────────────────────────────
         if ags_periodo:
             st.markdown("---")
-            st.markdown("#### Confirmação")
+            st.markdown("#### Agendamentos")
             for ag in sorted(ags_periodo, key=lambda x: (x.data, x.hora_inicio)):
-                col_info, col_conf, col_menu = st.columns([5, 1, 0.4])
+                col_nome_ag, col_info, col_conf, col_menu = st.columns([2, 4, 1, 0.4])
+                with col_nome_ag:
+                    pacote_label = " 📦" if getattr(ag, "_tem_pacote", False) else ""
+                    if st.button(f"{ag.cliente_nome or 'N/A'}{pacote_label}", key=f"nome_{ag.id}", use_container_width=True):
+                        st.session_state["ag_popup_edit_id"] = ag.id
+                        st.rerun()
                 with col_info:
-                    prefixo = f"**{ag.data.strftime('%d/%m')}** — " if vista == "Semana" else ""
+                    prefixo = f"**{ag.data.strftime('%d/%m')}** — " if vista != "Dia" else ""
                     icone_conf = " ✅" if ag.confirmado else ""
                     st.write(
-                        f"{prefixo}**{ag.hora_inicio}–{ag.hora_fim}** — "
-                        f"{ag.cliente_nome or 'N/A'} | {ag.procedimento or ''} | {ag.profissional}"
+                        f"{prefixo}**{ag.hora_inicio}–{ag.hora_fim}** | "
+                        f"{ag.procedimento or ''} | {ag.profissional}"
                         f"{icone_conf}"
                     )
                 with col_conf:
@@ -1262,6 +1353,74 @@ def tela_agenda():
                             db.delete(ag)
                             db.commit()
                             st.rerun()
+
+        # ── Pop-up de edição rápida ──────────────────────────────────────────
+        if "ag_popup_edit_id" in st.session_state:
+            _popup_id = st.session_state["ag_popup_edit_id"]
+            _ag_popup = db.get(ScheduledAppointment, _popup_id)
+            if _ag_popup:
+                @st.dialog("Editar Agendamento", width="large")
+                def _dialog_editar_ag():
+                    _db2 = SessionLocal()
+                    try:
+                        _ag2 = _db2.get(ScheduledAppointment, _popup_id)
+                        if not _ag2:
+                            st.error("Agendamento não encontrado.")
+                            return
+                        col_d1, col_d2 = st.columns(2)
+                        with col_d1:
+                            _ed_data = st.date_input("Data", value=_ag2.data, format="DD/MM/YYYY", key="dlg_ag_data")
+                            _clientes_dlg = _db2.query(Client).order_by(Client.nome.asc()).all()
+                            _opcoes_cli_dlg = ["— selecione —"] + [f"{c.nome} ({c.cpf or ''})" for c in _clientes_dlg]
+                            _mapa_cli_dlg = {f"{c.nome} ({c.cpf or ''})": (c.id, c.nome) for c in _clientes_dlg}
+                            _cli_atual = "— selecione —"
+                            for k, (cid, _) in _mapa_cli_dlg.items():
+                                if cid == _ag2.cliente_id:
+                                    _cli_atual = k
+                                    break
+                            _ed_cli = st.selectbox("Cliente", _opcoes_cli_dlg, index=_opcoes_cli_dlg.index(_cli_atual) if _cli_atual in _opcoes_cli_dlg else 0, key="dlg_ag_cli")
+                            _profs_dlg = _db2.query(Professional).order_by(Professional.nome.asc()).all()
+                            _nomes_prof_dlg = [p.nome for p in _profs_dlg]
+                            _idx_prof = _nomes_prof_dlg.index(_ag2.profissional) if _ag2.profissional in _nomes_prof_dlg else 0
+                            _ed_prof = st.selectbox("Profissional", _nomes_prof_dlg, index=_idx_prof, key="dlg_ag_prof")
+                        with col_d2:
+                            _slots_dlg = gerar_slots_horario()
+                            _idx_hora = _slots_dlg.index(_ag2.hora_inicio) if _ag2.hora_inicio in _slots_dlg else 0
+                            _ed_hora = st.selectbox("Hora início", _slots_dlg, index=_idx_hora, key="dlg_ag_hora")
+                            _duracoes_dlg = [15, 30, 45, 60, 75, 90, 105, 120]
+                            _idx_dur = _duracoes_dlg.index(_ag2.duracao_min) if _ag2.duracao_min in _duracoes_dlg else 3
+                            _ed_dur = st.selectbox("Duração (min)", _duracoes_dlg, index=_idx_dur, key="dlg_ag_dur")
+                            _ed_proc = st.text_input("Procedimento", value=_ag2.procedimento or "", key="dlg_ag_proc")
+                            _ed_obs = st.text_area("Observações", value=_ag2.observacoes or "", key="dlg_ag_obs")
+                            OPCOES_SALA_DLG = ["— nenhuma —", "Sala 1", "Sala 2", "Sala 3", "Sala 4", "Sala 5", "Soroterapia"]
+                            _sala_idx = OPCOES_SALA_DLG.index(_ag2.sala) if _ag2.sala in OPCOES_SALA_DLG else 0
+                            _ed_sala = st.selectbox("Sala", OPCOES_SALA_DLG, index=_sala_idx, key="dlg_ag_sala")
+
+                        col_sv, col_cn = st.columns(2)
+                        with col_sv:
+                            if st.button("Salvar", use_container_width=True, key="dlg_ag_save", type="primary"):
+                                _ag2.data = _ed_data
+                                _ag2.hora_inicio = _ed_hora
+                                _ag2.hora_fim = calcular_hora_fim(_ed_hora, _ed_dur)
+                                _ag2.duracao_min = _ed_dur
+                                if _ed_cli != "— selecione —" and _ed_cli in _mapa_cli_dlg:
+                                    _ag2.cliente_id, _ag2.cliente_nome = _mapa_cli_dlg[_ed_cli]
+                                _ag2.profissional = _ed_prof
+                                _ag2.procedimento = _ed_proc.strip()
+                                _ag2.observacoes = _ed_obs
+                                _ag2.sala = _ed_sala if _ed_sala != "— nenhuma —" else None
+                                _cor_map = {p.nome: (p.cor or "#E3A5C7") for p in _profs_dlg}
+                                _ag2.cor_profissional = _cor_map.get(_ed_prof, "#E3A5C7")
+                                _db2.commit()
+                                st.session_state.pop("ag_popup_edit_id", None)
+                                st.rerun()
+                        with col_cn:
+                            if st.button("Cancelar", use_container_width=True, key="dlg_ag_cancel"):
+                                st.session_state.pop("ag_popup_edit_id", None)
+                                st.rerun()
+                    finally:
+                        _db2.close()
+                _dialog_editar_ag()
 
         # ── Gerenciar Profissionais ──────────────────────────────────────────
         st.markdown("---")
@@ -3507,17 +3666,41 @@ def tela_vendas():
 
         # ── Adicionar item ──
         with st.expander("➕ Adicionar item", expanded=True):
-            col_i1, col_i2, col_i3 = st.columns([3, 1, 1])
+            # Buscar procedimentos cadastrados para auto-preencher
+            _procs_cadastrados = db.query(Tratamento).filter(Tratamento.ativo == True).order_by(Tratamento.nome).all()
+            _nomes_procs = ["— digitar manualmente —"] + [p.nome for p in _procs_cadastrados]
+            _mapa_procs = {p.nome: p for p in _procs_cadastrados}
+
+            col_i0, col_i1 = st.columns([2, 2])
+            with col_i0:
+                proc_selecionado = st.selectbox("Procedimento cadastrado", _nomes_procs, key="item_proc_sel")
             with col_i1:
-                proc_item = st.text_input("Procedimento*", key="item_proc")
-            with col_i2:
                 tipo_item = st.selectbox("Tipo", ["Unitário", "Pacote"], key="item_tipo")
+
+            # Auto-preencher valor se selecionou procedimento cadastrado
+            _val_default = 0.0
+            _sessoes_default = 1
+            if proc_selecionado != "— digitar manualmente —" and proc_selecionado in _mapa_procs:
+                _p_ref = _mapa_procs[proc_selecionado]
+                if tipo_item == "Pacote" and _p_ref.valor_pacote:
+                    _val_default = _p_ref.valor_pacote
+                    _sessoes_default = _p_ref.sessoes_pacote or 10
+                elif _p_ref.valor_unitario:
+                    _val_default = _p_ref.valor_unitario
+
+            col_i2, col_i3 = st.columns([3, 1])
+            with col_i2:
+                if proc_selecionado == "— digitar manualmente —":
+                    proc_item = st.text_input("Procedimento*", key="item_proc")
+                else:
+                    proc_item = proc_selecionado
+                    st.text_input("Procedimento*", value=proc_selecionado, disabled=True, key="item_proc_show")
             with col_i3:
-                valor_item = st.number_input("Valor (R$)*", min_value=0.0, step=0.01, key="item_valor")
+                valor_item = st.number_input("Valor (R$)*", min_value=0.0, step=0.01, value=_val_default, key="item_valor")
 
             sessoes_item = 1
             if tipo_item == "Pacote":
-                sessoes_item = st.number_input("Nº de sessões*", min_value=2, step=1, value=10, key="item_sessoes")
+                sessoes_item = st.number_input("Nº de sessões*", min_value=2, step=1, value=_sessoes_default, key="item_sessoes")
 
             if st.button("Adicionar item", use_container_width=True):
                 if not proc_item.strip():
@@ -3584,19 +3767,43 @@ def tela_vendas():
         # ── Vendas recentes ──
         st.markdown("---")
         st.markdown("### Vendas recentes")
+
+        col_filtro_v, _ = st.columns([1, 3])
+        with col_filtro_v:
+            filtro_tipo_venda = st.selectbox("Filtrar por tipo", ["Todos", "Pacote", "Unitário"], key="venda_filtro_tipo")
+
         vendas_rec = db.query(Sale).order_by(Sale.data_venda.desc(), Sale.id.desc()).limit(50).all()
         if vendas_rec:
             rows_v = []
             for v in vendas_rec:
-                procs = ", ".join(f"{it.procedimento} ({'pacote' if it.tipo=='pacote' else 'unit.'})" for it in v.itens)
+                # Determinar tipo predominante da venda
+                tipos_itens = set(it.tipo for it in v.itens)
+                if "pacote" in tipos_itens and "unitario" in tipos_itens:
+                    tipo_venda = "Misto"
+                elif "pacote" in tipos_itens:
+                    tipo_venda = "Pacote"
+                else:
+                    tipo_venda = "Unitário"
+
+                # Aplicar filtro
+                if filtro_tipo_venda == "Pacote" and "pacote" not in tipos_itens:
+                    continue
+                if filtro_tipo_venda == "Unitário" and "unitario" not in tipos_itens:
+                    continue
+
+                procs = ", ".join(f"{it.procedimento}" for it in v.itens)
                 rows_v.append({
                     "Data": v.data_venda.strftime("%d/%m/%Y"),
                     "Cliente": v.cliente.nome if v.cliente else "—",
+                    "Tipo": tipo_venda,
                     "Procedimentos": procs,
                     "Valor Total (R$)": f"{v.valor_total:.2f}",
                     "Pagamento": v.forma_pagamento,
                 })
-            st.dataframe(pd.DataFrame(rows_v), use_container_width=True, hide_index=True)
+            if rows_v:
+                st.dataframe(pd.DataFrame(rows_v), use_container_width=True, hide_index=True)
+            else:
+                st.info("Nenhuma venda encontrada com esse filtro.")
         else:
             st.info("Nenhuma venda registrada.")
     finally:
@@ -3671,10 +3878,10 @@ def _modal_excluir_usuario(uid: int, nome_usuario: str):
 
 # ====== TELA: CADASTROS (Materiais e Tratamentos) ======
 def tela_cadastros():
-    header_titulo("Cadastros", "Materiais e tipos de tratamento")
+    header_titulo("Cadastros", "Materiais e procedimentos")
     db = SessionLocal()
     try:
-        aba_mat, aba_trat = st.tabs(["Materiais", "Tratamentos"])
+        aba_mat, aba_trat = st.tabs(["Materiais", "Procedimentos"])
 
         # ────── ABA MATERIAIS ──────
         with aba_mat:
@@ -3718,46 +3925,66 @@ def tela_cadastros():
             else:
                 st.info("Nenhum material cadastrado ainda.")
 
-        # ────── ABA TRATAMENTOS ──────
+        # ────── ABA PROCEDIMENTOS ──────
         with aba_trat:
-            st.markdown("### Novo Tratamento")
-            col1, col2 = st.columns([3, 1])
+            st.markdown("### Novo Procedimento")
+            col1, col2 = st.columns(2)
             with col1:
-                nome_trat = st.text_input("Nome do tratamento", key="trat_nome")
+                nome_trat = st.text_input("Nome do procedimento*", key="trat_nome")
                 desc_trat = st.text_input("Descrição (opcional)", key="trat_desc")
             with col2:
-                st.markdown("<br><br>", unsafe_allow_html=True)
-                if st.button("Salvar", key="trat_salvar", use_container_width=True):
-                    if not nome_trat.strip():
-                        st.error("Informe o nome do tratamento.")
+                valor_unit = st.number_input("Valor unitário (R$)", min_value=0.0, step=0.01, key="trat_val_unit")
+                valor_pac = st.number_input("Valor pacote (R$)", min_value=0.0, step=0.01, key="trat_val_pac")
+                sessoes_pac = st.number_input("Sessões do pacote", min_value=0, step=1, value=0, key="trat_sessoes")
+
+            if st.button("Salvar procedimento", key="trat_salvar", use_container_width=True):
+                if not nome_trat.strip():
+                    st.error("Informe o nome do procedimento.")
+                else:
+                    existe = db.query(Tratamento).filter(
+                        Tratamento.nome == nome_trat.strip(),
+                        Tratamento.ativo == True
+                    ).first()
+                    if existe:
+                        st.warning("Já existe um procedimento com este nome.")
                     else:
-                        existe = db.query(Tratamento).filter(
-                            Tratamento.nome == nome_trat.strip(),
-                            Tratamento.ativo == True
-                        ).first()
-                        if existe:
-                            st.warning("Já existe um tratamento com este nome.")
-                        else:
-                            db.add(Tratamento(nome=nome_trat.strip(), descricao=desc_trat.strip() or None))
-                            db.commit()
-                            st.success("Tratamento cadastrado!")
-                            st.rerun()
+                        db.add(Tratamento(
+                            nome=nome_trat.strip(),
+                            descricao=desc_trat.strip() or None,
+                            valor_unitario=valor_unit if valor_unit > 0 else None,
+                            valor_pacote=valor_pac if valor_pac > 0 else None,
+                            sessoes_pacote=sessoes_pac if sessoes_pac > 0 else None,
+                        ))
+                        db.commit()
+                        st.success("Procedimento cadastrado!")
+                        st.rerun()
 
             st.markdown("---")
-            st.markdown("### Tratamentos Cadastrados")
+            st.markdown("### Procedimentos Cadastrados")
             tratamentos = db.query(Tratamento).filter(Tratamento.ativo == True).order_by(Tratamento.nome.asc()).all()
             if tratamentos:
+                import pandas as pd
+                rows_proc = []
                 for trat in tratamentos:
-                    c1, c2, c3 = st.columns([4, 3, 1])
-                    c1.write(trat.nome)
-                    c2.write(trat.descricao or "—")
-                    with c3:
-                        if st.button("🗑️", key=f"del_trat_{trat.id}", help="Excluir"):
+                    rows_proc.append({
+                        "Nome": trat.nome,
+                        "Descrição": trat.descricao or "—",
+                        "Valor Unit. (R$)": f"{trat.valor_unitario:.2f}" if trat.valor_unitario else "—",
+                        "Valor Pacote (R$)": f"{trat.valor_pacote:.2f}" if trat.valor_pacote else "—",
+                        "Sessões Pacote": trat.sessoes_pacote or "—",
+                    })
+                st.dataframe(pd.DataFrame(rows_proc), use_container_width=True, hide_index=True)
+
+                # Botão excluir por nome
+                for trat in tratamentos:
+                    col_n, col_del = st.columns([6, 1])
+                    with col_del:
+                        if st.button("🗑️", key=f"del_trat_{trat.id}", help=f"Excluir {trat.nome}"):
                             trat.ativo = False
                             db.commit()
                             st.rerun()
             else:
-                st.info("Nenhum tratamento cadastrado ainda.")
+                st.info("Nenhum procedimento cadastrado ainda.")
     finally:
         db.close()
 
