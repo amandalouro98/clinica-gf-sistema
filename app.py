@@ -1908,21 +1908,25 @@ def tela_clientes():
                                 pdf.set_font("Helvetica", "B", 18)
                                 pdf.set_text_color(*COR_ROSA)
                                 pdf.cell(0, 10, "TABELA DE DOSES", ln=True, align="C")
-                                pdf.ln(5)
-                                
-                                # Linha decorativa
-                                pdf.set_draw_color(*COR_ROSA)
-                                pdf.set_line_width(0.5)
-                                pdf.line(60, pdf.get_y(), 150, pdf.get_y())
-                                pdf.ln(10)
+                                pdf.ln(8)
                                 
                                 # Dados do paciente
                                 pdf.set_font("Helvetica", "B", 12)
-                                pdf.set_text_color(*COR_TEXTO)
-                                pdf.cell(0, 8, f"Paciente: {cli.nome if cli else 'N/A'}", ln=True)
-                                pdf.ln(4)
+                                pdf.set_text_color(*COR_ROSA)
+                                nome_pac = cli.nome if cli else 'N/A'
+                                pdf.cell(pdf.get_string_width("Paciente: ") + 2, 8, "Paciente: ", 0, 0)
+                                pdf.set_text_color(0, 0, 0)
+                                pdf.cell(0, 8, nome_pac, ln=True)
+                                pdf.set_font("Helvetica", "", 10)
+                                pdf.set_text_color(*COR_ROSA)
+                                pdf.cell(pdf.get_string_width("Data: ") + 2, 6, "Data: ", 0, 0)
+                                pdf.set_text_color(0, 0, 0)
+                                from datetime import datetime as _dt
+                                pdf.cell(0, 6, _dt.now().strftime("%d/%m/%Y"), ln=True)
+                                pdf.ln(6)
                                 
                                 # Tabela
+                                pdf.set_draw_color(*COR_ROSA)
                                 pdf.set_font("Helvetica", "B", 10)
                                 pdf.set_fill_color(*COR_ROSA)
                                 pdf.set_text_color(*COR_BRANCO)
@@ -1993,30 +1997,20 @@ def _gerar_pdf_pre_avaliacao(cliente_nome: str, cpf: str, avaliacao) -> bytes:
         def header(self):
             self.set_fill_color(*COR_ROSA_CLARO)
             self.rect(0, 0, 210, 297, 'F')
-            self.set_fill_color(*COR_ROSA)
+            self.set_fill_color(245, 220, 220)
             self.rect(0, 0, 210, 60, 'F')
-            logo_carregada = False
             try:
                 possiveis_caminhos = [
                     os.path.join(os.path.dirname(__file__), "ui", "logogf.png"),
                     os.path.join(os.path.dirname(__file__), "assets", "logogf.png"),
-                    "C:\\Users\\joaoz\\Desktop\\sistema GF\\ui\\logogf.png",
                 ]
                 for caminho in possiveis_caminhos:
                     if os.path.exists(caminho):
-                        self.image(caminho, x=85, y=10, w=40)
-                        logo_carregada = True
+                        self.image(caminho, x=75, y=20, w=60)
                         break
             except:
                 pass
-            if not logo_carregada:
-                self.set_y(16)
-                self.set_font("Helvetica", "B", 28)
-                self.set_text_color(*COR_BRANCO)
-                self.cell(0, 14, "GABRIELA FRANCO", ln=True, align="C")
-                self.set_font("Helvetica", "", 20)
-                self.cell(0, 10, "SAUDE INTEGRATIVA", ln=True, align="C")
-            self.ln(45)
+            self.ln(55)
         
         def footer(self):
             self.set_y(-25)
@@ -2194,40 +2188,22 @@ def _modal_receituario_popup():
                             
                             class PDFReceituario(FPDF):
                                 def header(self):
-                                    # Fundo rosa claro em toda a página
                                     self.set_fill_color(*COR_ROSA_CLARO)
                                     self.rect(0, 0, 210, 297, 'F')
-                                    
-                                    # Fundo rosa escuro no cabeçalho (igual ao rodapé)
-                                    self.set_fill_color(*COR_ROSA)
+                                    self.set_fill_color(245, 220, 220)
                                     self.rect(0, 0, 210, 60, 'F')
-                                    
-                                    # Tenta carregar a logo
-                                    logo_carregada = False
                                     try:
                                         possiveis_caminhos = [
                                             os.path.join(os.path.dirname(__file__), "ui", "logogf.png"),
                                             os.path.join(os.path.dirname(__file__), "assets", "logogf.png"),
-                                            "C:\\Users\\joaoz\\Desktop\\sistema GF\\ui\\logogf.png",
                                         ]
                                         for caminho in possiveis_caminhos:
                                             if os.path.exists(caminho):
-                                                self.image(caminho, x=85, y=10, w=40)
-                                                logo_carregada = True
+                                                self.image(caminho, x=75, y=20, w=60)
                                                 break
                                     except:
                                         pass
-                                    
-                                    # Se não carregou a logo, escreve o texto em branco sobre fundo rosa
-                                    if not logo_carregada:
-                                        self.set_y(16)
-                                        self.set_font("Helvetica", "B", 28)
-                                        self.set_text_color(*COR_BRANCO)
-                                        self.cell(0, 14, "GABRIELA FRANCO", ln=True, align="C")
-                                        self.set_font("Helvetica", "", 20)
-                                        self.cell(0, 10, "SAUDE INTEGRATIVA", ln=True, align="C")
-                                    
-                                    self.ln(45)
+                                    self.ln(55)
                                 
                                 def footer(self):
                                     # Fundo rosa mais escuro no rodapé
@@ -2453,30 +2429,20 @@ def _modal_tabela_doses():
                                 def header(self):
                                     self.set_fill_color(*COR_ROSA_CLARO)
                                     self.rect(0, 0, 210, 297, 'F')
-                                    self.set_fill_color(*COR_ROSA)
+                                    self.set_fill_color(245, 220, 220)
                                     self.rect(0, 0, 210, 60, 'F')
-                                    logo_carregada = False
                                     try:
                                         possiveis_caminhos = [
                                             os.path.join(os.path.dirname(__file__), "ui", "logogf.png"),
                                             os.path.join(os.path.dirname(__file__), "assets", "logogf.png"),
-                                            "C:\\Users\\joaoz\\Desktop\\sistema GF\\ui\\logogf.png",
                                         ]
                                         for caminho in possiveis_caminhos:
                                             if os.path.exists(caminho):
-                                                self.image(caminho, x=85, y=10, w=40)
-                                                logo_carregada = True
+                                                self.image(caminho, x=75, y=20, w=60)
                                                 break
                                     except:
                                         pass
-                                    if not logo_carregada:
-                                        self.set_y(16)
-                                        self.set_font("Helvetica", "B", 28)
-                                        self.set_text_color(*COR_BRANCO)
-                                        self.cell(0, 14, "GABRIELA FRANCO", ln=True, align="C")
-                                        self.set_font("Helvetica", "", 20)
-                                        self.cell(0, 10, "SAUDE INTEGRATIVA", ln=True, align="C")
-                                    self.ln(45)
+                                    self.ln(55)
                                 
                                 def footer(self):
                                     self.set_y(-25)
@@ -2498,21 +2464,25 @@ def _modal_tabela_doses():
                             pdf.set_font("Helvetica", "B", 18)
                             pdf.set_text_color(*COR_ROSA)
                             pdf.cell(0, 10, "TABELA DE DOSES", ln=True, align="C")
-                            pdf.ln(5)
-                            
-                            # Linha decorativa
-                            pdf.set_draw_color(*COR_ROSA)
-                            pdf.set_line_width(0.5)
-                            pdf.line(60, pdf.get_y(), 150, pdf.get_y())
-                            pdf.ln(10)
+                            pdf.ln(8)
                             
                             # Dados do paciente
                             pdf.set_font("Helvetica", "B", 12)
-                            pdf.set_text_color(*COR_TEXTO)
-                            pdf.cell(0, 8, f"Paciente: {cli.nome if cli else 'N/A'}", ln=True)
-                            pdf.ln(4)
+                            pdf.set_text_color(*COR_ROSA)
+                            nome_pac = cli.nome if cli else 'N/A'
+                            pdf.cell(pdf.get_string_width("Paciente: ") + 2, 8, "Paciente: ", 0, 0)
+                            pdf.set_text_color(0, 0, 0)
+                            pdf.cell(0, 8, nome_pac, ln=True)
+                            pdf.set_font("Helvetica", "", 10)
+                            pdf.set_text_color(*COR_ROSA)
+                            pdf.cell(pdf.get_string_width("Data: ") + 2, 6, "Data: ", 0, 0)
+                            pdf.set_text_color(0, 0, 0)
+                            from datetime import datetime as _dt
+                            pdf.cell(0, 6, _dt.now().strftime("%d/%m/%Y"), ln=True)
+                            pdf.ln(6)
                             
                             # Tabela
+                            pdf.set_draw_color(*COR_ROSA)
                             pdf.set_font("Helvetica", "B", 10)
                             pdf.set_fill_color(*COR_ROSA)
                             pdf.set_text_color(*COR_BRANCO)
@@ -2536,14 +2506,20 @@ def _modal_tabela_doses():
                                 pdf.ln()
                             
                             pdf_bytes = bytes(pdf.output())
-                            st.download_button(
-                                "⬇️ Baixar PDF",
-                                data=pdf_bytes,
-                                file_name=f"tabela_doses_{cli.nome.replace(' ', '_') if cli else 'cliente'}.pdf",
-                                mime="application/pdf",
-                                use_container_width=True,
-                                key="dose_download"
-                            )
+                            import base64
+                            b64_pdf = base64.b64encode(pdf_bytes).decode()
+                            col_dl, col_view = st.columns(2)
+                            with col_dl:
+                                st.download_button(
+                                    "⬇️ Baixar PDF",
+                                    data=pdf_bytes,
+                                    file_name=f"tabela_doses_{cli.nome.replace(' ', '_') if cli else 'cliente'}.pdf",
+                                    mime="application/pdf",
+                                    use_container_width=True,
+                                    key="dose_download"
+                                )
+                            with col_view:
+                                st.markdown(f'<a href="data:application/pdf;base64,{b64_pdf}" target="_blank" style="display:inline-block;width:100%;text-align:center;padding:0.5rem 1rem;background:#d59c9c;color:white;border-radius:8px;text-decoration:none;font-weight:600;">📤 Abrir / Compartilhar</a>', unsafe_allow_html=True)
                         except Exception as e:
                             st.error(f"Erro ao gerar PDF: {e}")
                 else:
@@ -2565,30 +2541,20 @@ def _modal_tabela_doses():
                                 def header(self):
                                     self.set_fill_color(*COR_ROSA_CLARO)
                                     self.rect(0, 0, 210, 297, 'F')
-                                    self.set_fill_color(*COR_ROSA)
+                                    self.set_fill_color(245, 220, 220)
                                     self.rect(0, 0, 210, 60, 'F')
-                                    logo_carregada = False
                                     try:
                                         possiveis_caminhos = [
                                             os.path.join(os.path.dirname(__file__), "ui", "logogf.png"),
                                             os.path.join(os.path.dirname(__file__), "assets", "logogf.png"),
-                                            "C:\\Users\\joaoz\\Desktop\\sistema GF\\ui\\logogf.png",
                                         ]
                                         for caminho in possiveis_caminhos:
                                             if os.path.exists(caminho):
-                                                self.image(caminho, x=85, y=10, w=40)
-                                                logo_carregada = True
+                                                self.image(caminho, x=75, y=20, w=60)
                                                 break
                                     except:
                                         pass
-                                    if not logo_carregada:
-                                        self.set_y(16)
-                                        self.set_font("Helvetica", "B", 28)
-                                        self.set_text_color(*COR_BRANCO)
-                                        self.cell(0, 14, "GABRIELA FRANCO", ln=True, align="C")
-                                        self.set_font("Helvetica", "", 20)
-                                        self.cell(0, 10, "SAUDE INTEGRATIVA", ln=True, align="C")
-                                    self.ln(45)
+                                    self.ln(55)
                                 
                                 def footer(self):
                                     self.set_y(-25)
@@ -2610,21 +2576,25 @@ def _modal_tabela_doses():
                             pdf.set_font("Helvetica", "B", 18)
                             pdf.set_text_color(*COR_ROSA)
                             pdf.cell(0, 10, "TABELA DE DOSES", ln=True, align="C")
-                            pdf.ln(5)
-                            
-                            # Linha decorativa
-                            pdf.set_draw_color(*COR_ROSA)
-                            pdf.set_line_width(0.5)
-                            pdf.line(60, pdf.get_y(), 150, pdf.get_y())
-                            pdf.ln(10)
+                            pdf.ln(8)
                             
                             # Dados do paciente
                             pdf.set_font("Helvetica", "B", 12)
-                            pdf.set_text_color(*COR_TEXTO)
-                            pdf.cell(0, 8, f"Paciente: {cli.nome if cli else 'N/A'}", ln=True)
-                            pdf.ln(4)
+                            pdf.set_text_color(*COR_ROSA)
+                            nome_pac = cli.nome if cli else 'N/A'
+                            pdf.cell(pdf.get_string_width("Paciente: ") + 2, 8, "Paciente: ", 0, 0)
+                            pdf.set_text_color(0, 0, 0)
+                            pdf.cell(0, 8, nome_pac, ln=True)
+                            pdf.set_font("Helvetica", "", 10)
+                            pdf.set_text_color(*COR_ROSA)
+                            pdf.cell(pdf.get_string_width("Data: ") + 2, 6, "Data: ", 0, 0)
+                            pdf.set_text_color(0, 0, 0)
+                            from datetime import datetime as _dt
+                            pdf.cell(0, 6, _dt.now().strftime("%d/%m/%Y"), ln=True)
+                            pdf.ln(6)
                             
                             # Tabela
+                            pdf.set_draw_color(*COR_ROSA)
                             pdf.set_font("Helvetica", "B", 10)
                             pdf.set_fill_color(*COR_ROSA)
                             pdf.set_text_color(*COR_BRANCO)
@@ -2641,14 +2611,20 @@ def _modal_tabela_doses():
                             pdf.cell(0, 8, "Nenhuma dose registrada.", ln=True, align="C")
                             
                             pdf_bytes = bytes(pdf.output())
-                            st.download_button(
-                                "⬇️ Baixar PDF",
-                                data=pdf_bytes,
-                                file_name=f"tabela_doses_{cli.nome.replace(' ', '_') if cli else 'cliente'}.pdf",
-                                mime="application/pdf",
-                                use_container_width=True,
-                                key="dose_download_vazio"
-                            )
+                            import base64 as _b64v
+                            b64_pdf_v = _b64v.b64encode(pdf_bytes).decode()
+                            col_dl2, col_view2 = st.columns(2)
+                            with col_dl2:
+                                st.download_button(
+                                    "⬇️ Baixar PDF",
+                                    data=pdf_bytes,
+                                    file_name=f"tabela_doses_{cli.nome.replace(' ', '_') if cli else 'cliente'}.pdf",
+                                    mime="application/pdf",
+                                    use_container_width=True,
+                                    key="dose_download_vazio"
+                                )
+                            with col_view2:
+                                st.markdown(f'<a href="data:application/pdf;base64,{b64_pdf_v}" target="_blank" style="display:inline-block;width:100%;text-align:center;padding:0.5rem 1rem;background:#d59c9c;color:white;border-radius:8px;text-decoration:none;font-weight:600;">📤 Abrir / Compartilhar</a>', unsafe_allow_html=True)
                         except Exception as e:
                             st.error(f"Erro ao gerar PDF: {e}")
             else:
@@ -3339,9 +3315,15 @@ def tela_relatorios():
                     _pdf.cell(0, 8, f"Receita no período: R$ {_val_vendas:,.2f}", ln=True)
                     
                     _pdf_bytes = bytes(_pdf.output())
-                    st.download_button("⬇️ Baixar PDF", data=_pdf_bytes,
-                                       file_name=f"relatorio_{_r_ini}_{_r_fim}.pdf",
-                                       mime="application/pdf", key="dl_pdf_rel")
+                    import base64 as _b64r
+                    _b64_rel = _b64r.b64encode(_pdf_bytes).decode()
+                    _col_r1, _col_r2 = st.columns(2)
+                    with _col_r1:
+                        st.download_button("⬇️ Baixar PDF", data=_pdf_bytes,
+                                           file_name=f"relatorio_{_r_ini}_{_r_fim}.pdf",
+                                           mime="application/pdf", key="dl_pdf_rel")
+                    with _col_r2:
+                        st.markdown(f'<a href="data:application/pdf;base64,{_b64_rel}" target="_blank" style="display:inline-block;width:100%;text-align:center;padding:0.5rem 1rem;background:#d59c9c;color:white;border-radius:8px;text-decoration:none;font-weight:600;">📤 Abrir / Compartilhar</a>', unsafe_allow_html=True)
                 except Exception as _e:
                     st.error(f"Erro ao gerar PDF: {_e}")
 
@@ -3499,7 +3481,14 @@ def tela_contratos():
                 db.commit()
                 path = gerar_pdf_contrato(c.id, destino=f"contrato_{c.id}.pdf")
                 with open(path, "rb") as f:
-                    st.download_button("Baixar PDF", data=f.read(), file_name=f"contrato_{c.id}.pdf")
+                    _contrato_bytes = f.read()
+                import base64 as _b64c
+                _b64_contrato = _b64c.b64encode(_contrato_bytes).decode()
+                _col_c1, _col_c2 = st.columns(2)
+                with _col_c1:
+                    st.download_button("⬇️ Baixar PDF", data=_contrato_bytes, file_name=f"contrato_{c.id}.pdf")
+                with _col_c2:
+                    st.markdown(f'<a href="data:application/pdf;base64,{_b64_contrato}" target="_blank" style="display:inline-block;width:100%;text-align:center;padding:0.5rem 1rem;background:#d59c9c;color:white;border-radius:8px;text-decoration:none;font-weight:600;">📤 Abrir / Compartilhar</a>', unsafe_allow_html=True)
                 st.success("Contrato gerado.")
     finally:
         db.close()

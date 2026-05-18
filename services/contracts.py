@@ -23,30 +23,20 @@ def gerar_pdf_contrato(contrato_id: int, destino="contrato.pdf"):
         def header(self):
             self.set_fill_color(*COR_ROSA_CLARO)
             self.rect(0, 0, 210, 297, 'F')
-            self.set_fill_color(*COR_ROSA)
+            self.set_fill_color(245, 220, 220)
             self.rect(0, 0, 210, 60, 'F')
-            logo_carregada = False
             try:
                 possiveis_caminhos = [
                     os.path.join(os.path.dirname(__file__), "..", "ui", "logogf.png"),
                     os.path.join(os.path.dirname(__file__), "..", "assets", "logogf.png"),
-                    "C:\\Users\\joaoz\\Desktop\\sistema GF\\ui\\logogf.png",
                 ]
                 for caminho in possiveis_caminhos:
                     if os.path.exists(caminho):
-                        self.image(caminho, x=85, y=10, w=40)
-                        logo_carregada = True
+                        self.image(caminho, x=75, y=20, w=60)
                         break
             except:
                 pass
-            if not logo_carregada:
-                self.set_y(16)
-                self.set_font("Helvetica", "B", 28)
-                self.set_text_color(*COR_BRANCO)
-                self.cell(0, 14, "GABRIELA FRANCO", ln=True, align="C")
-                self.set_font("Helvetica", "", 20)
-                self.cell(0, 10, "SAUDE INTEGRATIVA", ln=True, align="C")
-            self.ln(45)
+            self.ln(55)
 
         def footer(self):
             self.set_y(-25)
