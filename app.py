@@ -13,21 +13,15 @@ def _agora():
     return datetime.now(BR_TZ)
 
 def _mostrar_pdf(pdf_bytes, nome_arquivo, key_suffix=""):
-    """Mostra PDF inline com opção de fechar e compartilhar"""
-    import base64
-    b64 = base64.b64encode(pdf_bytes).decode()
-    st.markdown(f'''
-    <div style="position:relative;border:1px solid #d59c9c;border-radius:8px;overflow:hidden;margin:1rem 0;">
-        <div style="background:#d59c9c;padding:8px 12px;display:flex;justify-content:space-between;align-items:center;">
-            <span style="color:white;font-weight:600;">📄 {nome_arquivo}</span>
-            <a href="data:application/pdf;base64,{b64}" download="{nome_arquivo}" style="color:white;text-decoration:none;background:#4a3030;padding:4px 12px;border-radius:4px;font-size:0.85em;">⬇️ Salvar / Compartilhar</a>
-        </div>
-        <iframe src="data:application/pdf;base64,{b64}" width="100%" height="500px" style="border:none;"></iframe>
-    </div>
-    ''', unsafe_allow_html=True)
-    if st.button("❌ Fechar PDF", key=f"fechar_pdf_{key_suffix}", use_container_width=True):
-        st.session_state[f"mostrar_pdf_{key_suffix}"] = False
-        st.rerun()
+    """Botão de download do PDF - no iPhone abre compartilhamento nativo"""
+    st.download_button(
+        label=f"📄 Baixar / Compartilhar: {nome_arquivo}",
+        data=pdf_bytes,
+        file_name=nome_arquivo,
+        mime="application/pdf",
+        key=f"dl_pdf_{key_suffix}",
+        use_container_width=True,
+    )
 from dotenv import load_dotenv
 from streamlit_searchbox import st_searchbox
 
