@@ -1,19 +1,12 @@
 """
 Importa o histórico de atendimentos do Excel para o banco de dados.
 Uso: python importar_historico.py
-Versao: 2.0 - Sem dependencia de models
+Versao: 2.1 - Usa utils.db
 """
 import pandas as pd
 from datetime import date
-from sqlalchemy import create_engine, text
-from dotenv import load_dotenv
-import os
-
-load_dotenv()
-
-# Conexão direta sem importar models
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@db:5432/clinica")
-engine = create_engine(DATABASE_URL)
+from sqlalchemy import text
+from utils.db import engine
 
 df = pd.read_excel("histórico de atendimentos.xlsx")
 print(f"Total de registros no Excel: {len(df)}")
