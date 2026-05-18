@@ -1,9 +1,9 @@
-import streamlit as st
+﻿import streamlit as st
 import pandas as pd
 import altair as alt
 from datetime import date, datetime, timedelta, timezone
 
-# Fuso horário de Brasília (GMT-3)
+# Fuso horÃ¡rio de BrasÃ­lia (GMT-3)
 BR_TZ = timezone(timedelta(hours=-3))
 
 def _hoje():
@@ -14,8 +14,8 @@ def _agora():
 from dotenv import load_dotenv
 from streamlit_searchbox import st_searchbox
 
-# ====== CONFIGURAÇÃO INICIAL ======
-st.set_page_config(page_title="Gabriela Franco Saúde", page_icon="ui/favicon.png", layout="wide")
+# ====== CONFIGURAÃ‡ÃƒO INICIAL ======
+st.set_page_config(page_title="Gabriela Franco SaÃºde", page_icon="ui/favicon.png", layout="wide")
 load_dotenv()
 
 # ====== IMPORTS DO PROJETO ======
@@ -43,7 +43,7 @@ from services.contracts import gerar_pdf_contrato
 from services.importador import sincronizar_clientes
 from ui.components import header_titulo, month_from_date
 
-# ====== CRIA O BANCO (SE NÃO EXISTIR) E SEED DO ADMIN ======
+# ====== CRIA O BANCO (SE NÃƒO EXISTIR) E SEED DO ADMIN ======
 Base.metadata.create_all(bind=engine)
 seed_admin()
 
@@ -78,7 +78,7 @@ input[type="checkbox"][disabled] {
 </style>
 """, unsafe_allow_html=True)
 
-# ====== SESSÃO / LOGIN ======
+# ====== SESSÃƒO / LOGIN ======
 if "user" not in st.session_state:
     st.session_state.user = None
 if "menu" not in st.session_state:
@@ -119,7 +119,7 @@ def calcular_hora_fim(hora_inicio: str, duracao_min: int) -> str:
         return ""
 
 
-# ── Calendário proporcional (estilo Google) ──────────────────────────────────
+# â”€â”€ CalendÃ¡rio proporcional (estilo Google) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 PX_PER_MIN = 1.5
 CAL_START = 7 * 60   # 07:00 em minutos
 CAL_END   = 20 * 60  # 20:00 em minutos
@@ -143,10 +143,10 @@ def _height_px(duracao_min: int) -> int:
 
 
 def _coluna_html(ags_dia: list, col_w: int) -> str:
-    """Gera HTML de uma coluna de dia com cards proporcionais e sem duplicação."""
+    """Gera HTML de uma coluna de dia com cards proporcionais e sem duplicaÃ§Ã£o."""
     ags = sorted(ags_dia, key=lambda a: a.hora_inicio)
 
-    # Detecta sobreposições e distribui em sub-colunas
+    # Detecta sobreposiÃ§Ãµes e distribui em sub-colunas
     col_ends: list = []
     col_idx: dict = {}
     for ag in ags:
@@ -180,11 +180,11 @@ def _coluna_html(ags_dia: list, col_w: int) -> str:
         ci   = col_idx.get(ag.id, 0)
         left = ci * (card_w + 2)
         cor  = ag.cor_profissional or "#E3A5C7"
-        icone = "✅" if ag.confirmado else "⏳"
-        pacote_flag = " 📦" if getattr(ag, "_tem_pacote", False) else ""
+        icone = "âœ…" if ag.confirmado else "â³"
+        pacote_flag = " ðŸ“¦" if getattr(ag, "_tem_pacote", False) else ""
 
         if h >= 80:
-            sala_txt = f" · {ag.sala}" if getattr(ag, "sala", None) else ""
+            sala_txt = f" Â· {ag.sala}" if getattr(ag, "sala", None) else ""
             inner = (
                 f'<div style="font-size:11px;font-weight:700;overflow:hidden;'
                 f'white-space:nowrap;text-overflow:ellipsis;">'
@@ -192,10 +192,10 @@ def _coluna_html(ags_dia: list, col_w: int) -> str:
                 f'<div style="font-size:10px;overflow:hidden;white-space:nowrap;'
                 f'text-overflow:ellipsis;">{ag.procedimento or ""}{sala_txt}</div>'
                 f'<div style="font-size:10px;color:rgba(0,0,0,0.55);">'
-                f'{ag.hora_inicio}–{ag.hora_fim} {icone}{pacote_flag}</div>'
+                f'{ag.hora_inicio}â€“{ag.hora_fim} {icone}{pacote_flag}</div>'
             )
         elif h >= 40:
-            sala_txt = f" · {ag.sala}" if getattr(ag, "sala", None) else ""
+            sala_txt = f" Â· {ag.sala}" if getattr(ag, "sala", None) else ""
             inner = (
                 f'<div style="font-size:11px;font-weight:700;overflow:hidden;'
                 f'white-space:nowrap;text-overflow:ellipsis;">'
@@ -224,10 +224,10 @@ def _coluna_html(ags_dia: list, col_w: int) -> str:
 
 
 def _render_calendario(dias: list, ags_por_dia: dict, semana: bool = False) -> str:
-    """Monta o HTML completo do calendário proporcional."""
+    """Monta o HTML completo do calendÃ¡rio proporcional."""
     TIME_W = 52
     n = len(dias)
-    # Dia único: coluna ocupa tudo; semana: flex igual com mínimo
+    # Dia Ãºnico: coluna ocupa tudo; semana: flex igual com mÃ­nimo
     col_flex = "flex:1;" if n == 1 else "flex:1;min-width:110px;"
     # Para _coluna_html precisamos de um col_w estimado (usado para calcular sub-colunas)
     col_w_est = 700 if n == 1 else 150
@@ -243,7 +243,7 @@ def _render_calendario(dias: list, ags_por_dia: dict, semana: bool = False) -> s
 
     # Colunas de dias
     colunas = ""
-    nomes_sem = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
+    nomes_sem = ["Seg", "Ter", "Qua", "Qui", "Sex", "SÃ¡b", "Dom"]
     hoje = _hoje()
     for dia in dias:
         ags = ags_por_dia.get(dia, [])
@@ -281,7 +281,7 @@ def _render_calendario(dias: list, ags_por_dia: dict, semana: bool = False) -> s
 
 
 def _mostrar_pdf(pdf_bytes, nome_arquivo, key_suffix=""):
-    """PDF com botão de compartilhar nativo (iOS/Android) + download fallback"""
+    """PDF com botÃ£o de compartilhar nativo (iOS/Android) + download fallback"""
     import base64
     b64 = base64.b64encode(pdf_bytes).decode()
     st.markdown(f'''
@@ -316,14 +316,14 @@ def _mostrar_pdf(pdf_bytes, nome_arquivo, key_suffix=""):
         width:100%;padding:12px;margin:8px 0;
         background:#d59c9c;color:white;border:none;border-radius:8px;
         font-size:1em;font-weight:600;cursor:pointer;">
-        📤 Compartilhar / Baixar: {nome_arquivo}
+        ðŸ“¤ Compartilhar / Baixar: {nome_arquivo}
     </button>
     ''', unsafe_allow_html=True)
 
 
 # ====== LOGIN ======
 def login_screen():
-    # Espaço superior
+    # EspaÃ§o superior
     st.markdown("<div style='padding-top:2.5rem'></div>", unsafe_allow_html=True)
 
     # Logo centralizada
@@ -339,7 +339,7 @@ def login_screen():
 
         st.markdown("<div style='height:1.2rem'></div>", unsafe_allow_html=True)
 
-        # Linha divisória sutil
+        # Linha divisÃ³ria sutil
         st.markdown(
             "<hr style='border:none;border-top:1px solid #f0d5ce;margin:0 0 1.4rem 0'>",
             unsafe_allow_html=True,
@@ -357,7 +357,7 @@ def login_screen():
                 st.success(f"Bem-vinda, {user.nome}!")
                 st.rerun()
             else:
-                st.error("Credenciais inválidas.")
+                st.error("Credenciais invÃ¡lidas.")
 
 
 def require_login():
@@ -529,9 +529,9 @@ def render_sugestoes_cliente(db, termo, contexto="cadastro"):
 
 def botao_toggle_edicao():
     ligado = st.session_state.get("cliente_edicao_habilitada", False)
-    texto = "✏️ Edição habilitada" if ligado else "👁️ Somente visualização"
+    texto = "âœï¸ EdiÃ§Ã£o habilitada" if ligado else "ðŸ‘ï¸ Somente visualizaÃ§Ã£o"
     if st.button(texto, use_container_width=True, key="botao_toggle_edicao"):
-        # Apenas alterna o flag, não limpa os dados
+        # Apenas alterna o flag, nÃ£o limpa os dados
         st.session_state["cliente_edicao_habilitada"] = not ligado
         st.rerun()
 
@@ -540,7 +540,7 @@ def botao_toggle_edicao():
 def sidebar_menu():
     user = st.session_state.user
     with st.sidebar:
-        # Logo / cabeçalho da sidebar
+        # Logo / cabeÃ§alho da sidebar
         st.markdown(
             "<div style='background:#fff0ee;padding:1rem 0.8rem 0.5rem 0.8rem;border-bottom:1px solid #f0d5ce;'>",
             unsafe_allow_html=True,
@@ -560,53 +560,53 @@ def sidebar_menu():
         
         grupos = {
             "Principal": [
-                ("🏠", "Dashboard", "Dashboard"),
-                ("📅", "Agenda", "Agenda"),
+                ("ðŸ ", "Dashboard", "Dashboard"),
+                ("ðŸ“…", "Agenda", "Agenda"),
             ],
             "Clientes": [
-                ("👤", "Clientes", "Clientes"),
-                ("📋", "Pré-avaliação / Consulta", "Pré-avaliação"),
-                ("📏", "Biometria", "Biometria"),
-                ("🩺", "Atendimentos", "Atendimentos"),
+                ("ðŸ‘¤", "Clientes", "Clientes"),
+                ("ðŸ“‹", "PrÃ©-avaliaÃ§Ã£o / Consulta", "PrÃ©-avaliaÃ§Ã£o"),
+                ("ðŸ“", "Biometria", "Biometria"),
+                ("ðŸ©º", "Atendimentos", "Atendimentos"),
             ],
         }
         
-        # Gestão - varia por perfil
+        # GestÃ£o - varia por perfil
         gestao_itens = []
         
         if perfil == "admin":
-            # Admin vê tudo
+            # Admin vÃª tudo
             gestao_itens = [
-                ("💳", "Vendas", "Vendas"),
-                ("📦", "Estoque", "Estoque"),
-                ("📊", "Relatórios", "Relatórios"),
-                ("📝", "Contratos", "Contratos"),
-                ("🗂️", "Cadastros", "Cadastros"),
-                ("⚙️", "Usuários", "Usuários"),
+                ("ðŸ’³", "Vendas", "Vendas"),
+                ("ðŸ“¦", "Estoque", "Estoque"),
+                ("ðŸ“Š", "RelatÃ³rios", "RelatÃ³rios"),
+                ("ðŸ“", "Contratos", "Contratos"),
+                ("ðŸ—‚ï¸", "Cadastros", "Cadastros"),
+                ("âš™ï¸", "UsuÃ¡rios", "UsuÃ¡rios"),
             ]
         elif perfil == "recepcao":
-            # Recepção não vê Relatórios
+            # RecepÃ§Ã£o nÃ£o vÃª RelatÃ³rios
             gestao_itens = [
-                ("💳", "Vendas", "Vendas"),
-                ("📦", "Estoque", "Estoque"),
-                ("📝", "Contratos", "Contratos"),
-                ("🗂️", "Cadastros", "Cadastros"),
+                ("ðŸ’³", "Vendas", "Vendas"),
+                ("ðŸ“¦", "Estoque", "Estoque"),
+                ("ðŸ“", "Contratos", "Contratos"),
+                ("ðŸ—‚ï¸", "Cadastros", "Cadastros"),
             ]
         elif perfil == "profissional":
-            # Profissional não vê Vendas, Relatórios, Cadastros
+            # Profissional nÃ£o vÃª Vendas, RelatÃ³rios, Cadastros
             gestao_itens = [
-                ("📦", "Estoque", "Estoque"),
-                ("📝", "Contratos", "Contratos"),
+                ("ðŸ“¦", "Estoque", "Estoque"),
+                ("ðŸ“", "Contratos", "Contratos"),
             ]
         else:
-            # Padrão (sem perfil definido) - acesso mínimo
+            # PadrÃ£o (sem perfil definido) - acesso mÃ­nimo
             gestao_itens = [
-                ("📦", "Estoque", "Estoque"),
-                ("📝", "Contratos", "Contratos"),
+                ("ðŸ“¦", "Estoque", "Estoque"),
+                ("ðŸ“", "Contratos", "Contratos"),
             ]
         
         if gestao_itens:
-            grupos["Gestão"] = gestao_itens
+            grupos["GestÃ£o"] = gestao_itens
 
         for secao, itens in grupos.items():
             st.markdown(f'<div class="gf-sidebar-section">{secao}</div>', unsafe_allow_html=True)
@@ -634,7 +634,7 @@ def sidebar_menu():
 
 # ====== TELA: DASHBOARD ======
 def tela_dashboard():
-    header_titulo("ACOMPANHAMENTO GERAL", "Visão geral da clínica")
+    header_titulo("ACOMPANHAMENTO GERAL", "VisÃ£o geral da clÃ­nica")
     db = SessionLocal()
     try:
         _data_hoje = _hoje()
@@ -644,13 +644,13 @@ def tela_dashboard():
         # Cards atualizados
         total_clientes = db.query(Client).count()
         
-        # Atendimentos no mês
+        # Atendimentos no mÃªs
         atendimentos_mes = db.query(Appointment).filter(
             Appointment.data >= _ini_mes,
             Appointment.data <= _data_hoje
         ).count()
         
-        # Agendamentos totais (todos os futuros e passados do mês)
+        # Agendamentos totais (todos os futuros e passados do mÃªs)
         agendamentos_total = db.query(ScheduledAppointment).filter(
             ScheduledAppointment.data >= _ini_mes
         ).count()
@@ -660,7 +660,7 @@ def tela_dashboard():
             Appointment.data == _data_hoje
         ).count()
         
-        # Agendamentos cancelados/excluídos (busca no log por acao='excluido' no mês)
+        # Agendamentos cancelados/excluÃ­dos (busca no log por acao='excluido' no mÃªs)
         try:
             cancelados_mes = db.query(AgendaLog).filter(
                 AgendaLog.acao == 'excluido',
@@ -669,7 +669,7 @@ def tela_dashboard():
         except:
             cancelados_mes = 0
         
-        # Produtos com vencimento crítico (próximos 30 dias)
+        # Produtos com vencimento crÃ­tico (prÃ³ximos 30 dias)
         try:
             data_critica = _data_hoje + timedelta(days=30)
             produtos_vencimento_critico = db.query(StockLote).filter(
@@ -681,17 +681,17 @@ def tela_dashboard():
 
         c1, c2, c3, c4, c5, c6 = st.columns(6)
         c1.metric("Total de clientes", total_clientes)
-        c2.metric("Atendimentos no mês", atendimentos_mes)
+        c2.metric("Atendimentos no mÃªs", atendimentos_mes)
         c3.metric("Agendamentos totais", agendamentos_total)
         c4.metric("Atendimentos hoje", atendimentos_hoje)
         c5.metric("Agend. cancelados", cancelados_mes)
-        c6.metric("Vencimento crítico", produtos_vencimento_critico)
+        c6.metric("Vencimento crÃ­tico", produtos_vencimento_critico)
 
         st.markdown("---")
 
-        # --- A confirmar AMANHÃ ---
+        # --- A confirmar AMANHÃƒ ---
         _amanha = _data_hoje + timedelta(days=1)
-        st.markdown("### Clientes a confirmar (amanhã)")
+        st.markdown("### Clientes a confirmar (amanhÃ£)")
         pendentes = (
             db.query(ScheduledAppointment)
             .filter(
@@ -712,7 +712,7 @@ def tela_dashboard():
                 col_info, col_check = st.columns([5, 1])
                 with col_info:
                     st.write(
-                        f"**{ag.hora_inicio}** — {ag.cliente_nome or 'N/A'} | "
+                        f"**{ag.hora_inicio}** â€” {ag.cliente_nome or 'N/A'} | "
                         f"{ag.procedimento or ''} | {ag.profissional}"
                     )
                 with col_check:
@@ -722,7 +722,7 @@ def tela_dashboard():
                         st.session_state["confirmados_dash"].add(ag.id)
                         st.rerun()
         else:
-            st.info("Nenhum agendamento pendente de confirmação para amanhã.")
+            st.info("Nenhum agendamento pendente de confirmaÃ§Ã£o para amanhÃ£.")
 
         st.markdown("---")
 
@@ -753,8 +753,8 @@ def tela_dashboard():
 
         st.markdown("---")
 
-        # --- Gráfico por procedimento (MÊS VIGENTE) ---
-        st.markdown("### Atendimentos por procedimento (mês vigente)")
+        # --- GrÃ¡fico por procedimento (MÃŠS VIGENTE) ---
+        st.markdown("### Atendimentos por procedimento (mÃªs vigente)")
         df_at = pd.read_sql(
             db.query(Appointment).filter(
                 Appointment.data >= _ini_mes,
@@ -762,7 +762,7 @@ def tela_dashboard():
             ).statement, db.bind
         )
         if not df_at.empty and "tipo_tratamento" in df_at.columns:
-            df_at["tipo_tratamento"] = df_at["tipo_tratamento"].fillna("Não informado")
+            df_at["tipo_tratamento"] = df_at["tipo_tratamento"].fillna("NÃ£o informado")
             por_proc = (
                 df_at.groupby("tipo_tratamento")["id"]
                 .count()
@@ -782,10 +782,10 @@ def tela_dashboard():
             )
             st.altair_chart(chart, use_container_width=True)
         else:
-            st.info("Nenhum atendimento registrado no mês vigente.")
+            st.info("Nenhum atendimento registrado no mÃªs vigente.")
 
     except Exception as e:
-        st.warning(f"Não foi possível carregar todos os dados: {e}")
+        st.warning(f"NÃ£o foi possÃ­vel carregar todos os dados: {e}")
     finally:
         db.close()
 
@@ -806,14 +806,14 @@ CORES_PROFISSIONAIS = {
 def _init_agenda_state():
     defaults = {
         "ag_edit_id": None,
-        "ag_cliente": "— selecione —",
-        "ag_prof": "— selecione —",
+        "ag_cliente": "â€” selecione â€”",
+        "ag_prof": "â€” selecione â€”",
         "ag_proc": "",
         "ag_data": _hoje(),
         "ag_hora_ini": "08:00",
         "ag_duracao": 60,
         "ag_obs": "",
-        "ag_sala": "— selecione —",
+        "ag_sala": "â€” selecione â€”",
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -823,7 +823,7 @@ def _init_agenda_state():
 def tela_agenda():
     from collections import defaultdict
 
-    header_titulo("🕐 Agenda", "Agendamentos e calendário diário")
+    header_titulo("ðŸ• Agenda", "Agendamentos e calendÃ¡rio diÃ¡rio")
     _init_agenda_state()
 
     # Aplica pending edit ANTES de qualquer widget ser renderizado
@@ -841,38 +841,38 @@ def tela_agenda():
         cor_por_prof = {p.nome: (p.cor or "#E3A5C7") for p in profs_db}
         clientes = db.query(Client).order_by(Client.nome.asc()).all()
         mapa_cli = {f"{c.nome} ({c.cpf or ''})": (c.id, c.nome) for c in clientes}
-        opcoes_cli = ["— selecione —"] + list(mapa_cli.keys())
+        opcoes_cli = ["â€” selecione â€”"] + list(mapa_cli.keys())
 
         modo_edicao = st.session_state["ag_edit_id"] is not None
         ag_edit = db.get(ScheduledAppointment, st.session_state["ag_edit_id"]) if modo_edicao else None
 
-        # ── Formulário ──────────────────────────────────────────────────────
+        # â”€â”€ FormulÃ¡rio â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         st.markdown("### Agendamento")
 
-        aba_clientes_ag, aba_salas_ag = st.tabs(["👤 Clientes", "🚪 Salas"])
+        aba_clientes_ag, aba_salas_ag = st.tabs(["ðŸ‘¤ Clientes", "ðŸšª Salas"])
 
-        # ════════════════════════════════════════════
+        # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
         # SUB-ABA: CLIENTES
-        # ════════════════════════════════════════════
+        # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
         with aba_clientes_ag:
             if modo_edicao and ag_edit:
-                st.info(f"Editando: **{ag_edit.cliente_nome or 'N/A'}** — {ag_edit.hora_inicio}–{ag_edit.hora_fim}")
-                if st.button("✖ Cancelar edição", key="ag_cancel"):
+                st.info(f"Editando: **{ag_edit.cliente_nome or 'N/A'}** â€” {ag_edit.hora_inicio}â€“{ag_edit.hora_fim}")
+                if st.button("âœ– Cancelar ediÃ§Ã£o", key="ag_cancel"):
                     for k in ["ag_edit_id","ag_cliente","ag_prof","ag_proc",
                                "ag_hora_ini","ag_duracao","ag_obs","ag_sala","ag_data"]:
                         st.session_state.pop(k, None)
                     st.rerun()
 
-            OPCOES_SALA = ["— selecione —", "Sala 1", "Sala 2", "Sala 3", "Sala 4", "Sala 5", "Soroterapia"]
+            OPCOES_SALA = ["â€” selecione â€”", "Sala 1", "Sala 2", "Sala 3", "Sala 4", "Sala 5", "Soroterapia"]
 
             col1, col2 = st.columns(2)
             with col1:
                 if st.session_state.get("ag_cliente") not in opcoes_cli:
-                    st.session_state["ag_cliente"] = "— selecione —"
+                    st.session_state["ag_cliente"] = "â€” selecione â€”"
                 cliente_sel = st.selectbox("Cliente", opcoes_cli, key="ag_cliente")
 
-                # ── Pacotes disponíveis (checkboxes) ──
-                if cliente_sel and cliente_sel != "— selecione —":
+                # â”€â”€ Pacotes disponÃ­veis (checkboxes) â”€â”€
+                if cliente_sel and cliente_sel != "â€” selecione â€”":
                     _cli_id_ag = mapa_cli.get(cliente_sel, (0, ""))[0]
                     if _cli_id_ag:
                         try:
@@ -887,13 +887,13 @@ def tela_agenda():
                                 ).all()
                             )
                             if _pacotes:
-                                st.caption("📦 Pacotes ativos — selecione para vincular ao agendamento:")
+                                st.caption("ðŸ“¦ Pacotes ativos â€” selecione para vincular ao agendamento:")
                                 pacote_selecionado_id = st.session_state.get("ag_pacote_item_id")
                                 for _p in _pacotes:
                                     rest = _p.sessoes_total - _p.sessoes_usadas
                                     chave = f"pkg_{_p.id}"
                                     marcado = st.checkbox(
-                                        f"📦 {_p.procedimento} — {rest} sessão(ões) restante(s)",
+                                        f"ðŸ“¦ {_p.procedimento} â€” {rest} sessÃ£o(Ãµes) restante(s)",
                                         key=chave,
                                         value=(pacote_selecionado_id == _p.id),
                                     )
@@ -913,35 +913,35 @@ def tela_agenda():
                 data_ag = st.date_input("Data", format="DD/MM/YYYY", key="ag_data")
 
                 if nomes_prof:
-                    opcoes_prof = ["— selecione —"] + nomes_prof
+                    opcoes_prof = ["â€” selecione â€”"] + nomes_prof
                     if st.session_state.get("ag_prof") not in opcoes_prof:
-                        st.session_state["ag_prof"] = "— selecione —"
-                    prof_sel = st.selectbox("Profissional responsável*", opcoes_prof, key="ag_prof")
+                        st.session_state["ag_prof"] = "â€” selecione â€”"
+                    prof_sel = st.selectbox("Profissional responsÃ¡vel*", opcoes_prof, key="ag_prof")
                 else:
                     st.info("Cadastre um profissional abaixo primeiro.")
-                    prof_sel = "— selecione —"
+                    prof_sel = "â€” selecione â€”"
 
                 procedimento = st.text_input("Procedimento", key="ag_proc")
 
                 if st.session_state.get("ag_sala") not in OPCOES_SALA:
-                    st.session_state["ag_sala"] = "— selecione —"
+                    st.session_state["ag_sala"] = "â€” selecione â€”"
                 sala_sel = st.selectbox("Sala", OPCOES_SALA, key="ag_sala")
 
             with col2:
                 if st.session_state.get("ag_hora_ini") not in slots:
                     st.session_state["ag_hora_ini"] = "08:00"
-                hora_inicio = st.selectbox("Hora início", slots, key="ag_hora_ini")
+                hora_inicio = st.selectbox("Hora inÃ­cio", slots, key="ag_hora_ini")
 
                 if st.session_state.get("ag_duracao") not in duracoes:
                     st.session_state["ag_duracao"] = 60
-                duracao = st.selectbox("Duração (min)", duracoes, key="ag_duracao")
+                duracao = st.selectbox("DuraÃ§Ã£o (min)", duracoes, key="ag_duracao")
 
                 # Calcula hora fim e exibe em tempo real
                 hora_fim_calc = calcular_hora_fim(hora_inicio, duracao)
                 st.markdown(f"**Hora fim:** {hora_fim_calc}")
-                observacoes_ag = st.text_area("Observações", key="ag_obs", height=150)
+                observacoes_ag = st.text_area("ObservaÃ§Ãµes", key="ag_obs", height=150)
 
-                # Recorrência
+                # RecorrÃªncia
                 if not modo_edicao:
                     recorrente = st.checkbox("Repetir semanalmente", key="ag_recorrente")
                     if recorrente:
@@ -952,15 +952,15 @@ def tela_agenda():
                     recorrente = False
                     num_semanas = 1
 
-            btn_label = "💾 Salvar alterações" if modo_edicao else "💾 Salvar agendamento"
+            btn_label = "ðŸ’¾ Salvar alteraÃ§Ãµes" if modo_edicao else "ðŸ’¾ Salvar agendamento"
             if st.button(btn_label, use_container_width=True, key="ag_salvar"):
-                if prof_sel == "— selecione —":
+                if prof_sel == "â€” selecione â€”":
                     st.error("Selecione um profissional.")
                 else:
                     cli_id, cli_nome = None, None
-                    if cliente_sel != "— selecione —" and cliente_sel in mapa_cli:
+                    if cliente_sel != "â€” selecione â€”" and cliente_sel in mapa_cli:
                         cli_id, cli_nome = mapa_cli[cliente_sel]
-                    sala_val = sala_sel if sala_sel != "— selecione —" else None
+                    sala_val = sala_sel if sala_sel != "â€” selecione â€”" else None
 
                     if modo_edicao and ag_edit:
                         _antes = __import__("json").dumps({
@@ -1005,7 +1005,7 @@ def tela_agenda():
                         st.success("Agendamento atualizado!")
                     else:
                         _pacote_item_id = st.session_state.pop("ag_pacote_item_id", None)
-                        # Criar agendamentos (1 ou múltiplos se recorrente)
+                        # Criar agendamentos (1 ou mÃºltiplos se recorrente)
                         for _sem_i in range(int(num_semanas)):
                             _data_sem = data_ag + timedelta(weeks=_sem_i)
                             novo = ScheduledAppointment(
@@ -1044,7 +1044,7 @@ def tela_agenda():
                                 pass
                         db.commit()
                         if int(num_semanas) > 1:
-                            st.success(f"{int(num_semanas)} agendamentos criados (recorrência semanal)!")
+                            st.success(f"{int(num_semanas)} agendamentos criados (recorrÃªncia semanal)!")
                         else:
                             st.success("Agendamento salvo!")
                         for _k in ["ag_cliente","ag_prof","ag_proc","ag_hora_ini",
@@ -1053,43 +1053,43 @@ def tela_agenda():
                             st.session_state.pop(_k, None)
                     st.rerun()
 
-        # ════════════════════════════════════════════
+        # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
         # SUB-ABA: SALAS
-        # ════════════════════════════════════════════
+        # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
         with aba_salas_ag:
-            OPCOES_SALA_S = ["— selecione —", "Sala 1", "Sala 2", "Sala 3", "Sala 4", "Sala 5", "Soroterapia"]
-            _COR_SALA = "#a0c4e8"  # Cor padrão para reservas de sala
+            OPCOES_SALA_S = ["â€” selecione â€”", "Sala 1", "Sala 2", "Sala 3", "Sala 4", "Sala 5", "Soroterapia"]
+            _COR_SALA = "#a0c4e8"  # Cor padrÃ£o para reservas de sala
             col_s1, col_s2 = st.columns(2)
             with col_s1:
-                _responsavel_s = st.text_input("Nome do responsável", key="sala_responsavel")
+                _responsavel_s = st.text_input("Nome do responsÃ¡vel", key="sala_responsavel")
                 if st.session_state.get("sala_sala") not in OPCOES_SALA_S:
-                    st.session_state["sala_sala"] = "— selecione —"
+                    st.session_state["sala_sala"] = "â€” selecione â€”"
                 _sala_s = st.selectbox("Sala", OPCOES_SALA_S, key="sala_sala")
                 _data_s = st.date_input("Data", format="DD/MM/YYYY", key="sala_data")
                 if nomes_prof:
-                    _opcoes_prof_s = ["— selecione —"] + nomes_prof
+                    _opcoes_prof_s = ["â€” selecione â€”"] + nomes_prof
                     if st.session_state.get("sala_prof") not in _opcoes_prof_s:
-                        st.session_state["sala_prof"] = "— selecione —"
+                        st.session_state["sala_prof"] = "â€” selecione â€”"
                     _prof_s = st.selectbox("Profissional (opcional)", _opcoes_prof_s, key="sala_prof")
                 else:
-                    _prof_s = "— selecione —"
+                    _prof_s = "â€” selecione â€”"
             with col_s2:
                 if st.session_state.get("sala_hora_ini") not in slots:
                     st.session_state["sala_hora_ini"] = "08:00"
-                _hora_ini_s = st.selectbox("Hora início", slots, key="sala_hora_ini")
+                _hora_ini_s = st.selectbox("Hora inÃ­cio", slots, key="sala_hora_ini")
                 if st.session_state.get("sala_duracao") not in duracoes:
                     st.session_state["sala_duracao"] = 60
-                _duracao_s = st.selectbox("Duração (min)", duracoes, key="sala_duracao")
+                _duracao_s = st.selectbox("DuraÃ§Ã£o (min)", duracoes, key="sala_duracao")
                 # Calcula hora fim e exibe em tempo real
                 _hora_fim_s = calcular_hora_fim(_hora_ini_s or "08:00", _duracao_s or 60)
                 st.markdown(f"**Hora fim:** {_hora_fim_s}")
-                _obs_s = st.text_area("Observações", key="sala_obs", height=80)
+                _obs_s = st.text_area("ObservaÃ§Ãµes", key="sala_obs", height=80)
 
-            if st.button("💾 Salvar reserva de sala", use_container_width=True, key="sala_salvar"):
-                if not _responsavel_s or _sala_s == "— selecione —":
-                    st.error("Informe o responsável e a sala.")
+            if st.button("ðŸ’¾ Salvar reserva de sala", use_container_width=True, key="sala_salvar"):
+                if not _responsavel_s or _sala_s == "â€” selecione â€”":
+                    st.error("Informe o responsÃ¡vel e a sala.")
                 else:
-                    _prof_sala = _responsavel_s if _prof_s == "— selecione —" else _prof_s
+                    _prof_sala = _responsavel_s if _prof_s == "â€” selecione â€”" else _prof_s
                     _cor_sala = cor_por_prof.get(_prof_sala, _COR_SALA)
                     _novo_sala = ScheduledAppointment(
                         data=_data_s,
@@ -1131,10 +1131,10 @@ def tela_agenda():
 
         st.markdown("---")
 
-        # ── Controles do calendário ─────────────────────────────────────────
+        # â”€â”€ Controles do calendÃ¡rio â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         ctrl1, ctrl2, ctrl3, ctrl4 = st.columns([1, 1, 1, 1])
         with ctrl1:
-            vista = st.radio("Visualizar", ["Dia", "Semana", "Mês"], horizontal=True, key="ag_vista")
+            vista = st.radio("Visualizar", ["Dia", "Semana", "MÃªs"], horizontal=True, key="ag_vista")
 
         if vista == "Dia":
             with ctrl2:
@@ -1147,23 +1147,23 @@ def tela_agenda():
             monday = data_ref - timedelta(days=data_ref.weekday())
             sunday = monday + timedelta(days=6)
             with ctrl3:
-                st.date_input("Início (Seg)", value=monday, format="DD/MM/YYYY",
+                st.date_input("InÃ­cio (Seg)", value=monday, format="DD/MM/YYYY",
                               disabled=True, key="ag_sem_ini")
             with ctrl4:
                 st.date_input("Fim (Dom)", value=sunday, format="DD/MM/YYYY",
                               disabled=True, key="ag_sem_fim")
             dias = [monday + timedelta(days=i) for i in range(7)]
-        else:  # Mês
+        else:  # MÃªs
             with ctrl2:
-                data_ref = st.date_input("Qualquer data do mês", value=_hoje(),
+                data_ref = st.date_input("Qualquer data do mÃªs", value=_hoje(),
                                          format="DD/MM/YYYY", key="ag_data_ref")
             import calendar
             primeiro_dia_mes = data_ref.replace(day=1)
             _, dias_no_mes = calendar.monthrange(data_ref.year, data_ref.month)
             ultimo_dia_mes = data_ref.replace(day=dias_no_mes)
-            # Começa na segunda da primeira semana
+            # ComeÃ§a na segunda da primeira semana
             inicio_cal = primeiro_dia_mes - timedelta(days=primeiro_dia_mes.weekday())
-            # Termina no domingo da última semana
+            # Termina no domingo da Ãºltima semana
             fim_cal = ultimo_dia_mes + timedelta(days=(6 - ultimo_dia_mes.weekday()))
             dias = [inicio_cal + timedelta(days=i) for i in range((fim_cal - inicio_cal).days + 1)]
 
@@ -1193,7 +1193,7 @@ def tela_agenda():
         for ag in ags_periodo:
             ags_por_dia[ag.data].append(ag)
 
-        # Marcar quais agendamentos têm pacote ativo
+        # Marcar quais agendamentos tÃªm pacote ativo
         try:
             from models.sale import Sale, SaleItem
             for ag in ags_periodo:
@@ -1213,7 +1213,7 @@ def tela_agenda():
         except Exception:
             pass
 
-        # Legenda de profissionais — compacta, numa só linha
+        # Legenda de profissionais â€” compacta, numa sÃ³ linha
         prof_vistos: dict = {}
         for ag in ags_periodo:
             prof_vistos.setdefault(ag.profissional, ag.cor_profissional or "#E3A5C7")
@@ -1225,10 +1225,10 @@ def tela_agenda():
             )
             st.markdown(f'<div style="margin-bottom:6px;">{badges}</div>', unsafe_allow_html=True)
 
-        # Calendário proporcional
-        if vista == "Mês":
+        # CalendÃ¡rio proporcional
+        if vista == "MÃªs":
             # Renderizar grid mensal simplificado
-            nomes_sem = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
+            nomes_sem = ["Seg", "Ter", "Qua", "Qui", "Sex", "SÃ¡b", "Dom"]
             hoje = _hoje()
             mes_html = '<table style="width:100%;border-collapse:collapse;font-family:sans-serif;font-size:12px;">'
             mes_html += '<tr>'
@@ -1262,22 +1262,22 @@ def tela_agenda():
             cal_html = _render_calendario(dias, ags_por_dia, semana=(vista == "Semana"))
             st.markdown(cal_html, unsafe_allow_html=True)
 
-        # ── Confirmação e ações ─────────────────────────────────────────────
+        # â”€â”€ ConfirmaÃ§Ã£o e aÃ§Ãµes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         if ags_periodo:
             st.markdown("---")
             st.markdown("#### Agendamentos")
             for ag in sorted(ags_periodo, key=lambda x: (x.data, x.hora_inicio)):
                 col_nome_ag, col_info, col_conf, col_menu = st.columns([2, 4, 1, 0.4])
                 with col_nome_ag:
-                    pacote_label = " 📦" if getattr(ag, "_tem_pacote", False) else ""
+                    pacote_label = " ðŸ“¦" if getattr(ag, "_tem_pacote", False) else ""
                     if st.button(f"{ag.cliente_nome or 'N/A'}{pacote_label}", key=f"nome_{ag.id}", use_container_width=True):
                         st.session_state["ag_popup_edit_id"] = ag.id
                         st.rerun()
                 with col_info:
-                    prefixo = f"**{ag.data.strftime('%d/%m')}** — " if vista != "Dia" else ""
-                    icone_conf = " ✅" if ag.confirmado else ""
+                    prefixo = f"**{ag.data.strftime('%d/%m')}** â€” " if vista != "Dia" else ""
+                    icone_conf = " âœ…" if ag.confirmado else ""
                     st.write(
-                        f"{prefixo}**{ag.hora_inicio}–{ag.hora_fim}** | "
+                        f"{prefixo}**{ag.hora_inicio}â€“{ag.hora_fim}** | "
                         f"{ag.procedimento or ''} | {ag.profissional}"
                         f"{icone_conf}"
                     )
@@ -1286,7 +1286,7 @@ def tela_agenda():
                         if st.button("Confirmar", key=f"conf_{ag.id}", use_container_width=True):
                             ag.confirmado = True
                             db.commit()
-                            # ── Desconta sessão de pacote se houver ──
+                            # â”€â”€ Desconta sessÃ£o de pacote se houver â”€â”€
                             try:
                                 from models.sale import Sale, SaleItem, SessionUsage
                                 if ag.cliente_id:
@@ -1348,15 +1348,15 @@ def tela_agenda():
                                 pass
                             st.rerun()
                     else:
-                        if st.button("✅ Confirmado", key=f"desc_{ag.id}", use_container_width=True):
+                        if st.button("âœ… Confirmado", key=f"desc_{ag.id}", use_container_width=True):
                             ag.confirmado = False
                             db.commit()
                             st.rerun()
-                # ⋮ sempre visível — independente do status de confirmação
+                # â‹® sempre visÃ­vel â€” independente do status de confirmaÃ§Ã£o
                 with col_menu:
-                    with st.popover("⋮"):
-                        if st.button("✏️ Editar", key=f"edit_{ag.id}", use_container_width=True):
-                            cli_key = "— selecione —"
+                    with st.popover("â‹®"):
+                        if st.button("âœï¸ Editar", key=f"edit_{ag.id}", use_container_width=True):
+                            cli_key = "â€” selecione â€”"
                             for k, (cid, _) in mapa_cli.items():
                                 if cid == ag.cliente_id:
                                     cli_key = k
@@ -1364,17 +1364,17 @@ def tela_agenda():
                             st.session_state["ag_edit_id"] = ag.id
                             st.session_state["ag_pending_edit"] = {
                                 "ag_cliente":  cli_key,
-                                "ag_prof":     ag.profissional if ag.profissional in nomes_prof else "— selecione —",
+                                "ag_prof":     ag.profissional if ag.profissional in nomes_prof else "â€” selecione â€”",
                                 "ag_proc":     ag.procedimento or "",
                                 "ag_data":     ag.data,
                                 "ag_hora_ini": ag.hora_inicio if ag.hora_inicio in slots else "08:00",
                                 "ag_duracao":  ag.duracao_min if ag.duracao_min in duracoes else 60,
                                 "ag_obs":      ag.observacoes or "",
-                                "ag_sala":     ag.sala if ag.sala else "— selecione —",
+                                "ag_sala":     ag.sala if ag.sala else "â€” selecione â€”",
                             }
                             st.rerun()
                         st.markdown("---")
-                        if st.button("🗑️ Excluir", key=f"del_{ag.id}", use_container_width=True):
+                        if st.button("ðŸ—‘ï¸ Excluir", key=f"del_{ag.id}", use_container_width=True):
                             try:
                                 _ulog = st.session_state.get("user", {})
                                 db.add(AgendaLog(
@@ -1395,7 +1395,7 @@ def tela_agenda():
                             db.commit()
                             st.rerun()
 
-        # ── Pop-up de edição rápida ──────────────────────────────────────────
+        # â”€â”€ Pop-up de ediÃ§Ã£o rÃ¡pida â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         if "ag_popup_edit_id" in st.session_state:
             _popup_id = st.session_state["ag_popup_edit_id"]
             _ag_popup = db.get(ScheduledAppointment, _popup_id)
@@ -1406,15 +1406,15 @@ def tela_agenda():
                     try:
                         _ag2 = _db2.get(ScheduledAppointment, _popup_id)
                         if not _ag2:
-                            st.error("Agendamento não encontrado.")
+                            st.error("Agendamento nÃ£o encontrado.")
                             return
                         col_d1, col_d2 = st.columns(2)
                         with col_d1:
                             _ed_data = st.date_input("Data", value=_ag2.data, format="DD/MM/YYYY", key="dlg_ag_data")
                             _clientes_dlg = _db2.query(Client).order_by(Client.nome.asc()).all()
-                            _opcoes_cli_dlg = ["— selecione —"] + [f"{c.nome} ({c.cpf or ''})" for c in _clientes_dlg]
+                            _opcoes_cli_dlg = ["â€” selecione â€”"] + [f"{c.nome} ({c.cpf or ''})" for c in _clientes_dlg]
                             _mapa_cli_dlg = {f"{c.nome} ({c.cpf or ''})": (c.id, c.nome) for c in _clientes_dlg}
-                            _cli_atual = "— selecione —"
+                            _cli_atual = "â€” selecione â€”"
                             for k, (cid, _) in _mapa_cli_dlg.items():
                                 if cid == _ag2.cliente_id:
                                     _cli_atual = k
@@ -1427,13 +1427,13 @@ def tela_agenda():
                         with col_d2:
                             _slots_dlg = gerar_slots_horario()
                             _idx_hora = _slots_dlg.index(_ag2.hora_inicio) if _ag2.hora_inicio in _slots_dlg else 0
-                            _ed_hora = st.selectbox("Hora início", _slots_dlg, index=_idx_hora, key="dlg_ag_hora")
+                            _ed_hora = st.selectbox("Hora inÃ­cio", _slots_dlg, index=_idx_hora, key="dlg_ag_hora")
                             _duracoes_dlg = [15, 30, 45, 60, 75, 90, 105, 120]
                             _idx_dur = _duracoes_dlg.index(_ag2.duracao_min) if _ag2.duracao_min in _duracoes_dlg else 3
-                            _ed_dur = st.selectbox("Duração (min)", _duracoes_dlg, index=_idx_dur, key="dlg_ag_dur")
+                            _ed_dur = st.selectbox("DuraÃ§Ã£o (min)", _duracoes_dlg, index=_idx_dur, key="dlg_ag_dur")
                             _ed_proc = st.text_input("Procedimento", value=_ag2.procedimento or "", key="dlg_ag_proc")
-                            _ed_obs = st.text_area("Observações", value=_ag2.observacoes or "", key="dlg_ag_obs")
-                            OPCOES_SALA_DLG = ["— nenhuma —", "Sala 1", "Sala 2", "Sala 3", "Sala 4", "Sala 5", "Soroterapia"]
+                            _ed_obs = st.text_area("ObservaÃ§Ãµes", value=_ag2.observacoes or "", key="dlg_ag_obs")
+                            OPCOES_SALA_DLG = ["â€” nenhuma â€”", "Sala 1", "Sala 2", "Sala 3", "Sala 4", "Sala 5", "Soroterapia"]
                             _sala_idx = OPCOES_SALA_DLG.index(_ag2.sala) if _ag2.sala in OPCOES_SALA_DLG else 0
                             _ed_sala = st.selectbox("Sala", OPCOES_SALA_DLG, index=_sala_idx, key="dlg_ag_sala")
 
@@ -1444,12 +1444,12 @@ def tela_agenda():
                                 _ag2.hora_inicio = _ed_hora
                                 _ag2.hora_fim = calcular_hora_fim(_ed_hora, _ed_dur)
                                 _ag2.duracao_min = _ed_dur
-                                if _ed_cli != "— selecione —" and _ed_cli in _mapa_cli_dlg:
+                                if _ed_cli != "â€” selecione â€”" and _ed_cli in _mapa_cli_dlg:
                                     _ag2.cliente_id, _ag2.cliente_nome = _mapa_cli_dlg[_ed_cli]
                                 _ag2.profissional = _ed_prof
                                 _ag2.procedimento = _ed_proc.strip()
                                 _ag2.observacoes = _ed_obs
-                                _ag2.sala = _ed_sala if _ed_sala != "— nenhuma —" else None
+                                _ag2.sala = _ed_sala if _ed_sala != "â€” nenhuma â€”" else None
                                 _cor_map = {p.nome: (p.cor or "#E3A5C7") for p in _profs_dlg}
                                 _ag2.cor_profissional = _cor_map.get(_ed_prof, "#E3A5C7")
                                 _db2.commit()
@@ -1463,7 +1463,7 @@ def tela_agenda():
                         _db2.close()
                 _dialog_editar_ag()
 
-        # ── Gerenciar Profissionais ──────────────────────────────────────────
+        # â”€â”€ Gerenciar Profissionais â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         st.markdown("---")
         st.markdown("### Profissionais")
         profs_db = db.query(Professional).order_by(Professional.nome.asc()).all()
@@ -1479,15 +1479,15 @@ def tela_agenda():
                 with col_nome:
                     st.write(p.nome)
                 with col_btn:
-                    with st.popover("⋮", use_container_width=True):
-                        if st.button("✏️ Editar", key=f"prof_edit_{p.id}"):
+                    with st.popover("â‹®", use_container_width=True):
+                        if st.button("âœï¸ Editar", key=f"prof_edit_{p.id}"):
                             st.session_state["prof_editando"] = p.id
                             st.rerun()
-                        if st.button("🗑️ Remover", key=f"rem_prof_{p.id}", use_container_width=True):
+                        if st.button("ðŸ—‘ï¸ Remover", key=f"rem_prof_{p.id}", use_container_width=True):
                             db.delete(p)
                             db.commit()
                             st.rerun()
-            # Formulário de edição de profissional
+            # FormulÃ¡rio de ediÃ§Ã£o de profissional
             if st.session_state.get("prof_editando"):
                 _pid = st.session_state["prof_editando"]
                 _prof_ed = db.get(Professional, _pid)
@@ -1504,7 +1504,7 @@ def tela_agenda():
                         )
                         col_psv, col_pcn = st.columns(2)
                         with col_psv:
-                            _salvar_prof = st.form_submit_button("💾 Salvar", use_container_width=True)
+                            _salvar_prof = st.form_submit_button("ðŸ’¾ Salvar", use_container_width=True)
                         with col_pcn:
                             _cancelar_prof = st.form_submit_button("Cancelar", use_container_width=True)
                     if _salvar_prof:
@@ -1536,7 +1536,7 @@ def tela_agenda():
                 if novo_nome.strip():
                     existe = db.query(Professional).filter(Professional.nome == novo_nome.strip()).first()
                     if existe:
-                        st.warning("Profissional já cadastrado.")
+                        st.warning("Profissional jÃ¡ cadastrado.")
                     else:
                         db.add(Professional(nome=novo_nome.strip(), cor=CORES_PROFISSIONAIS[cor_escolhida]))
                         db.commit()
@@ -1545,19 +1545,19 @@ def tela_agenda():
                 else:
                     st.error("Informe o nome.")
 
-        # ── Histórico de Agendamentos ───────────────────────────────────────
+        # â”€â”€ HistÃ³rico de Agendamentos â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         _data_hoje = _hoje()
         _ini_mes = _data_hoje.replace(day=1)
         st.markdown("---")
-        with st.expander("📋 Histórico de agendamentos", expanded=False):
+        with st.expander("ðŸ“‹ HistÃ³rico de agendamentos", expanded=False):
             col_hi, col_hf, col_att = st.columns([1, 1, 1])
             with col_hi:
                 _log_ini = st.date_input("De", value=_ini_mes, key="log_ini", format="DD/MM/YYYY")
             with col_hf:
-                _log_fim = st.date_input("Até", value=_data_hoje, key="log_fim", format="DD/MM/YYYY")
+                _log_fim = st.date_input("AtÃ©", value=_data_hoje, key="log_fim", format="DD/MM/YYYY")
             with col_att:
                 st.markdown("&nbsp;", unsafe_allow_html=True)
-                if st.button("🔄 Atualizar", use_container_width=True, key="log_refresh"):
+                if st.button("ðŸ”„ Atualizar", use_container_width=True, key="log_refresh"):
                     st.rerun()
 
             try:
@@ -1568,38 +1568,38 @@ def tela_agenda():
                     .all()
                 )
                 if not _logs:
-                    st.info("Nenhum registro no período.")
+                    st.info("Nenhum registro no perÃ­odo.")
                 else:
                     import json as _json
                     _CORES_ACAO = {
-                        "criado": "🟢", "editado": "🟡",
-                        "confirmado": "🔵", "excluido": "🔴",
+                        "criado": "ðŸŸ¢", "editado": "ðŸŸ¡",
+                        "confirmado": "ðŸ”µ", "excluido": "ðŸ”´",
                     }
                     _rows = []
                     for _l in _logs:
                         _depois = _json.loads(_l.dados_depois or "{}") if _l.dados_depois else {}
                         _antes = _json.loads(_l.dados_antes or "{}") if _l.dados_antes else {}
                         _base = _depois if _depois else _antes
-                        _data_ag = _base.get("data", "—")
+                        _data_ag = _base.get("data", "â€”")
                         try:
                             from datetime import datetime as _dt
-                            _data_ag = _dt.strptime(_data_ag, "%Y-%m-%d").strftime("%d/%m/%Y") if _data_ag and _data_ag != "—" else "—"
+                            _data_ag = _dt.strptime(_data_ag, "%Y-%m-%d").strftime("%d/%m/%Y") if _data_ag and _data_ag != "â€”" else "â€”"
                         except Exception:
                             pass
                         _rows.append({
                             "Data do Agendamento": _data_ag,
-                            "Data/Hora da Ação": _l.criado_em.strftime("%d/%m/%Y %H:%M") if _l.criado_em else "—",
-                            "Ação": f"{_CORES_ACAO.get(_l.acao, '')} {_l.acao}",
-                            "Paciente": _base.get("cliente", "—"),
-                            "Profissional": _base.get("profissional", "—"),
-                            "Procedimento": _base.get("procedimento", "—"),
-                            "Sala": _base.get("sala", "—"),
-                            "Usuário": _l.usuario_nome or "—",
+                            "Data/Hora da AÃ§Ã£o": _l.criado_em.strftime("%d/%m/%Y %H:%M") if _l.criado_em else "â€”",
+                            "AÃ§Ã£o": f"{_CORES_ACAO.get(_l.acao, '')} {_l.acao}",
+                            "Paciente": _base.get("cliente", "â€”"),
+                            "Profissional": _base.get("profissional", "â€”"),
+                            "Procedimento": _base.get("procedimento", "â€”"),
+                            "Sala": _base.get("sala", "â€”"),
+                            "UsuÃ¡rio": _l.usuario_nome or "â€”",
                         })
                     import pandas as _pd
                     st.dataframe(_pd.DataFrame(_rows), use_container_width=True, hide_index=True)
             except Exception as _e:
-                st.warning(f"Não foi possível carregar o histórico: {_e}")
+                st.warning(f"NÃ£o foi possÃ­vel carregar o histÃ³rico: {_e}")
 
     finally:
         db.close()
@@ -1607,8 +1607,8 @@ def tela_agenda():
 
 # ====== TELA: CADASTRO DE CLIENTE ======
 def _modal_cliente(titulo: str, cliente_id: int = 0):
-    """Modal reutilizável para criar ou editar cliente.
-    Abre via st.dialog — sempre lê dados frescos do banco.
+    """Modal reutilizÃ¡vel para criar ou editar cliente.
+    Abre via st.dialog â€” sempre lÃª dados frescos do banco.
     """
     @st.dialog(titulo, width="large")
     def _abrir():
@@ -1639,10 +1639,10 @@ def _modal_cliente(titulo: str, cliente_id: int = 0):
                 nasc   = st.date_input("Data de nascimento",  value=nasc_default,   key=f"{prefix}nasc",   format="DD/MM/YYYY")
                 tel    = st.text_input("Telefone",            value=v("telefone"),  key=f"{prefix}tel")
                 email  = st.text_input("E-mail",              value=v("email"),     key=f"{prefix}email")
-                prof   = st.text_input("Profissão",           value=v("profissao"), key=f"{prefix}prof")
+                prof   = st.text_input("ProfissÃ£o",           value=v("profissao"), key=f"{prefix}prof")
 
             with col_b:
-                end    = st.text_input("Endereço",            value=v("endereco"),  key=f"{prefix}end")
+                end    = st.text_input("EndereÃ§o",            value=v("endereco"),  key=f"{prefix}end")
                 bairro = st.text_input("Bairro",              value=v("bairro"),    key=f"{prefix}bairro")
                 cidade = st.text_input("Cidade",              value=v("cidade"),    key=f"{prefix}cidade")
                 peso   = st.number_input("Peso (kg)",         value=vf("peso"),     min_value=0.0, step=0.1, key=f"{prefix}peso")
@@ -1654,18 +1654,18 @@ def _modal_cliente(titulo: str, cliente_id: int = 0):
             with col_c:
                 func_int = st.text_input("Funcionamento intestinal", value=v("funcionamento_intestinal"), key=f"{prefix}func")
                 uso_vit  = st.text_area("Uso de vitaminas",          value=v("uso_vitaminas"),            key=f"{prefix}vit")
-                marcacao = st.text_area("Marcação corporal",          value=v("marcacao_corporal"),        key=f"{prefix}marc")
+                marcacao = st.text_area("MarcaÃ§Ã£o corporal",          value=v("marcacao_corporal"),        key=f"{prefix}marc")
                 neo      = st.checkbox("Neoplasia",   value=vb("neoplasia"),  key=f"{prefix}neo")
                 epi      = st.checkbox("Epilepsia",   value=vb("epilepsia"),  key=f"{prefix}epi")
-                outras   = st.text_area("Outras condições médicas",  value=v("outras_condicoes"),         key=f"{prefix}outras")
+                outras   = st.text_area("Outras condiÃ§Ãµes mÃ©dicas",  value=v("outras_condicoes"),         key=f"{prefix}outras")
                 queixa   = st.text_area("Queixa principal",          value=v("queixa_principal"),         key=f"{prefix}queixa")
                 termo    = st.checkbox("Aceito o termo de veracidade", value=vb("termo_aceite"),          key=f"{prefix}termo")
 
             st.markdown("---")
-            label_btn = "💾 Salvar alterações" if cliente_id else "💾 Salvar novo cliente"
+            label_btn = "ðŸ’¾ Salvar alteraÃ§Ãµes" if cliente_id else "ðŸ’¾ Salvar novo cliente"
             if st.button(label_btn, use_container_width=True, type="primary"):
                 if not nome.strip():
-                    st.error("Nome é obrigatório.")
+                    st.error("Nome Ã© obrigatÃ³rio.")
                     return
                 imc_sal = calcular_imc(peso, altura)
                 dados = dict(
@@ -1701,50 +1701,50 @@ def _modal_cliente(titulo: str, cliente_id: int = 0):
 
 
 def tela_clientes():
-    header_titulo("Clientes", "Busca, cadastro, ficha completa e histórico")
+    header_titulo("Clientes", "Busca, cadastro, ficha completa e histÃ³rico")
 
-    # ── Barra de ação ──
+    # â”€â”€ Barra de aÃ§Ã£o â”€â”€
     _cli_id_top = st.session_state.get("cliente_id_edicao", 0)
     col_sync, col_novo, col_edit, _ = st.columns([1, 1, 1, 2])
     with col_sync:
-        if st.button("🔄 Sincronizar", use_container_width=True):
+        if st.button("ðŸ”„ Sincronizar", use_container_width=True):
             try:
                 with st.spinner("Sincronizando..."):
                     r = sincronizar_clientes()
                 st.success(
-                    f"✅ {r['importados']} novos · 🔄 {r['atualizados']} atualizados · ⏭️ {r['pulados']} pulados"
+                    f"âœ… {r['importados']} novos Â· ðŸ”„ {r['atualizados']} atualizados Â· â­ï¸ {r['pulados']} pulados"
                 )
                 if r["pulados_nomes"]:
                     with st.expander(f"Ver {len(r['pulados_nomes'])} pulado(s)"):
                         for n in r["pulados_nomes"]:
-                            st.caption(f"• {n}")
+                            st.caption(f"â€¢ {n}")
                 st.rerun()
             except Exception as e:
                 st.error(f"Erro ao sincronizar: {e}")
     with col_novo:
-        if st.button("➕ Novo Cliente", use_container_width=True):
+        if st.button("âž• Novo Cliente", use_container_width=True):
             _modal_cliente("Novo Cliente", 0)
     with col_edit:
         if _cli_id_top:
-            if st.button("✏️ Editar", use_container_width=True, key="btn_editar_top"):
+            if st.button("âœï¸ Editar", use_container_width=True, key="btn_editar_top"):
                 _modal_cliente("Editar Cliente", _cli_id_top)
 
     db = SessionLocal()
     try:
-        # ── Busca ──
+        # â”€â”€ Busca â”€â”€
         st.markdown("#### Buscar cliente")
         render_sugestoes_cliente(db, "", "cadastro")
 
         cliente_id = st.session_state.get("cliente_id_edicao", 0)
 
         if not cliente_id:
-            st.info('Use a busca acima para selecionar uma cliente, ou clique em "➕ Novo Cliente".')
+            st.info('Use a busca acima para selecionar uma cliente, ou clique em "âž• Novo Cliente".')
         else:
             c = db.get(Client, cliente_id)
             if not c:
-                st.warning("Cliente não encontrado no banco.")
+                st.warning("Cliente nÃ£o encontrado no banco.")
             else:
-                # ── Cabeçalho: nome em destaque ──
+                # â”€â”€ CabeÃ§alho: nome em destaque â”€â”€
                 st.markdown(
                     f'<p style="font-size:1.9rem;font-weight:700;color:#b87575;'
                     f'font-family:\'Cormorant Garamond\',serif;margin:0.2rem 0 0.8rem 0;">'
@@ -1752,7 +1752,7 @@ def tela_clientes():
                     unsafe_allow_html=True,
                 )
 
-                # ── Mini-resumo de pacotes ativos ──────────────────────────
+                # â”€â”€ Mini-resumo de pacotes ativos â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                 try:
                     from models.sale import Sale, SaleItem
                     _pkt = (
@@ -1767,30 +1767,30 @@ def tela_clientes():
                     if _pkt:
                         for _p in _pkt:
                             rest = _p.sessoes_total - _p.sessoes_usadas
-                            st.info(f"📦 Pacote ativo: **{_p.procedimento}** — {rest} sessão(ões) restante(s)")
+                            st.info(f"ðŸ“¦ Pacote ativo: **{_p.procedimento}** â€” {rest} sessÃ£o(Ãµes) restante(s)")
                 except Exception:
                     pass
 
                 def row(label, val):
-                    return f"**{label}:** {val or '—'}"
+                    return f"**{label}:** {val or 'â€”'}"
 
-                # ── DADOS PESSOAIS ──────────────────────────────────────────
+                # â”€â”€ DADOS PESSOAIS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                 st.markdown("##### Dados Pessoais")
                 col_a, col_b = st.columns(2)
 
                 with col_a:
                     st.markdown(row("CPF", c.cpf))
-                    nasc = c.data_nascimento.strftime("%d/%m/%Y") if c.data_nascimento else "—"
+                    nasc = c.data_nascimento.strftime("%d/%m/%Y") if c.data_nascimento else "â€”"
                     st.markdown(row("Nascimento", nasc))
                     st.markdown(row("Telefone", c.telefone))
                     st.markdown(row("E-mail", c.email))
-                    st.markdown(row("Profissão", c.profissao))
+                    st.markdown(row("ProfissÃ£o", c.profissao))
                     st.markdown(row("Queixa principal", c.queixa_principal))
-                    termo_txt = "Aceito" if c.termo_aceite else "Não"
+                    termo_txt = "Aceito" if c.termo_aceite else "NÃ£o"
                     st.markdown(f"**Termo:** {termo_txt}")
 
                 with col_b:
-                    st.markdown(row("Endereço", c.endereco))
+                    st.markdown(row("EndereÃ§o", c.endereco))
                     st.markdown(row("Bairro", c.bairro))
                     st.markdown(row("Cidade", c.cidade))
                     st.markdown(row("Peso", f"{c.peso} kg" if c.peso else None))
@@ -1800,11 +1800,11 @@ def tela_clientes():
                     st.markdown(row("Func. intestinal", c.funcionamento_intestinal))
                     st.markdown(row("Uso de vitaminas", c.uso_vitaminas))
 
-                # ── CONDIÇÕES MÉDICAS ───────────────────────────────────────
+                # â”€â”€ CONDIÃ‡Ã•ES MÃ‰DICAS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                 st.markdown("---")
-                st.markdown("##### Condições Médicas")
+                st.markdown("##### CondiÃ§Ãµes MÃ©dicas")
 
-                # Condições booleanas fixas
+                # CondiÃ§Ãµes booleanas fixas
                 _cond_fixas = [
                     ("Neoplasia", c.neoplasia),
                     ("Epilepsia", c.epilepsia),
@@ -1812,13 +1812,13 @@ def tela_clientes():
                 _cols_med = st.columns(3)
                 _idx_med = 0
                 for _label, _bool_val in _cond_fixas:
-                    _txt = "Sim" if _bool_val else "Não"
+                    _txt = "Sim" if _bool_val else "NÃ£o"
                     with _cols_med[_idx_med % 3]:
                         st.markdown(f"**{_label}:** {_txt}")
                     _idx_med += 1
 
-                # Condições vindas de outras_condicoes (texto multilinhas)
-                _SEM_ICONE = {"MEDICAMENTOS EM USO", "FUMA", "CONSUMO DE ÁLCOOL"}
+                # CondiÃ§Ãµes vindas de outras_condicoes (texto multilinhas)
+                _SEM_ICONE = {"MEDICAMENTOS EM USO", "FUMA", "CONSUMO DE ÃLCOOL"}
                 if c.outras_condicoes:
                     _linhas_cond = [l.strip() for l in c.outras_condicoes.split("\n") if l.strip()]
                     for _linha in _linhas_cond:
@@ -1833,16 +1833,16 @@ def tela_clientes():
                             "sim" in _val.lower() and _rot_upper not in _SEM_ICONE
                         )
                         if _rot_upper in _SEM_ICONE:
-                            _exibir = _val if _val else "Não informado"
+                            _exibir = _val if _val else "NÃ£o informado"
                         else:
-                            _exibir = "Sim" if _is_sim else (_val if _val else "Não informado")
+                            _exibir = "Sim" if _is_sim else (_val if _val else "NÃ£o informado")
                         with _cols_med[_idx_med % 3]:
                             st.markdown(f"**{_rot}:** {_exibir}")
                         _idx_med += 1
 
-                # ── Histórico em abas ──
+                # â”€â”€ HistÃ³rico em abas â”€â”€
                 st.markdown("---")
-                abas = st.tabs(["📋 Atendimentos", "📐 Biometria", "📝 Pré-avaliações", "💳 Compras e Pacotes", "💉 Tabela de Doses"])
+                abas = st.tabs(["ðŸ“‹ Atendimentos", "ðŸ“ Biometria", "ðŸ“ PrÃ©-avaliaÃ§Ãµes", "ðŸ’³ Compras e Pacotes", "ðŸ’‰ Tabela de Doses"])
 
                 with abas[0]:
                     atend = pd.read_sql(
@@ -1879,9 +1879,9 @@ def tela_clientes():
                                 aval["criado_em"] = pd.to_datetime(aval["criado_em"], errors="coerce").dt.strftime("%d/%m/%Y %H:%M")
                             st.dataframe(aval, use_container_width=True, hide_index=True)
                         else:
-                            st.info("Nenhuma pré-avaliação encontrada.")
+                            st.info("Nenhuma prÃ©-avaliaÃ§Ã£o encontrada.")
                     except Exception:
-                        st.info("Nenhuma pré-avaliação encontrada.")
+                        st.info("Nenhuma prÃ©-avaliaÃ§Ã£o encontrada.")
 
                 with abas[3]:
                     vendas = (
@@ -1901,7 +1901,7 @@ def tela_clientes():
                                     "Data": v.data_venda.strftime("%d/%m/%Y"),
                                     "Procedimento": it.procedimento,
                                     "Tipo": it.tipo.capitalize(),
-                                    "Total Sessões": it.sessoes_total,
+                                    "Total SessÃµes": it.sessoes_total,
                                     "Usadas": it.sessoes_usadas,
                                     "Saldo": saldo,
                                     "Valor (R$)": f"{it.valor:.2f}",
@@ -1916,17 +1916,17 @@ def tela_clientes():
                     
                     if doses:
                         dados_doses = [{
-                            "Data": d.data_registro.strftime("%d/%m/%Y") if d.data_registro else "—",
-                            "Medicação": d.medicacao,
-                            "Semana": d.semana or "—",
-                            "Dose": d.dose or "—",
-                            "Via": d.via or "—",
-                            "Peso": f"{d.peso} kg" if d.peso else "—",
+                            "Data": d.data_registro.strftime("%d/%m/%Y") if d.data_registro else "â€”",
+                            "MedicaÃ§Ã£o": d.medicacao,
+                            "Semana": d.semana or "â€”",
+                            "Dose": d.dose or "â€”",
+                            "Via": d.via or "â€”",
+                            "Peso": f"{d.peso} kg" if d.peso else "â€”",
                         } for d in doses]
                         st.dataframe(pd.DataFrame(dados_doses), use_container_width=True, hide_index=True)
                         
-                        # Botão PDF
-                        if st.button("📄 Gerar PDF da tabela de doses", use_container_width=True, key="dose_pdf_cliente"):
+                        # BotÃ£o PDF
+                        if st.button("ðŸ“„ Gerar PDF da tabela de doses", use_container_width=True, key="dose_pdf_cliente"):
                             try:
                                 from fpdf import FPDF
                                 import os
@@ -1973,7 +1973,7 @@ def tela_clientes():
                                         self.set_y(-20)
                                         self.set_font("Helvetica", "", 9)
                                         self.set_text_color(*COR_BRANCO)
-                                        self.cell(0, 5, "Praça São Judas Tadeu, 160 - Jardim Casqueiro - Cubatão", ln=True, align="C")
+                                        self.cell(0, 5, "PraÃ§a SÃ£o Judas Tadeu, 160 - Jardim Casqueiro - CubatÃ£o", ln=True, align="C")
                                         self.cell(0, 5, "@gabifrancosaude - (13) 3304-0528", ln=True, align="C")
                                 
                                 pdf = PDFTabelaDoses()
@@ -1982,7 +1982,7 @@ def tela_clientes():
                                 
                                 cli = db.get(Client, cliente_id)
                                 
-                                # Título
+                                # TÃ­tulo
                                 pdf.set_font("Helvetica", "B", 18)
                                 pdf.set_text_color(*COR_ROSA)
                                 pdf.cell(0, 10, "TABELA DE DOSES", ln=True, align="C")
@@ -2009,7 +2009,7 @@ def tela_clientes():
                                 pdf.set_fill_color(*COR_ROSA)
                                 pdf.set_text_color(*COR_BRANCO)
                                 pdf.cell(35, 8, "Data", 1, 0, 'C', True)
-                                pdf.cell(40, 8, "Medicação", 1, 0, 'C', True)
+                                pdf.cell(40, 8, "MedicaÃ§Ã£o", 1, 0, 'C', True)
                                 pdf.cell(25, 8, "Semana", 1, 0, 'C', True)
                                 pdf.cell(30, 8, "Dose", 1, 0, 'C', True)
                                 pdf.cell(25, 8, "Via", 1, 0, 'C', True)
@@ -2019,17 +2019,17 @@ def tela_clientes():
                                 pdf.set_font("Helvetica", "", 9)
                                 pdf.set_text_color(*COR_TEXTO)
                                 for d in doses:
-                                    pdf.cell(35, 8, d.data_registro.strftime("%d/%m/%Y") if d.data_registro else "—", 1)
+                                    pdf.cell(35, 8, d.data_registro.strftime("%d/%m/%Y") if d.data_registro else "â€”", 1)
                                     pdf.cell(40, 8, d.medicacao[:18], 1)
-                                    pdf.cell(25, 8, (d.semana or "—")[:10], 1)
-                                    pdf.cell(30, 8, (d.dose or "—")[:12], 1)
-                                    pdf.cell(25, 8, (d.via or "—")[:10], 1)
-                                    pdf.cell(25, 8, f"{d.peso} kg" if d.peso else "—", 1)
+                                    pdf.cell(25, 8, (d.semana or "â€”")[:10], 1)
+                                    pdf.cell(30, 8, (d.dose or "â€”")[:12], 1)
+                                    pdf.cell(25, 8, (d.via or "â€”")[:10], 1)
+                                    pdf.cell(25, 8, f"{d.peso} kg" if d.peso else "â€”", 1)
                                     pdf.ln()
                                 
                                 pdf_bytes = bytes(pdf.output())
                                 st.download_button(
-                                    "⬇️ Baixar PDF",
+                                    "â¬‡ï¸ Baixar PDF",
                                     data=pdf_bytes,
                                     file_name=f"tabela_doses_{cli.nome.replace(' ', '_') if cli else 'cliente'}.pdf",
                                     mime="application/pdf",
@@ -2056,9 +2056,9 @@ def tela_clientes():
 
 
 
-# ====== TELA: PRÉ-AVALIAÇÃO ======
+# ====== TELA: PRÃ‰-AVALIAÃ‡ÃƒO ======
 def _gerar_pdf_pre_avaliacao(cliente_nome: str, cpf: str, avaliacao) -> bytes:
-    """Gera PDF da pré-avaliação usando fpdf2 e retorna bytes."""
+    """Gera PDF da prÃ©-avaliaÃ§Ã£o usando fpdf2 e retorna bytes."""
     try:
         from fpdf import FPDF
         import os
@@ -2097,17 +2097,17 @@ def _gerar_pdf_pre_avaliacao(cliente_nome: str, cpf: str, avaliacao) -> bytes:
             self.set_y(-20)
             self.set_font("Helvetica", "", 9)
             self.set_text_color(*COR_BRANCO)
-            self.cell(0, 5, "Praça São Judas Tadeu, 160 - Jardim Casqueiro - Cubatão", ln=True, align="C")
+            self.cell(0, 5, "PraÃ§a SÃ£o Judas Tadeu, 160 - Jardim Casqueiro - CubatÃ£o", ln=True, align="C")
             self.cell(0, 5, "@gabifrancosaude - (13) 3304-0528", ln=True, align="C")
 
     pdf = PDFPreAvaliacao()
     pdf.add_page()
     pdf.set_auto_page_break(auto=True, margin=30)
 
-    # Título
+    # TÃ­tulo
     pdf.set_font("Helvetica", "B", 18)
     pdf.set_text_color(*COR_ROSA)
-    pdf.cell(0, 10, "PRÉ-AVALIAÇÃO / CONSULTA", ln=True, align="C")
+    pdf.cell(0, 10, "PRÃ‰-AVALIAÃ‡ÃƒO / CONSULTA", ln=True, align="C")
     pdf.ln(5)
     
     # Linha decorativa
@@ -2121,7 +2121,7 @@ def _gerar_pdf_pre_avaliacao(cliente_nome: str, cpf: str, avaliacao) -> bytes:
     pdf.set_text_color(*COR_TEXTO)
     pdf.cell(0, 8, f"{avaliacao.criado_em.strftime('%d/%m/%Y') if avaliacao.criado_em else ''}", ln=True)
     pdf.cell(0, 8, f"{cliente_nome}", ln=True)
-    pdf.cell(0, 8, f"CPF: {cpf or '—'}", ln=True)
+    pdf.cell(0, 8, f"CPF: {cpf or 'â€”'}", ln=True)
     pdf.ln(8)
 
     def campo(label: str, valor: str):
@@ -2137,37 +2137,37 @@ def _gerar_pdf_pre_avaliacao(cliente_nome: str, cpf: str, avaliacao) -> bytes:
 
     campo("Queixa detalhada:", avaliacao.queixa_detalhada or "")
     campo("Objetivo do tratamento:", avaliacao.objetivo_tratamento or "")
-    campo("Avaliação inicial:", avaliacao.avaliacao_inicial or "")
-    campo("Receituário (Indicação de tratamento):", avaliacao.receituario or "")
-    campo("Observações profissionais:", avaliacao.observacoes_profissionais or "")
+    campo("AvaliaÃ§Ã£o inicial:", avaliacao.avaliacao_inicial or "")
+    campo("ReceituÃ¡rio (IndicaÃ§Ã£o de tratamento):", avaliacao.receituario or "")
+    campo("ObservaÃ§Ãµes profissionais:", avaliacao.observacoes_profissionais or "")
 
     return bytes(pdf.output())
 
 
 def tela_pre_avaliacao():
-    header_titulo("Pré-avaliação", "Vinculada ao cliente e salva no histórico")
+    header_titulo("PrÃ©-avaliaÃ§Ã£o", "Vinculada ao cliente e salva no histÃ³rico")
     db = SessionLocal()
     try:
         clientes = db.query(Client).order_by(Client.nome.asc()).all()
         mapa = {f"{c.nome} ({c.cpf or ''})": c.id for c in clientes}
-        opcoes_cli = ["— selecione —"] + list(mapa.keys())
+        opcoes_cli = ["â€” selecione â€”"] + list(mapa.keys())
         cliente_sel = st.selectbox("Cliente", opcoes_cli)
 
-        if cliente_sel and cliente_sel != "— selecione —":
+        if cliente_sel and cliente_sel != "â€” selecione â€”":
             cid = mapa[cliente_sel]
             cli = db.get(Client, cid)
 
             queixa = st.text_area("Queixa detalhada", height=100)
             objetivo = st.text_area("Objetivo do tratamento", height=100)
-            avaliacao_ini = st.text_area("Avaliação inicial", height=100)
+            avaliacao_ini = st.text_area("AvaliaÃ§Ã£o inicial", height=100)
             receituario = st.text_area(
-                "Receituário (Indicação de tratamento)",
+                "ReceituÃ¡rio (IndicaÃ§Ã£o de tratamento)",
                 height=200,
-                placeholder="Descreva os tratamentos, protocolos e indicações para esta paciente...",
+                placeholder="Descreva os tratamentos, protocolos e indicaÃ§Ãµes para esta paciente...",
             )
-            obs = st.text_area("Observações profissionais", height=100)
+            obs = st.text_area("ObservaÃ§Ãµes profissionais", height=100)
 
-            if st.button("Salvar pré-avaliação", use_container_width=True):
+            if st.button("Salvar prÃ©-avaliaÃ§Ã£o", use_container_width=True):
                 a = Assessment(
                     cliente_id=cid,
                     queixa_detalhada=queixa,
@@ -2178,12 +2178,12 @@ def tela_pre_avaliacao():
                 )
                 db.add(a)
                 db.commit()
-                st.success("Pré-avaliação registrada.")
+                st.success("PrÃ©-avaliaÃ§Ã£o registrada.")
                 st.rerun()
 
-            # ── Histórico + botão PDF ──────────────────────────────────────
+            # â”€â”€ HistÃ³rico + botÃ£o PDF â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             st.markdown("---")
-            st.markdown("#### Histórico de pré-avaliações")
+            st.markdown("#### HistÃ³rico de prÃ©-avaliaÃ§Ãµes")
             avaliacoes = (
                 db.query(Assessment)
                 .filter(Assessment.cliente_id == cid)
@@ -2191,28 +2191,28 @@ def tela_pre_avaliacao():
                 .all()
             )
             if not avaliacoes:
-                st.info("Nenhuma pré-avaliação registrada para esta cliente.")
+                st.info("Nenhuma prÃ©-avaliaÃ§Ã£o registrada para esta cliente.")
             else:
                 for av in avaliacoes:
-                    data_str = av.criado_em.strftime("%d/%m/%Y %H:%M") if av.criado_em else "—"
-                    with st.expander(f"📋 {data_str}"):
+                    data_str = av.criado_em.strftime("%d/%m/%Y %H:%M") if av.criado_em else "â€”"
+                    with st.expander(f"ðŸ“‹ {data_str}"):
                         if av.queixa_detalhada:
                             st.markdown(f"**Queixa:** {av.queixa_detalhada}")
                         if av.objetivo_tratamento:
                             st.markdown(f"**Objetivo:** {av.objetivo_tratamento}")
                         if av.avaliacao_inicial:
-                            st.markdown(f"**Avaliação inicial:** {av.avaliacao_inicial}")
+                            st.markdown(f"**AvaliaÃ§Ã£o inicial:** {av.avaliacao_inicial}")
                         if av.receituario:
-                            st.markdown(f"**Receituário:** {av.receituario}")
+                            st.markdown(f"**ReceituÃ¡rio:** {av.receituario}")
                         if av.observacoes_profissionais:
-                            st.markdown(f"**Observações:** {av.observacoes_profissionais}")
+                            st.markdown(f"**ObservaÃ§Ãµes:** {av.observacoes_profissionais}")
 
                         pdf_bytes = _gerar_pdf_pre_avaliacao(
                             cli.nome if cli else "", cli.cpf if cli else "", av
                         )
                         if pdf_bytes:
                             st.download_button(
-                                "📄 Baixar PDF",
+                                "ðŸ“„ Baixar PDF",
                                 data=pdf_bytes,
                                 file_name=f"pre_avaliacao_{cid}_{data_str.replace('/', '-').replace(' ', '_').replace(':', '')}.pdf",
                                 mime="application/pdf",
@@ -2224,18 +2224,18 @@ def tela_pre_avaliacao():
 
 # ====== MODAIS ATENDIMENTOS ======
 def _modal_receituario_popup():
-    @st.dialog("Gerar Receituário", width="large")
+    @st.dialog("Gerar ReceituÃ¡rio", width="large")
     def _abrir():
         db = SessionLocal()
         try:
             # Busca cliente
             clientes = db.query(Client).order_by(Client.nome.asc()).all()
             mapa_cli = {f"{c.nome} ({c.cpf or ''})": c for c in clientes}
-            opcoes_cli = ["— selecione —"] + list(mapa_cli.keys())
+            opcoes_cli = ["â€” selecione â€”"] + list(mapa_cli.keys())
             
             cliente_sel = st.selectbox("Selecione o cliente", opcoes_cli, key="rec_popup_cliente")
             
-            if cliente_sel != "— selecione —":
+            if cliente_sel != "â€” selecione â€”":
                 cliente = mapa_cli[cliente_sel]
                 
                 col1, col2 = st.columns(2)
@@ -2245,15 +2245,15 @@ def _modal_receituario_popup():
                     data_rec = st.date_input("Data", value=_hoje(), key="rec_popup_data")
                 
                 receituario_txt = st.text_area(
-                    "Receituário (Indicação de Tratamento)",
+                    "ReceituÃ¡rio (IndicaÃ§Ã£o de Tratamento)",
                     height=200,
-                    placeholder="Descreva os tratamentos, protocolos e indicações...",
+                    placeholder="Descreva os tratamentos, protocolos e indicaÃ§Ãµes...",
                     key="rec_popup_texto"
                 )
                 
-                if st.button("📄 Gerar PDF do Receituário", use_container_width=True, key="rec_popup_gerar"):
+                if st.button("ðŸ“„ Gerar PDF do ReceituÃ¡rio", use_container_width=True, key="rec_popup_gerar"):
                     if not receituario_txt or receituario_txt.strip() == "":
-                        st.warning("Preencha o receituário antes de gerar o PDF.")
+                        st.warning("Preencha o receituÃ¡rio antes de gerar o PDF.")
                     else:
                         try:
                             from fpdf import FPDF
@@ -2284,26 +2284,26 @@ def _modal_receituario_popup():
                                     self.ln(55)
                                 
                                 def footer(self):
-                                    # Fundo rosa mais escuro no rodapé
+                                    # Fundo rosa mais escuro no rodapÃ©
                                     self.set_y(-25)
                                     self.set_fill_color(*COR_ROSA)
                                     self.rect(0, self.get_y(), 210, 25, 'F')
                                     
-                                    # Texto do rodapé em branco
+                                    # Texto do rodapÃ© em branco
                                     self.set_y(-20)
                                     self.set_font("Helvetica", "", 9)
                                     self.set_text_color(*COR_BRANCO)
-                                    self.cell(0, 5, "Praça São Judas Tadeu, 160 - Jardim Casqueiro - Cubatão", ln=True, align="C")
+                                    self.cell(0, 5, "PraÃ§a SÃ£o Judas Tadeu, 160 - Jardim Casqueiro - CubatÃ£o", ln=True, align="C")
                                     self.cell(0, 5, "@gabifrancosaude - (13) 3304-0528", ln=True, align="C")
                             
                             pdf = PDFReceituario()
                             pdf.add_page()
                             pdf.set_auto_page_break(auto=True, margin=30)
                             
-                            # Título
+                            # TÃ­tulo
                             pdf.set_font("Helvetica", "B", 18)
                             pdf.set_text_color(*COR_ROSA)
-                            pdf.cell(0, 10, "RECEITUÁRIO", ln=True, align="C")
+                            pdf.cell(0, 10, "RECEITUÃRIO", ln=True, align="C")
                             pdf.ln(5)
                             
                             # Linha decorativa
@@ -2319,22 +2319,22 @@ def _modal_receituario_popup():
                             pdf.cell(0, 8, f"{cliente.nome}", ln=True)
                             pdf.ln(8)
                             
-                            # Título do conteúdo
+                            # TÃ­tulo do conteÃºdo
                             pdf.set_font("Helvetica", "B", 11)
                             pdf.set_text_color(*COR_ROSA)
-                            pdf.cell(0, 8, "INDICAÇÃO DE TRATAMENTO", ln=True)
+                            pdf.cell(0, 8, "INDICAÃ‡ÃƒO DE TRATAMENTO", ln=True)
                             pdf.ln(3)
                             
-                            # Conteúdo do receituário
+                            # ConteÃºdo do receituÃ¡rio
                             pdf.set_font("Helvetica", "", 11)
                             pdf.set_text_color(*COR_TEXTO)
                             pdf.multi_cell(0, 7, receituario_txt)
                             
                             pdf_bytes = bytes(pdf.output())
                             
-                            # Download automático do PDF
+                            # Download automÃ¡tico do PDF
                             st.download_button(
-                                label="📥 PDF gerado! Clique para baixar",
+                                label="ðŸ“¥ PDF gerado! Clique para baixar",
                                 data=pdf_bytes,
                                 file_name=f"receituario_{cliente.nome.replace(' ', '_')}_{data_rec.strftime('%Y%m%d')}.pdf",
                                 mime="application/pdf",
@@ -2351,7 +2351,7 @@ def _modal_receituario_popup():
 
 
 def _modal_receituario(cliente_id=None, cliente_nome=None, receituario_texto=None):
-    @st.dialog("Receituário", width="large")
+    @st.dialog("ReceituÃ¡rio", width="large")
     def _abrir():
         # Usa valores passados ou busca no session_state como fallback
         cliente_at_id = cliente_id or st.session_state.get("atendimento_cliente_id")
@@ -2365,7 +2365,7 @@ def _modal_receituario(cliente_id=None, cliente_nome=None, receituario_texto=Non
             return
         
         if not receituario_txt or str(receituario_txt).strip() == "":
-            st.warning("Nenhum receituário preenchido para este atendimento.")
+            st.warning("Nenhum receituÃ¡rio preenchido para este atendimento.")
             if st.button("Fechar", use_container_width=True, key="rec_fechar_vazio"):
                 st.rerun()
             return
@@ -2373,7 +2373,7 @@ def _modal_receituario(cliente_id=None, cliente_nome=None, receituario_texto=Non
         st.markdown(f"**Paciente:** {cliente_at_nome}")
         st.markdown(f"**Data:** {_hoje().strftime('%d/%m/%Y')}")
         st.markdown("---")
-        st.markdown("### Receituário (Indicação de Tratamento)")
+        st.markdown("### ReceituÃ¡rio (IndicaÃ§Ã£o de Tratamento)")
         st.markdown(receituario_txt)
         
         # Gerar PDF
@@ -2393,9 +2393,9 @@ def _modal_receituario(cliente_id=None, cliente_nome=None, receituario_texto=Non
                 pdf.ln(10)
             
             pdf.set_font("Helvetica", "B", 16)
-            pdf.cell(0, 10, "GABRIELA FRANCO SAÚDE INTEGRATIVA", ln=True, align="C")
+            pdf.cell(0, 10, "GABRIELA FRANCO SAÃšDE INTEGRATIVA", ln=True, align="C")
             pdf.set_font("Helvetica", "B", 13)
-            pdf.cell(0, 8, "Receituário", ln=True, align="C")
+            pdf.cell(0, 8, "ReceituÃ¡rio", ln=True, align="C")
             pdf.ln(6)
             
             pdf.set_font("Helvetica", "B", 11)
@@ -2404,14 +2404,14 @@ def _modal_receituario(cliente_id=None, cliente_nome=None, receituario_texto=Non
             pdf.ln(4)
             
             pdf.set_font("Helvetica", "B", 11)
-            pdf.cell(0, 7, "Receituário (Indicação de Tratamento):", ln=True)
+            pdf.cell(0, 7, "ReceituÃ¡rio (IndicaÃ§Ã£o de Tratamento):", ln=True)
             pdf.set_font("Helvetica", "", 11)
             pdf.multi_cell(0, 7, str(receituario_txt))
             
             pdf_bytes = bytes(pdf.output())
             
             st.download_button(
-                "⬇️ Baixar PDF",
+                "â¬‡ï¸ Baixar PDF",
                 data=pdf_bytes,
                 file_name=f"receituario_{cliente_at_nome.replace(' ', '_')}_{_hoje().strftime('%Y%m%d')}.pdf",
                 mime="application/pdf",
@@ -2434,14 +2434,14 @@ def _modal_tabela_doses():
             # Busca cliente
             clientes = db.query(Client).order_by(Client.nome.asc()).all()
             mapa_cli = {f"{c.nome} ({c.cpf or ''})": c.id for c in clientes}
-            opcoes_cli = ["— selecione —"] + list(mapa_cli.keys())
+            opcoes_cli = ["â€” selecione â€”"] + list(mapa_cli.keys())
             
             cliente_sel = st.selectbox("Cliente", opcoes_cli, key="dose_cliente")
-            cliente_id = mapa_cli.get(cliente_sel) if cliente_sel != "— selecione —" else None
+            cliente_id = mapa_cli.get(cliente_sel) if cliente_sel != "â€” selecione â€”" else None
             
             col1, col2, col3 = st.columns(3)
             with col1:
-                medicacao = st.text_input("Medicação", key="dose_medicacao")
+                medicacao = st.text_input("MedicaÃ§Ã£o", key="dose_medicacao")
                 semana = st.text_input("Semana", key="dose_semana")
             with col2:
                 dose = st.text_input("Dose", key="dose_dose")
@@ -2450,11 +2450,11 @@ def _modal_tabela_doses():
                 peso = st.number_input("Peso (kg)", min_value=0.0, step=0.1, key="dose_peso")
                 data_dose = st.date_input("Data", value=_hoje(), key="dose_data")
             
-            if st.button("➕ Adicionar à tabela", use_container_width=True, key="dose_add"):
+            if st.button("âž• Adicionar Ã  tabela", use_container_width=True, key="dose_add"):
                 if not cliente_id:
                     st.error("Selecione um cliente.")
                 elif not medicacao:
-                    st.error("Informe a medicação.")
+                    st.error("Informe a medicaÃ§Ã£o.")
                 else:
                     nova_dose = DoseTable(
                         cliente_id=cliente_id,
@@ -2481,18 +2481,18 @@ def _modal_tabela_doses():
                 
                 if doses:
                     dados = [{
-                        "Data": d.data_registro.strftime("%d/%m/%Y") if d.data_registro else "—",
-                        "Medicação": d.medicacao,
-                        "Semana": d.semana or "—",
-                        "Dose": d.dose or "—",
-                        "Via": d.via or "—",
-                        "Peso": f"{d.peso} kg" if d.peso else "—",
+                        "Data": d.data_registro.strftime("%d/%m/%Y") if d.data_registro else "â€”",
+                        "MedicaÃ§Ã£o": d.medicacao,
+                        "Semana": d.semana or "â€”",
+                        "Dose": d.dose or "â€”",
+                        "Via": d.via or "â€”",
+                        "Peso": f"{d.peso} kg" if d.peso else "â€”",
                     } for d in doses]
                     st.dataframe(pd.DataFrame(dados), use_container_width=True, hide_index=True)
                     
-                    # Botão PDF sempre visível quando há cliente selecionado
+                    # BotÃ£o PDF sempre visÃ­vel quando hÃ¡ cliente selecionado
                     st.markdown("---")
-                    if st.button("📄 Gerar PDF da tabela", use_container_width=True, key="dose_pdf"):
+                    if st.button("ðŸ“„ Gerar PDF da tabela", use_container_width=True, key="dose_pdf"):
                         try:
                             from fpdf import FPDF
                             import os
@@ -2529,7 +2529,7 @@ def _modal_tabela_doses():
                                     self.set_y(-20)
                                     self.set_font("Helvetica", "", 9)
                                     self.set_text_color(*COR_BRANCO)
-                                    self.cell(0, 5, "Praça São Judas Tadeu, 160 - Jardim Casqueiro - Cubatão", ln=True, align="C")
+                                    self.cell(0, 5, "PraÃ§a SÃ£o Judas Tadeu, 160 - Jardim Casqueiro - CubatÃ£o", ln=True, align="C")
                                     self.cell(0, 5, "@gabifrancosaude - (13) 3304-0528", ln=True, align="C")
                             
                             pdf = PDFTabelaDoses()
@@ -2538,7 +2538,7 @@ def _modal_tabela_doses():
                             
                             cli = db.get(Client, cliente_id)
                             
-                            # Título
+                            # TÃ­tulo
                             pdf.set_font("Helvetica", "B", 18)
                             pdf.set_text_color(*COR_ROSA)
                             pdf.cell(0, 10, "TABELA DE DOSES", ln=True, align="C")
@@ -2565,7 +2565,7 @@ def _modal_tabela_doses():
                             pdf.set_fill_color(*COR_ROSA)
                             pdf.set_text_color(*COR_BRANCO)
                             pdf.cell(35, 8, "Data", 1, 0, 'C', True)
-                            pdf.cell(40, 8, "Medicação", 1, 0, 'C', True)
+                            pdf.cell(40, 8, "MedicaÃ§Ã£o", 1, 0, 'C', True)
                             pdf.cell(25, 8, "Semana", 1, 0, 'C', True)
                             pdf.cell(30, 8, "Dose", 1, 0, 'C', True)
                             pdf.cell(25, 8, "Via", 1, 0, 'C', True)
@@ -2575,12 +2575,12 @@ def _modal_tabela_doses():
                             pdf.set_font("Helvetica", "", 9)
                             pdf.set_text_color(*COR_TEXTO)
                             for d in doses:
-                                pdf.cell(35, 8, d.data_registro.strftime("%d/%m/%Y") if d.data_registro else "—", 1)
+                                pdf.cell(35, 8, d.data_registro.strftime("%d/%m/%Y") if d.data_registro else "â€”", 1)
                                 pdf.cell(40, 8, d.medicacao[:18], 1)
-                                pdf.cell(25, 8, (d.semana or "—")[:10], 1)
-                                pdf.cell(30, 8, (d.dose or "—")[:12], 1)
-                                pdf.cell(25, 8, (d.via or "—")[:10], 1)
-                                pdf.cell(25, 8, f"{d.peso} kg" if d.peso else "—", 1)
+                                pdf.cell(25, 8, (d.semana or "â€”")[:10], 1)
+                                pdf.cell(30, 8, (d.dose or "â€”")[:12], 1)
+                                pdf.cell(25, 8, (d.via or "â€”")[:10], 1)
+                                pdf.cell(25, 8, f"{d.peso} kg" if d.peso else "â€”", 1)
                                 pdf.ln()
                             
                             pdf_bytes = bytes(pdf.output())
@@ -2589,7 +2589,7 @@ def _modal_tabela_doses():
                             col_dl, col_view = st.columns(2)
                             with col_dl:
                                 st.download_button(
-                                    "⬇️ Baixar PDF",
+                                    "â¬‡ï¸ Baixar PDF",
                                     data=pdf_bytes,
                                     file_name=f"tabela_doses_{cli.nome.replace(' ', '_') if cli else 'cliente'}.pdf",
                                     mime="application/pdf",
@@ -2597,14 +2597,14 @@ def _modal_tabela_doses():
                                     key="dose_download"
                                 )
                             with col_view:
-                                st.markdown(f'<a href="data:application/pdf;base64,{b64_pdf}" target="_blank" style="display:inline-block;width:100%;text-align:center;padding:0.5rem 1rem;background:#d59c9c;color:white;border-radius:8px;text-decoration:none;font-weight:600;">📤 Abrir / Compartilhar</a>', unsafe_allow_html=True)
+                                st.markdown(f'<a href="data:application/pdf;base64,{b64_pdf}" target="_blank" style="display:inline-block;width:100%;text-align:center;padding:0.5rem 1rem;background:#d59c9c;color:white;border-radius:8px;text-decoration:none;font-weight:600;">ðŸ“¤ Abrir / Compartilhar</a>', unsafe_allow_html=True)
                         except Exception as e:
                             st.error(f"Erro ao gerar PDF: {e}")
                 else:
                     st.info("Nenhuma dose registrada para este cliente.")
-                    # Botão PDF mesmo sem doses - mostra tabela vazia
+                    # BotÃ£o PDF mesmo sem doses - mostra tabela vazia
                     st.markdown("---")
-                    if st.button("📄 Gerar PDF (tabela vazia)", use_container_width=True, key="dose_pdf_vazio"):
+                    if st.button("ðŸ“„ Gerar PDF (tabela vazia)", use_container_width=True, key="dose_pdf_vazio"):
                         try:
                             from fpdf import FPDF
                             import os
@@ -2641,7 +2641,7 @@ def _modal_tabela_doses():
                                     self.set_y(-20)
                                     self.set_font("Helvetica", "", 9)
                                     self.set_text_color(*COR_BRANCO)
-                                    self.cell(0, 5, "Praça São Judas Tadeu, 160 - Jardim Casqueiro - Cubatão", ln=True, align="C")
+                                    self.cell(0, 5, "PraÃ§a SÃ£o Judas Tadeu, 160 - Jardim Casqueiro - CubatÃ£o", ln=True, align="C")
                                     self.cell(0, 5, "@gabifrancosaude - (13) 3304-0528", ln=True, align="C")
                             
                             pdf = PDFTabelaDoses()
@@ -2650,7 +2650,7 @@ def _modal_tabela_doses():
                             
                             cli = db.get(Client, cliente_id)
                             
-                            # Título
+                            # TÃ­tulo
                             pdf.set_font("Helvetica", "B", 18)
                             pdf.set_text_color(*COR_ROSA)
                             pdf.cell(0, 10, "TABELA DE DOSES", ln=True, align="C")
@@ -2677,7 +2677,7 @@ def _modal_tabela_doses():
                             pdf.set_fill_color(*COR_ROSA)
                             pdf.set_text_color(*COR_BRANCO)
                             pdf.cell(35, 8, "Data", 1, 0, 'C', True)
-                            pdf.cell(40, 8, "Medicação", 1, 0, 'C', True)
+                            pdf.cell(40, 8, "MedicaÃ§Ã£o", 1, 0, 'C', True)
                             pdf.cell(25, 8, "Semana", 1, 0, 'C', True)
                             pdf.cell(30, 8, "Dose", 1, 0, 'C', True)
                             pdf.cell(25, 8, "Via", 1, 0, 'C', True)
@@ -2694,7 +2694,7 @@ def _modal_tabela_doses():
                             col_dl2, col_view2 = st.columns(2)
                             with col_dl2:
                                 st.download_button(
-                                    "⬇️ Baixar PDF",
+                                    "â¬‡ï¸ Baixar PDF",
                                     data=pdf_bytes,
                                     file_name=f"tabela_doses_{cli.nome.replace(' ', '_') if cli else 'cliente'}.pdf",
                                     mime="application/pdf",
@@ -2702,7 +2702,7 @@ def _modal_tabela_doses():
                                     key="dose_download_vazio"
                                 )
                             with col_view2:
-                                st.markdown(f'<a href="data:application/pdf;base64,{b64_pdf_v}" target="_blank" style="display:inline-block;width:100%;text-align:center;padding:0.5rem 1rem;background:#d59c9c;color:white;border-radius:8px;text-decoration:none;font-weight:600;">📤 Abrir / Compartilhar</a>', unsafe_allow_html=True)
+                                st.markdown(f'<a href="data:application/pdf;base64,{b64_pdf_v}" target="_blank" style="display:inline-block;width:100%;text-align:center;padding:0.5rem 1rem;background:#d59c9c;color:white;border-radius:8px;text-decoration:none;font-weight:600;">ðŸ“¤ Abrir / Compartilhar</a>', unsafe_allow_html=True)
                         except Exception as e:
                             st.error(f"Erro ao gerar PDF: {e}")
             else:
@@ -2714,7 +2714,7 @@ def _modal_tabela_doses():
 
 # ====== TELA: ATENDIMENTOS ======
 def tela_atendimentos():
-    header_titulo("Atendimentos", "Baixa automática no estoque")
+    header_titulo("Atendimentos", "Baixa automÃ¡tica no estoque")
     db = SessionLocal()
     try:
         st.markdown("### Cliente")
@@ -2725,14 +2725,14 @@ def tela_atendimentos():
 
         sel_at = st.selectbox(
             "Selecione a cliente",
-            options=["— Selecione —"] + list(mapa_clientes.keys()),
+            options=["â€” Selecione â€”"] + list(mapa_clientes.keys()),
             key="atendimento_selectbox",
         )
 
         cliente_at_id = None
         cliente_at_nome = ""
 
-        if sel_at and sel_at != "— Selecione —":
+        if sel_at and sel_at != "â€” Selecione â€”":
             cliente_selecionado = mapa_clientes.get(sel_at)
             if cliente_selecionado:
                 cliente_at_id = cliente_selecionado.id
@@ -2752,21 +2752,21 @@ def tela_atendimentos():
         with col2:
             # Lista suspensa de tratamentos cadastrados
             tratamentos_lista = db.query(Tratamento).filter(Tratamento.ativo == True).order_by(Tratamento.nome.asc()).all()
-            opcoes_trat = ["— selecione —"] + [t.nome for t in tratamentos_lista]
+            opcoes_trat = ["â€” selecione â€”"] + [t.nome for t in tratamentos_lista]
             tipo = st.selectbox("Tipo de tratamento realizado", opcoes_trat, key="at_tipo")
-            if tipo == "— selecione —":
+            if tipo == "â€” selecione â€”":
                 tipo = ""
             protocolo = st.text_area("Protocolo de atendimento", key="at_protocolo")
 
-        obs = st.text_area("Observações", key="at_obs")
+        obs = st.text_area("ObservaÃ§Ãµes", key="at_obs")
 
-        # Botões de ação extras
+        # BotÃµes de aÃ§Ã£o extras
         col_rec, col_dose = st.columns(2)
         with col_rec:
-            if st.button("📄 Gerar Receituário", use_container_width=True, key="btn_receituario"):
+            if st.button("ðŸ“„ Gerar ReceituÃ¡rio", use_container_width=True, key="btn_receituario"):
                 _modal_receituario_popup()
         with col_dose:
-            if st.button("💉 Tabela de Doses", use_container_width=True, key="btn_doses"):
+            if st.button("ðŸ’‰ Tabela de Doses", use_container_width=True, key="btn_doses"):
                 _modal_tabela_doses()
 
         st.markdown("---")
@@ -2776,7 +2776,7 @@ def tela_atendimentos():
         mats_cadastrados = db.query(Material).filter(Material.ativo == True).order_by(Material.nome.asc()).all()
         produtos = db.query(Product).order_by(Product.nome.asc()).all()
         mapa_prod = {p.nome: p.id for p in produtos}
-        # Lista de nomes para seleção: materiais cadastrados + produtos do estoque
+        # Lista de nomes para seleÃ§Ã£o: materiais cadastrados + produtos do estoque
         nomes_materiais = sorted(set([m.nome for m in mats_cadastrados] + list(mapa_prod.keys())))
 
         linhas = st.number_input("Quantos produtos diferentes foram usados?", min_value=0, step=1, value=0)
@@ -2787,13 +2787,13 @@ def tela_atendimentos():
             with c1:
                 prod_nome = st.selectbox(
                     f"Material {i + 1}",
-                    ["— selecione —"] + nomes_materiais,
+                    ["â€” selecione â€”"] + nomes_materiais,
                     key=f"at_prod_{i}",
                 )
             with c2:
-                lote_opcoes = ["— selecione —"]
+                lote_opcoes = ["â€” selecione â€”"]
                 lote_map = {}
-                if prod_nome and prod_nome != "— selecione —" and prod_nome in mapa_prod:
+                if prod_nome and prod_nome != "â€” selecione â€”" and prod_nome in mapa_prod:
                     lotes_disp = (
                         db.query(StockLote)
                         .filter(
@@ -2811,8 +2811,8 @@ def tela_atendimentos():
                 qtd = st.number_input("Qtd", min_value=0, step=1, key=f"at_qtd_{i}")
 
             if (
-                prod_nome and prod_nome != "— selecione —"
-                and lote_sel and lote_sel != "— selecione —"
+                prod_nome and prod_nome != "â€” selecione â€”"
+                and lote_sel and lote_sel != "â€” selecione â€”"
                 and lote_sel in lote_map
                 and qtd > 0
             ):
@@ -2852,7 +2852,7 @@ def tela_atendimentos():
 
                 st.session_state.pop("atendimento_cliente_id", None)
                 st.session_state.pop("atendimento_cliente_nome", None)
-                # Limpar campos do formulário
+                # Limpar campos do formulÃ¡rio
                 for key in ["atendimento_selectbox", "at_data", "at_queixa", "at_tipo", "at_protocolo", "at_obs"]:
                     if key in st.session_state:
                         st.session_state.pop(key, None)
@@ -2860,12 +2860,12 @@ def tela_atendimentos():
                 st.rerun()
 
         st.markdown("---")
-        st.markdown("### Histórico de Atendimentos")
+        st.markdown("### HistÃ³rico de Atendimentos")
 
         # Filtro de datas
         col_filtro1, col_filtro2, col_filtro3, col_filtro4, col_filtro5 = st.columns([2, 2, 1, 1, 1])
         with col_filtro1:
-            data_inicio = st.date_input("Data início", value=_hoje() - timedelta(days=30), key="at_hist_inicio")
+            data_inicio = st.date_input("Data inÃ­cio", value=_hoje() - timedelta(days=30), key="at_hist_inicio")
         with col_filtro2:
             data_fim = st.date_input("Data fim", value=_hoje(), key="at_hist_fim")
         with col_filtro3:
@@ -2873,16 +2873,16 @@ def tela_atendimentos():
             filtrar_hoje = st.button("Hoje", key="at_hist_hoje")
         with col_filtro4:
             st.markdown("<br>", unsafe_allow_html=True)
-            editar_at_btn = st.button("✏️ Editar", key="at_hist_editar")
+            editar_at_btn = st.button("âœï¸ Editar", key="at_hist_editar")
         with col_filtro5:
             st.markdown("<br>", unsafe_allow_html=True)
-            excluir_at_btn = st.button("🗑️ Excluir", key="at_hist_excluir")
+            excluir_at_btn = st.button("ðŸ—‘ï¸ Excluir", key="at_hist_excluir")
 
         if filtrar_hoje:
             data_inicio = _hoje()
             data_fim = _hoje()
 
-        # Buscar atendimentos no período
+        # Buscar atendimentos no perÃ­odo
         atendimentos = (
             db.query(Appointment, Client)
             .join(Client, Appointment.cliente_id == Client.id)
@@ -2900,12 +2900,12 @@ def tela_atendimentos():
                 ids_atendimentos.append(at.id)
                 dados_tabela.append({
                     "Selecionar": False,
-                    "Data": at.data.strftime("%d/%m/%Y") if at.data else "—",
-                    "Cliente": cli.nome if cli else "—",
-                    "Protocolo": (at.protocolo_atendimento[:50] + "...") if at.protocolo_atendimento and len(at.protocolo_atendimento) > 50 else (at.protocolo_atendimento or "—"),
-                    "Queixa": (at.queixa_consulta[:50] + "...") if at.queixa_consulta and len(at.queixa_consulta) > 50 else (at.queixa_consulta or "—"),
-                    "Tipo Tratamento": at.tipo_tratamento or "—",
-                    "Observações": (at.observacoes[:50] + "...") if at.observacoes and len(at.observacoes) > 50 else (at.observacoes or "—"),
+                    "Data": at.data.strftime("%d/%m/%Y") if at.data else "â€”",
+                    "Cliente": cli.nome if cli else "â€”",
+                    "Protocolo": (at.protocolo_atendimento[:50] + "...") if at.protocolo_atendimento and len(at.protocolo_atendimento) > 50 else (at.protocolo_atendimento or "â€”"),
+                    "Queixa": (at.queixa_consulta[:50] + "...") if at.queixa_consulta and len(at.queixa_consulta) > 50 else (at.queixa_consulta or "â€”"),
+                    "Tipo Tratamento": at.tipo_tratamento or "â€”",
+                    "ObservaÃ§Ãµes": (at.observacoes[:50] + "...") if at.observacoes and len(at.observacoes) > 50 else (at.observacoes or "â€”"),
                 })
 
             df_hist = pd.DataFrame(dados_tabela)
@@ -2916,7 +2916,7 @@ def tela_atendimentos():
                 column_config={
                     "Selecionar": st.column_config.CheckboxColumn("Selecionar", default=False),
                 },
-                disabled=["Data", "Cliente", "Protocolo", "Queixa", "Tipo Tratamento", "Observações"],
+                disabled=["Data", "Cliente", "Protocolo", "Queixa", "Tipo Tratamento", "ObservaÃ§Ãµes"],
                 key="at_hist_editor"
             )
 
@@ -2933,7 +2933,7 @@ def tela_atendimentos():
                     if at_del:
                         db.delete(at_del)
                         db.commit()
-                        st.success("Atendimento excluído com sucesso!")
+                        st.success("Atendimento excluÃ­do com sucesso!")
                         st.rerun()
 
                 if editar_at_btn:
@@ -2943,7 +2943,7 @@ def tela_atendimentos():
                 if editar_at_btn or excluir_at_btn:
                     st.warning("Selecione um atendimento na tabela primeiro.")
 
-            # Modal de edição
+            # Modal de ediÃ§Ã£o
             if "editar_atendimento_id" in st.session_state:
                 at_edit = db.query(Appointment).filter(Appointment.id == st.session_state["editar_atendimento_id"]).first()
                 if at_edit:
@@ -2953,7 +2953,7 @@ def tela_atendimentos():
                         edit_data = st.date_input("Data", value=at_edit.data, format="DD/MM/YYYY")
                         edit_queixa = st.text_area("Queixa", value=at_edit.queixa_consulta or "")
                         edit_tipo = st.text_input("Tipo Tratamento", value=at_edit.tipo_tratamento or "")
-                        edit_obs = st.text_area("Observações", value=at_edit.observacoes or "")
+                        edit_obs = st.text_area("ObservaÃ§Ãµes", value=at_edit.observacoes or "")
                         col_salvar, col_cancelar = st.columns(2)
                         with col_salvar:
                             salvar_edicao = st.form_submit_button("Salvar", use_container_width=True)
@@ -2973,7 +2973,7 @@ def tela_atendimentos():
                         st.session_state.pop("editar_atendimento_id", None)
                         st.rerun()
         else:
-            st.info("Nenhum atendimento encontrado no período selecionado.")
+            st.info("Nenhum atendimento encontrado no perÃ­odo selecionado.")
 
     finally:
         db.close()
@@ -2981,7 +2981,7 @@ def tela_atendimentos():
 
 # ====== TELA: BIOMETRIA ======
 def tela_biometria():
-    header_titulo("Biometria", "Evolução automática e gráficos")
+    header_titulo("Biometria", "EvoluÃ§Ã£o automÃ¡tica e grÃ¡ficos")
     db = SessionLocal()
     try:
         clientes = db.query(Client).order_by(Client.nome.asc()).all()
@@ -2989,11 +2989,11 @@ def tela_biometria():
 
         col_cli, col_data = st.columns(2)
         with col_cli:
-            cliente_sel = st.selectbox("Cliente", list(mapa.keys()) if mapa else ["—"])
+            cliente_sel = st.selectbox("Cliente", list(mapa.keys()) if mapa else ["â€”"])
         with col_data:
-            data_m = st.date_input("Data da medição", value=_hoje(), format="DD/MM/YYYY")
+            data_m = st.date_input("Data da mediÃ§Ã£o", value=_hoje(), format="DD/MM/YYYY")
 
-        if cliente_sel and cliente_sel != "—":
+        if cliente_sel and cliente_sel != "â€”":
             cid = mapa[cliente_sel]
 
             col1, col2, col3 = st.columns(3)
@@ -3001,10 +3001,10 @@ def tela_biometria():
                 peso = st.number_input("Peso (kg)", min_value=0.0, step=1.0)
                 cintura = st.number_input("Cintura (cm)", min_value=0.0, step=1.0)
             with col2:
-                abdomen = st.number_input("Abdômen (cm)", min_value=0.0, step=1.0)
+                abdomen = st.number_input("AbdÃ´men (cm)", min_value=0.0, step=1.0)
                 quadril = st.number_input("Quadril (cm)", min_value=0.0, step=1.0)
             with col3:
-                braco = st.number_input("Braço (cm)", min_value=0.0, step=1.0)
+                braco = st.number_input("BraÃ§o (cm)", min_value=0.0, step=1.0)
                 coxa = st.number_input("Coxa (cm)", min_value=0.0, step=1.0)
 
             if st.button("Salvar medidas"):
@@ -3031,7 +3031,7 @@ def tela_biometria():
             )
 
             if not historico.empty:
-                st.markdown("#### Evolução de peso")
+                st.markdown("#### EvoluÃ§Ã£o de peso")
                 chart = alt.Chart(historico).mark_line(point=True).encode(
                     x="data_medicao:T", y="peso:Q"
                 )
@@ -3041,7 +3041,7 @@ def tela_biometria():
                     pd.to_datetime(historico["data_medicao"], errors="coerce")
                     .dt.strftime("%d/%m/%Y")
                 )
-                st.markdown("#### Histórico completo")
+                st.markdown("#### HistÃ³rico completo")
                 bio_records = (
                     db.query(Biometrics)
                     .filter(Biometrics.cliente_id == cid)
@@ -3049,25 +3049,25 @@ def tela_biometria():
                     .all()
                 )
                 for _bio in bio_records:
-                    _data_bio = _bio.data_medicao.strftime("%d/%m/%Y") if _bio.data_medicao else "—"
+                    _data_bio = _bio.data_medicao.strftime("%d/%m/%Y") if _bio.data_medicao else "â€”"
                     col_bio_info, col_bio_menu = st.columns([6, 0.4])
                     with col_bio_info:
                         st.write(
-                            f"**{_data_bio}** — Peso: {_bio.peso or '—'} kg | "
-                            f"Cintura: {_bio.cintura or '—'} | Abdômen: {_bio.abdomen or '—'} | "
-                            f"Quadril: {_bio.quadril or '—'} | Braço: {_bio.braco or '—'} | "
-                            f"Coxa: {_bio.coxa or '—'}"
+                            f"**{_data_bio}** â€” Peso: {_bio.peso or 'â€”'} kg | "
+                            f"Cintura: {_bio.cintura or 'â€”'} | AbdÃ´men: {_bio.abdomen or 'â€”'} | "
+                            f"Quadril: {_bio.quadril or 'â€”'} | BraÃ§o: {_bio.braco or 'â€”'} | "
+                            f"Coxa: {_bio.coxa or 'â€”'}"
                         )
                     with col_bio_menu:
-                        with st.popover("⋮", use_container_width=True):
-                            if st.button("✏️ Editar", key=f"bio_edit_{_bio.id}"):
+                        with st.popover("â‹®", use_container_width=True):
+                            if st.button("âœï¸ Editar", key=f"bio_edit_{_bio.id}"):
                                 st.session_state["bio_editando"] = _bio.id
                                 st.rerun()
-                            if st.button("🗑️ Excluir", key=f"bio_del_{_bio.id}"):
+                            if st.button("ðŸ—‘ï¸ Excluir", key=f"bio_del_{_bio.id}"):
                                 db.delete(_bio)
                                 db.commit()
                                 st.rerun()
-                # Formulário de edição de biometria
+                # FormulÃ¡rio de ediÃ§Ã£o de biometria
                 if st.session_state.get("bio_editando"):
                     _bid = st.session_state["bio_editando"]
                     _bio_ed = db.get(Biometrics, _bid)
@@ -3081,14 +3081,14 @@ def tela_biometria():
                                 _ed_bio_peso = st.number_input("Peso (kg)", value=float(_bio_ed.peso or 0), min_value=0.0, step=0.1, key="ed_bio_peso")
                                 _ed_bio_cin = st.number_input("Cintura (cm)", value=float(_bio_ed.cintura or 0), min_value=0.0, step=0.1, key="ed_bio_cin")
                             with col_eb2:
-                                _ed_bio_abd = st.number_input("Abdômen (cm)", value=float(_bio_ed.abdomen or 0), min_value=0.0, step=0.1, key="ed_bio_abd")
+                                _ed_bio_abd = st.number_input("AbdÃ´men (cm)", value=float(_bio_ed.abdomen or 0), min_value=0.0, step=0.1, key="ed_bio_abd")
                                 _ed_bio_qua = st.number_input("Quadril (cm)", value=float(_bio_ed.quadril or 0), min_value=0.0, step=0.1, key="ed_bio_qua")
                             with col_eb3:
-                                _ed_bio_bra = st.number_input("Braço (cm)", value=float(_bio_ed.braco or 0), min_value=0.0, step=0.1, key="ed_bio_bra")
+                                _ed_bio_bra = st.number_input("BraÃ§o (cm)", value=float(_bio_ed.braco or 0), min_value=0.0, step=0.1, key="ed_bio_bra")
                                 _ed_bio_cox = st.number_input("Coxa (cm)", value=float(_bio_ed.coxa or 0), min_value=0.0, step=0.1, key="ed_bio_cox")
                             col_ebsv, col_ebcn = st.columns(2)
                             with col_ebsv:
-                                _salvar_bio_ed = st.form_submit_button("💾 Salvar", use_container_width=True)
+                                _salvar_bio_ed = st.form_submit_button("ðŸ’¾ Salvar", use_container_width=True)
                             with col_ebcn:
                                 _cancelar_bio_ed = st.form_submit_button("Cancelar", use_container_width=True)
                         if _salvar_bio_ed:
@@ -3112,10 +3112,10 @@ def tela_biometria():
 
 # ====== TELA: ESTOQUE ======
 def tela_estoque():
-    header_titulo("Estoque", "Produtos, lotes e movimentações")
+    header_titulo("Estoque", "Produtos, lotes e movimentaÃ§Ãµes")
     db = SessionLocal()
     try:
-        aba1, aba2, aba3 = st.tabs(["Estoque", "Movimentações", "Cadastro de Produtos"])
+        aba1, aba2, aba3 = st.tabs(["Estoque", "MovimentaÃ§Ãµes", "Cadastro de Produtos"])
 
         # ---------- ABA 1: Estoque ----------
         with aba1:
@@ -3128,11 +3128,11 @@ def tela_estoque():
                 with col1:
                     prod_compra = st.selectbox(
                         "Produto*",
-                        ["— selecione —"] + list(mapa_prod.keys()),
+                        ["â€” selecione â€”"] + list(mapa_prod.keys()),
                     )
                     lote_compra = st.text_input("Lote")
                     qtd_compra = st.number_input("Quantidade", min_value=0.0, step=1.0)
-                    qtd_min_compra = st.number_input("Quantidade mínima", min_value=0.0, step=1.0)
+                    qtd_min_compra = st.number_input("Quantidade mÃ­nima", min_value=0.0, step=1.0)
                 with col2:
                     validade_compra = st.date_input("Data de validade", value=_hoje(), format="DD/MM/YYYY")
                     fornecedor_compra = st.text_input("Fornecedor")
@@ -3141,13 +3141,13 @@ def tela_estoque():
                 salvar_compra = st.form_submit_button("Registrar compra", use_container_width=True)
 
             if salvar_compra:
-                if prod_compra == "— selecione —" or qtd_compra <= 0:
+                if prod_compra == "â€” selecione â€”" or qtd_compra <= 0:
                     st.error("Selecione um produto e informe quantidade.")
                 else:
                     novo_lote = StockLote(
                         produto_id=mapa_prod[prod_compra],
                         lote=lote_compra or None,
-                        quantidade_atual=qtd_compra,
+                        quantidade_atual=0,
                         quantidade_minima=qtd_min_compra,
                         data_validade=validade_compra,
                         fornecedor=fornecedor_compra or None,
@@ -3169,19 +3169,45 @@ def tela_estoque():
                 .all()
             )
             if lotes:
-                dados_est = [
-                    {
-                        "Produto": lt.produto.nome,
-                        "Categoria": lt.produto.categoria,
-                        "Lote": lt.lote or "S/N",
-                        "Quantidade": lt.quantidade_atual,
-                        "Qtd mínima": lt.quantidade_minima,
-                        "Validade": formatar_data_br(lt.data_validade),
-                        "Fornecedor": lt.fornecedor or "",
-                    }
-                    for lt in lotes
-                ]
-                st.dataframe(pd.DataFrame(dados_est), use_container_width=True, hide_index=True)
+                for lt in lotes:
+                    col_info_e, col_acoes_e = st.columns([9, 1])
+                    with col_info_e:
+                        st.markdown(f"**{lt.produto.nome}** | {lt.produto.categoria} | Lote: {lt.lote or 'S/N'} | Qtd: {lt.quantidade_atual} | Val: {formatar_data_br(lt.data_validade)} | {lt.fornecedor or '—'}")
+                    with col_acoes_e:
+                        with st.popover("⋮", use_container_width=True):
+                            if st.button("✏️ Editar", key=f"est_edit_{lt.id}"):
+                                st.session_state["est_editando"] = lt.id
+                                st.rerun()
+                            if st.button("🗑️ Excluir", key=f"est_del_{lt.id}"):
+                                db.delete(lt)
+                                db.commit()
+                                st.success("Lote excluído!")
+                                st.rerun()
+                    if st.session_state.get("est_editando") == lt.id:
+                        with st.container():
+                            st.markdown("**Editar lote:**")
+                            ec1, ec2 = st.columns(2)
+                            with ec1:
+                                new_qtd = st.number_input("Quantidade", value=float(lt.quantidade_atual or 0), key=f"est_ed_qtd_{lt.id}")
+                                new_val = st.date_input("Validade", value=lt.data_validade, key=f"est_ed_val_{lt.id}")
+                            with ec2:
+                                new_forn = st.text_input("Fornecedor", value=lt.fornecedor or "", key=f"est_ed_forn_{lt.id}")
+                                new_lote_nome = st.text_input("Lote", value=lt.lote or "", key=f"est_ed_lote_{lt.id}")
+                            bc1, bc2 = st.columns(2)
+                            with bc1:
+                                if st.button("💾 Salvar", key=f"est_save_{lt.id}", use_container_width=True):
+                                    lt.quantidade_atual = new_qtd
+                                    lt.data_validade = new_val
+                                    lt.fornecedor = new_forn if new_forn else None
+                                    lt.lote = new_lote_nome if new_lote_nome else None
+                                    db.commit()
+                                    del st.session_state["est_editando"]
+                                    st.success("Lote atualizado!")
+                                    st.rerun()
+                            with bc2:
+                                if st.button("❌ Cancelar", key=f"est_cancel_{lt.id}", use_container_width=True):
+                                    del st.session_state["est_editando"]
+                                    st.rerun()
             else:
                 st.info("Nenhum lote cadastrado ainda.")
 
@@ -3192,9 +3218,9 @@ def tela_estoque():
                 st.warning(f"Estoque baixo: {', '.join(nomes)}")
             if validadep:
                 nomes_v = [f"{lt.produto.nome} (lote: {lt.lote or 'S/N'})" for lt in validadep]
-                st.warning(f"Validade próxima (30 dias): {', '.join(nomes_v)}")
+                st.warning(f"Validade prÃ³xima (30 dias): {', '.join(nomes_v)}")
 
-        # ---------- ABA 2: Movimentações ----------
+        # ---------- ABA 2: MovimentaÃ§Ãµes ----------
         with aba2:
             movs_lista = (
                 db.query(StockMovement)
@@ -3206,26 +3232,26 @@ def tela_estoque():
                     # Tenta resolver nome do produto pelo lote
                     try:
                         _lt_mov = db.get(StockLote, _mov.lote_id)
-                        _prod_nome_mov = _lt_mov.produto.nome if _lt_mov and _lt_mov.produto else "—"
-                        _lote_str_mov = _lt_mov.lote or "S/N" if _lt_mov else "—"
+                        _prod_nome_mov = _lt_mov.produto.nome if _lt_mov and _lt_mov.produto else "â€”"
+                        _lote_str_mov = _lt_mov.lote or "S/N" if _lt_mov else "â€”"
                     except Exception:
-                        _prod_nome_mov = "—"
-                        _lote_str_mov = "—"
-                    _data_mov = str(_mov.data)[:10] if _mov.data else "—"
+                        _prod_nome_mov = "â€”"
+                        _lote_str_mov = "â€”"
+                    _data_mov = str(_mov.criado_em)[:10] if _mov.criado_em else "â€”"
                     col_mov_info, col_mov_del = st.columns([6, 0.4])
                     with col_mov_info:
                         st.write(
-                            f"**{_data_mov}** — {_prod_nome_mov} | Lote: {_lote_str_mov} | "
-                            f"{_mov.tipo or '—'} | Qtd: {_mov.quantidade} | {_mov.motivo or '—'}"
+                            f"**{_data_mov}** â€” {_prod_nome_mov} | Lote: {_lote_str_mov} | "
+                            f"{_mov.tipo or 'â€”'} | Qtd: {_mov.quantidade} | {_mov.motivo or 'â€”'}"
                         )
                     with col_mov_del:
-                        with st.popover("⋮", use_container_width=True):
-                            if st.button("🗑️ Excluir", key=f"mov_del_{_mov.id}"):
+                        with st.popover("â‹®", use_container_width=True):
+                            if st.button("ðŸ—‘ï¸ Excluir", key=f"mov_del_{_mov.id}"):
                                 db.delete(_mov)
                                 db.commit()
                                 st.rerun()
             else:
-                st.info("Nenhuma movimentação registrada.")
+                st.info("Nenhuma movimentaÃ§Ã£o registrada.")
 
             st.markdown("### Movimentar manualmente")
             produtos = db.query(Product).order_by(Product.nome.asc()).all()
@@ -3235,13 +3261,13 @@ def tela_estoque():
             with col1:
                 prod_mov = st.selectbox(
                     "Produto",
-                    ["— selecione —"] + list(mapa_prod2.keys()),
+                    ["â€” selecione â€”"] + list(mapa_prod2.keys()),
                     key="mov_prod",
                 )
             with col2:
-                lote_mov_opcoes = ["— selecione —"]
+                lote_mov_opcoes = ["â€” selecione â€”"]
                 lote_mov_map = {}
-                if prod_mov and prod_mov != "— selecione —" and prod_mov in mapa_prod2:
+                if prod_mov and prod_mov != "â€” selecione â€”" and prod_mov in mapa_prod2:
                     lts = db.query(StockLote).filter(StockLote.produto_id == mapa_prod2[prod_mov]).all()
                     for lt in lts:
                         label = f"Lote: {lt.lote or 'S/N'} | Qtd: {lt.quantidade_atual}"
@@ -3253,16 +3279,16 @@ def tela_estoque():
             qtd_mov = st.number_input("Quantidade", min_value=0.0, step=1.0)
             mot_mov = st.text_input("Motivo")
 
-            if st.button("Confirmar movimentação"):
+            if st.button("Confirmar movimentaÃ§Ã£o"):
                 if (
                     lote_mov_sel
-                    and lote_mov_sel != "— selecione —"
+                    and lote_mov_sel != "â€” selecione â€”"
                     and lote_mov_sel in lote_mov_map
                     and qtd_mov > 0
                 ):
                     try:
                         movimentar(lote_mov_map[lote_mov_sel], tipo_mov, qtd_mov, mot_mov)
-                        st.success("Movimentação registrada.")
+                        st.success("MovimentaÃ§Ã£o registrada.")
                         st.rerun()
                     except Exception as e:
                         st.error(str(e))
@@ -3286,11 +3312,11 @@ def tela_estoque():
 
             if salvar_prod:
                 if not nome_prod.strip():
-                    st.error("Nome é obrigatório.")
+                    st.error("Nome Ã© obrigatÃ³rio.")
                 else:
                     existe_prod = db.query(Product).filter(Product.nome == nome_prod.strip()).first()
                     if existe_prod:
-                        st.warning("Produto com este nome já cadastrado.")
+                        st.warning("Produto com este nome jÃ¡ cadastrado.")
                     else:
                         db.add(Product(nome=nome_prod.strip(), categoria=cat_prod))
                         db.commit()
@@ -3300,28 +3326,28 @@ def tela_estoque():
         db.close()
 
 
-# ====== TELA: RELATÓRIOS ======
+# ====== TELA: RELATÃ“RIOS ======
 def tela_relatorios():
-    header_titulo("Relatórios", "Análise, exportações e insights da clínica")
+    header_titulo("RelatÃ³rios", "AnÃ¡lise, exportaÃ§Ãµes e insights da clÃ­nica")
     db = SessionLocal()
     try:
         _data_hoje = _hoje()
         _ini_mes = _data_hoje.replace(day=1)
         aba_analise, aba_vendas, aba_estoque, aba_clientes = st.tabs([
-            "📊 Análise Geral", "💰 Vendas", "📦 Estoque", "👤 Clientes"
+            "ðŸ“Š AnÃ¡lise Geral", "ðŸ’° Vendas", "ðŸ“¦ Estoque", "ðŸ‘¤ Clientes"
         ])
 
-        # ══════════════════════════════════════════
-        # ABA 1 — ANÁLISE GERAL
-        # ══════════════════════════════════════════
+        # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+        # ABA 1 â€” ANÃLISE GERAL
+        # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
         with aba_analise:
             col_di, col_df = st.columns(2)
             with col_di:
                 _r_ini = st.date_input("De", value=_ini_mes, key="rel_ini", format="DD/MM/YYYY")
             with col_df:
-                _r_fim = st.date_input("Até", value=_data_hoje, key="rel_fim", format="DD/MM/YYYY")
+                _r_fim = st.date_input("AtÃ©", value=_data_hoje, key="rel_fim", format="DD/MM/YYYY")
 
-            # ── Totais ───────────────────────────────────────────────
+            # â”€â”€ Totais â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             try:
                 _n_at = db.query(Appointment).filter(
                     Appointment.data >= _r_ini, Appointment.data <= _r_fim).count()
@@ -3338,14 +3364,14 @@ def tela_relatorios():
                 _n_vendas, _val_vendas = 0, 0.0
 
             cv1, cv2, cv3, cv4 = st.columns(4)
-            cv1.metric("Atendimentos no período", _n_at)
+            cv1.metric("Atendimentos no perÃ­odo", _n_at)
             cv2.metric("Total de clientes", _n_cli)
-            cv3.metric("Vendas no período", _n_vendas)
-            cv4.metric("Receita no período", f"R$ {_val_vendas:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
+            cv3.metric("Vendas no perÃ­odo", _n_vendas)
+            cv4.metric("Receita no perÃ­odo", f"R$ {_val_vendas:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
 
             st.markdown("---")
 
-            # ── Gráfico: atendimentos por mês ───────────────────────
+            # â”€â”€ GrÃ¡fico: atendimentos por mÃªs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             try:
                 _df_at = pd.read_sql(
                     db.query(Appointment).filter(
@@ -3353,17 +3379,17 @@ def tela_relatorios():
                 if not _df_at.empty and "data" in _df_at.columns:
                     _df_at["mes"] = pd.to_datetime(_df_at["data"], errors="coerce").dt.strftime("%Y-%m")
                     _por_mes = _df_at.groupby("mes").size().reset_index(name="Atendimentos")
-                    st.markdown("#### Atendimentos por mês")
+                    st.markdown("#### Atendimentos por mÃªs")
                     st.altair_chart(
                         alt.Chart(_por_mes).mark_bar(color="#D59C9C").encode(
-                            x=alt.X("mes:O", title="Mês"),
+                            x=alt.X("mes:O", title="MÃªs"),
                             y=alt.Y("Atendimentos:Q"),
                             tooltip=["mes", "Atendimentos"],
                         ).properties(height=260),
                         use_container_width=True,
                     )
 
-                    # ── Gráfico: procedimentos/tipo ─────────────────
+                    # â”€â”€ GrÃ¡fico: procedimentos/tipo â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                     if "tipo_tratamento" in _df_at.columns:
                         _por_tipo = _df_at.groupby("tipo_tratamento").size().reset_index(name="Total")
                         _por_tipo = _por_tipo[_por_tipo["tipo_tratamento"].notna() & (_por_tipo["tipo_tratamento"] != "")]
@@ -3378,9 +3404,9 @@ def tela_relatorios():
                                 use_container_width=True,
                             )
             except Exception as _e:
-                st.warning(f"Gráfico de atendimentos indisponível: {_e}")
+                st.warning(f"GrÃ¡fico de atendimentos indisponÃ­vel: {_e}")
 
-            # ── Gráfico: vendas por mês ──────────────────────────────
+            # â”€â”€ GrÃ¡fico: vendas por mÃªs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             try:
                 _df_v = pd.read_sql(
                     db.query(Sale).filter(
@@ -3389,20 +3415,20 @@ def tela_relatorios():
                     _df_v["mes"] = pd.to_datetime(_df_v["data_venda"], errors="coerce").dt.strftime("%Y-%m")
                     _vg = _df_v.groupby("mes").agg(
                         Vendas=("id", "count"), Valor=("valor_total", "sum")).reset_index()
-                    st.markdown("#### Vendas por mês")
+                    st.markdown("#### Vendas por mÃªs")
                     _base = alt.Chart(_vg)
                     _bars = _base.mark_bar(color="#D59C9C", opacity=0.85).encode(
-                        x=alt.X("mes:O", title="Mês"), y=alt.Y("Vendas:Q"), tooltip=["mes", "Vendas", "Valor"])
+                        x=alt.X("mes:O", title="MÃªs"), y=alt.Y("Vendas:Q"), tooltip=["mes", "Vendas", "Valor"])
                     _line = _base.mark_line(color="#9b5555", strokeWidth=2, point=True).encode(
                         x="mes:O", y=alt.Y("Valor:Q", axis=alt.Axis(title="Valor (R$)")))
                     st.altair_chart(alt.layer(_bars, _line).resolve_scale(y="independent").properties(height=280),
                                     use_container_width=True)
             except Exception as _e:
-                st.warning(f"Gráfico de vendas indisponível: {_e}")
+                st.warning(f"GrÃ¡fico de vendas indisponÃ­vel: {_e}")
 
-            # ── Botão PDF resumo ─────────────────────────────────────
+            # â”€â”€ BotÃ£o PDF resumo â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             st.markdown("---")
-            if st.button("📄 Gerar Relatório PDF (resumo)", use_container_width=True):
+            if st.button("ðŸ“„ Gerar RelatÃ³rio PDF (resumo)", use_container_width=True):
                 try:
                     from fpdf import FPDF as _FPDF
                     import os
@@ -3449,17 +3475,17 @@ def tela_relatorios():
                             self.set_y(-20)
                             self.set_font("Helvetica", "", 9)
                             self.set_text_color(*_COR_BRANCO)
-                            self.cell(0, 5, "Praça São Judas Tadeu, 160 - Jardim Casqueiro - Cubatão", ln=True, align="C")
+                            self.cell(0, 5, "PraÃ§a SÃ£o Judas Tadeu, 160 - Jardim Casqueiro - CubatÃ£o", ln=True, align="C")
                             self.cell(0, 5, "@gabifrancosaude - (13) 3304-0528", ln=True, align="C")
                     
                     _pdf = PDFRelatorio()
                     _pdf.add_page()
                     _pdf.set_auto_page_break(auto=True, margin=30)
                     
-                    # Título
+                    # TÃ­tulo
                     _pdf.set_font("Helvetica", "B", 18)
                     _pdf.set_text_color(*_COR_ROSA)
-                    _pdf.cell(0, 10, "RELATÓRIO GERAL", ln=True, align="C")
+                    _pdf.cell(0, 10, "RELATÃ“RIO GERAL", ln=True, align="C")
                     _pdf.ln(5)
                     
                     # Linha decorativa
@@ -3468,41 +3494,41 @@ def tela_relatorios():
                     _pdf.line(60, _pdf.get_y(), 150, _pdf.get_y())
                     _pdf.ln(10)
                     
-                    # Período
+                    # PerÃ­odo
                     _pdf.set_font("Helvetica", "B", 12)
                     _pdf.set_text_color(*_COR_TEXTO)
-                    _pdf.cell(0, 8, f"Período: {_r_ini.strftime('%d/%m/%Y')} a {_r_fim.strftime('%d/%m/%Y')}", ln=True)
+                    _pdf.cell(0, 8, f"PerÃ­odo: {_r_ini.strftime('%d/%m/%Y')} a {_r_fim.strftime('%d/%m/%Y')}", ln=True)
                     _pdf.ln(8)
                     
                     # Dados
                     _pdf.set_font("Helvetica", "", 11)
-                    _pdf.cell(0, 8, f"Atendimentos no período: {_n_at}", ln=True)
+                    _pdf.cell(0, 8, f"Atendimentos no perÃ­odo: {_n_at}", ln=True)
                     _pdf.cell(0, 8, f"Total de clientes: {_n_cli}", ln=True)
-                    _pdf.cell(0, 8, f"Vendas no período: {_n_vendas}", ln=True)
-                    _pdf.cell(0, 8, f"Receita no período: R$ {_val_vendas:,.2f}", ln=True)
+                    _pdf.cell(0, 8, f"Vendas no perÃ­odo: {_n_vendas}", ln=True)
+                    _pdf.cell(0, 8, f"Receita no perÃ­odo: R$ {_val_vendas:,.2f}", ln=True)
                     
                     _pdf_bytes = bytes(_pdf.output())
                     import base64 as _b64r
                     _b64_rel = _b64r.b64encode(_pdf_bytes).decode()
                     _col_r1, _col_r2 = st.columns(2)
                     with _col_r1:
-                        st.download_button("⬇️ Baixar PDF", data=_pdf_bytes,
+                        st.download_button("â¬‡ï¸ Baixar PDF", data=_pdf_bytes,
                                            file_name=f"relatorio_{_r_ini}_{_r_fim}.pdf",
                                            mime="application/pdf", key="dl_pdf_rel")
                     with _col_r2:
-                        st.markdown(f'<a href="data:application/pdf;base64,{_b64_rel}" target="_blank" style="display:inline-block;width:100%;text-align:center;padding:0.5rem 1rem;background:#d59c9c;color:white;border-radius:8px;text-decoration:none;font-weight:600;">📤 Abrir / Compartilhar</a>', unsafe_allow_html=True)
+                        st.markdown(f'<a href="data:application/pdf;base64,{_b64_rel}" target="_blank" style="display:inline-block;width:100%;text-align:center;padding:0.5rem 1rem;background:#d59c9c;color:white;border-radius:8px;text-decoration:none;font-weight:600;">ðŸ“¤ Abrir / Compartilhar</a>', unsafe_allow_html=True)
                 except Exception as _e:
                     st.error(f"Erro ao gerar PDF: {_e}")
 
-        # ══════════════════════════════════════════
-        # ABA 2 — VENDAS
-        # ══════════════════════════════════════════
+        # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+        # ABA 2 â€” VENDAS
+        # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
         with aba_vendas:
             col_vd, col_vf, col_vp = st.columns([1, 1, 1])
             with col_vd:
                 _v_ini = st.date_input("De", value=_ini_mes, key="rel_v_ini", format="DD/MM/YYYY")
             with col_vf:
-                _v_fim = st.date_input("Até", value=_data_hoje, key="rel_v_fim", format="DD/MM/YYYY")
+                _v_fim = st.date_input("AtÃ©", value=_data_hoje, key="rel_v_fim", format="DD/MM/YYYY")
             with col_vp:
                 _v_pag = st.selectbox("Forma de pagamento", ["Todas", "pix", "credito", "debito", "dinheiro"], key="rel_v_pag")
 
@@ -3520,13 +3546,13 @@ def tela_relatorios():
                     for _it in _itens:
                         _rows_v.append({
                             "Data": str(_s.data_venda)[:10],
-                            "Cliente": _c.nome if _c else "—",
-                            "Procedimento": _it.procedimento or "—",
-                            "Tipo": _it.tipo or "—",
-                            "Sessões (total)": _it.sessoes_total or "—",
-                            "Sessões (usadas)": _it.sessoes_usadas or 0,
+                            "Cliente": _c.nome if _c else "â€”",
+                            "Procedimento": _it.procedimento or "â€”",
+                            "Tipo": _it.tipo or "â€”",
+                            "SessÃµes (total)": _it.sessoes_total or "â€”",
+                            "SessÃµes (usadas)": _it.sessoes_usadas or 0,
                             "Valor (R$)": f"{float(_it.valor or 0):,.2f}",
-                            "Pagamento": _s.forma_pagamento or "—",
+                            "Pagamento": _s.forma_pagamento or "â€”",
                             "Obs": _s.observacoes or "",
                         })
 
@@ -3535,16 +3561,16 @@ def tela_relatorios():
                     st.dataframe(_df_v2, use_container_width=True, hide_index=True)
                     _total_v = sum(float(r.get("Valor (R$)", "0").replace(",", "")) for r in _rows_v)
                     st.markdown(f"**Total de itens:** {len(_rows_v)} | **Valor total: R$ {_total_v:,.2f}**")
-                    st.download_button("📥 Exportar CSV", data=_df_v2.to_csv(index=False).encode("utf-8"),
+                    st.download_button("ðŸ“¥ Exportar CSV", data=_df_v2.to_csv(index=False).encode("utf-8"),
                                        file_name=f"vendas_{_v_ini}_{_v_fim}.csv", mime="text/csv", key="dl_csv_v")
                 else:
-                    st.info("Nenhuma venda no período/filtro selecionado.")
+                    st.info("Nenhuma venda no perÃ­odo/filtro selecionado.")
             except Exception as _e:
                 st.warning(f"Erro ao carregar vendas: {_e}")
 
-        # ══════════════════════════════════════════
-        # ABA 3 — ESTOQUE
-        # ══════════════════════════════════════════
+        # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+        # ABA 3 â€” ESTOQUE
+        # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
         with aba_estoque:
             try:
                 from models.stock import Product, StockLote, StockMovement
@@ -3554,13 +3580,13 @@ def tela_relatorios():
                 for _p in _prods:
                     _lotes = db.query(StockLote).filter(StockLote.produto_id == _p.id).all()
                     _qtd_total = sum(float(_l.quantidade_atual or 0) for _l in _lotes)
-                    _lotes_str = ", ".join([f"Lote {_l.lote or 'S/N'}: {_l.quantidade_atual}" for _l in _lotes]) or "—"
-                    _alerta = "⚠️ Baixo" if any(
+                    _lotes_str = ", ".join([f"Lote {_l.lote or 'S/N'}: {_l.quantidade_atual}" for _l in _lotes]) or "â€”"
+                    _alerta = "âš ï¸ Baixo" if any(
                         float(_l.quantidade_atual or 0) <= float(_l.quantidade_minima or 0) for _l in _lotes
                     ) else "OK"
                     _rows_e.append({
                         "Produto": _p.nome,
-                        "Categoria": _p.categoria or "—",
+                        "Categoria": _p.categoria or "â€”",
                         "Qtd total": _qtd_total,
                         "Lotes": _lotes_str,
                         "Alerta": _alerta,
@@ -3568,44 +3594,44 @@ def tela_relatorios():
                 if _rows_e:
                     _df_e = pd.DataFrame(_rows_e)
                     st.dataframe(_df_e, use_container_width=True, hide_index=True)
-                    st.download_button("📥 Exportar CSV produtos", data=_df_e.to_csv(index=False).encode("utf-8"),
+                    st.download_button("ðŸ“¥ Exportar CSV produtos", data=_df_e.to_csv(index=False).encode("utf-8"),
                                        file_name="estoque_produtos.csv", mime="text/csv", key="dl_est_prod")
                 else:
                     st.info("Nenhum produto cadastrado.")
 
-                st.markdown("#### Movimentações")
+                st.markdown("#### MovimentaÃ§Ãµes")
                 _movs = db.query(StockMovement).order_by(StockMovement.data.desc()).limit(500).all()
                 if _movs:
                     _rows_m = [{
                         "Data": str(_m.data)[:10],
-                        "Produto": next((p.nome for p in _prods if any(l.id == _m.lote_id for l in db.query(StockLote).filter(StockLote.produto_id == p.id).all())), "—"),
-                        "Lote": next((l.lote for l in db.query(StockLote).filter(StockLote.id == _m.lote_id).all()), "—"),
-                        "Tipo": _m.tipo or "—",
+                        "Produto": next((p.nome for p in _prods if any(l.id == _m.lote_id for l in db.query(StockLote).filter(StockLote.produto_id == p.id).all())), "â€”"),
+                        "Lote": next((l.lote for l in db.query(StockLote).filter(StockLote.id == _m.lote_id).all()), "â€”"),
+                        "Tipo": _m.tipo or "â€”",
                         "Quantidade": _m.quantidade,
-                        "Motivo": _m.motivo or "—",
+                        "Motivo": _m.motivo or "â€”",
                     } for _m in _movs]
                     _df_m = pd.DataFrame(_rows_m)
                     st.dataframe(_df_m, use_container_width=True, hide_index=True)
-                    st.download_button("📥 Exportar CSV movimentações", data=_df_m.to_csv(index=False).encode("utf-8"),
+                    st.download_button("ðŸ“¥ Exportar CSV movimentaÃ§Ãµes", data=_df_m.to_csv(index=False).encode("utf-8"),
                                        file_name="movimentacoes_estoque.csv", mime="text/csv", key="dl_est_mov")
                 else:
-                    st.info("Nenhuma movimentação registrada.")
+                    st.info("Nenhuma movimentaÃ§Ã£o registrada.")
             except Exception as _e:
                 st.warning(f"Erro ao carregar estoque: {_e}")
 
-        # ══════════════════════════════════════════
-        # ABA 4 — CLIENTES
-        # ══════════════════════════════════════════
+        # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+        # ABA 4 â€” CLIENTES
+        # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
         with aba_clientes:
             _n_cli_total = db.query(Client).count()
             st.metric("Total de clientes cadastrados", _n_cli_total)
-            st.info("A tabela completa de clientes não é exibida aqui para preservar a privacidade. Use o botão abaixo para exportar.")
-            if st.button("📥 Exportar lista de clientes (CSV)", use_container_width=True, key="dl_cli_csv"):
+            st.info("A tabela completa de clientes nÃ£o Ã© exibida aqui para preservar a privacidade. Use o botÃ£o abaixo para exportar.")
+            if st.button("ðŸ“¥ Exportar lista de clientes (CSV)", use_container_width=True, key="dl_cli_csv"):
                 _df_cli = pd.read_sql(db.query(Client).order_by(Client.nome.asc()).statement, db.bind)
                 _colunas_exp = [c for c in ["nome", "cpf", "telefone", "email", "data_nascimento",
                                              "profissao", "endereco", "bairro", "cidade", "peso",
                                              "altura", "imc", "neoplasia", "epilepsia"] if c in _df_cli.columns]
-                st.download_button("⬇️ Baixar CSV", data=_df_cli[_colunas_exp].to_csv(index=False).encode("utf-8"),
+                st.download_button("â¬‡ï¸ Baixar CSV", data=_df_cli[_colunas_exp].to_csv(index=False).encode("utf-8"),
                                    file_name="clientes.csv", mime="text/csv", key="dl_cli_csv2")
     finally:
         db.close()
@@ -3613,7 +3639,7 @@ def tela_relatorios():
 
 # ====== TELA: CONTRATOS ======
 def tela_contratos():
-    header_titulo("Módulo de Contratos", "Geração e PDF")
+    header_titulo("MÃ³dulo de Contratos", "GeraÃ§Ã£o e PDF")
     db = SessionLocal()
     try:
         clientes = db.query(Client).order_by(Client.nome.asc()).all()
@@ -3621,7 +3647,7 @@ def tela_contratos():
 
         col1, col2 = st.columns(2)
         with col1:
-            cliente_sel = st.selectbox("Cliente", list(mapa_cli.keys()) if mapa_cli else ["—"])
+            cliente_sel = st.selectbox("Cliente", list(mapa_cli.keys()) if mapa_cli else ["â€”"])
             cpf_exibir = mapa_cli[cliente_sel].cpf if cliente_sel and cliente_sel in mapa_cli else ""
             st.text_input("CPF do cliente", value=cpf_exibir, disabled=True)
             tipo_trat = st.text_input("Tipo de tratamento*")
@@ -3632,8 +3658,8 @@ def tela_contratos():
             assinatura = st.text_input("Assinatura digital")
 
         if st.button("Gerar contrato"):
-            if not cliente_sel or cliente_sel == "—" or not tipo_trat or valor <= 0:
-                st.error("Preencha os campos obrigatórios.")
+            if not cliente_sel or cliente_sel == "â€”" or not tipo_trat or valor <= 0:
+                st.error("Preencha os campos obrigatÃ³rios.")
             else:
                 cli_obj = mapa_cli[cliente_sel]
                 c = Contract(
@@ -3653,9 +3679,9 @@ def tela_contratos():
                 _b64_contrato = _b64c.b64encode(_contrato_bytes).decode()
                 _col_c1, _col_c2 = st.columns(2)
                 with _col_c1:
-                    st.download_button("⬇️ Baixar PDF", data=_contrato_bytes, file_name=f"contrato_{c.id}.pdf")
+                    st.download_button("â¬‡ï¸ Baixar PDF", data=_contrato_bytes, file_name=f"contrato_{c.id}.pdf")
                 with _col_c2:
-                    st.markdown(f'<a href="data:application/pdf;base64,{_b64_contrato}" target="_blank" style="display:inline-block;width:100%;text-align:center;padding:0.5rem 1rem;background:#d59c9c;color:white;border-radius:8px;text-decoration:none;font-weight:600;">📤 Abrir / Compartilhar</a>', unsafe_allow_html=True)
+                    st.markdown(f'<a href="data:application/pdf;base64,{_b64_contrato}" target="_blank" style="display:inline-block;width:100%;text-align:center;padding:0.5rem 1rem;background:#d59c9c;color:white;border-radius:8px;text-decoration:none;font-weight:600;">ðŸ“¤ Abrir / Compartilhar</a>', unsafe_allow_html=True)
                 st.success("Contrato gerado.")
     finally:
         db.close()
@@ -3663,7 +3689,7 @@ def tela_contratos():
 
 # ====== TELA: FICHA DO CLIENTE ======
 def tela_ficha_cliente():
-    header_titulo("Ficha do Cliente", "Busca, ficha completa e histórico")
+    header_titulo("Ficha do Cliente", "Busca, ficha completa e histÃ³rico")
     inicializar_state_cliente()
 
     db = SessionLocal()
@@ -3672,12 +3698,12 @@ def tela_ficha_cliente():
 
         cliente_id = st.session_state.get("ficha_cliente_id", 0)
         if not cliente_id:
-            st.info("Digite o nome da cliente para ver sugestões e selecionar uma ficha.")
+            st.info("Digite o nome da cliente para ver sugestÃµes e selecionar uma ficha.")
             return
 
         cli = db.get(Client, cliente_id)
         if not cli:
-            st.error("Cliente não encontrado.")
+            st.error("Cliente nÃ£o encontrado.")
             return
 
         st.markdown(f"## {cli.nome}")
@@ -3689,26 +3715,26 @@ def tela_ficha_cliente():
             st.write(f"**Telefone:** {cli.telefone or ''}")
             st.write(f"**E-mail:** {cli.email or ''}")
         with c2:
-            st.write(f"**Profissão:** {cli.profissao or ''}")
-            st.write(f"**Endereço:** {cli.endereco or ''}")
+            st.write(f"**ProfissÃ£o:** {cli.profissao or ''}")
+            st.write(f"**EndereÃ§o:** {cli.endereco or ''}")
             st.write(f"**Bairro:** {cli.bairro or ''}")
             st.write(f"**Cidade:** {cli.cidade or ''}")
         with c3:
             st.write(f"**Peso:** {cli.peso or ''}")
             st.write(f"**Altura:** {cli.altura or ''}")
             st.write(f"**IMC:** {cli.imc or ''}")
-            st.write(f"**Termo aceito:** {'Sim' if cli.termo_aceite else 'Não'}")
+            st.write(f"**Termo aceito:** {'Sim' if cli.termo_aceite else 'NÃ£o'}")
 
         st.markdown("---")
-        st.markdown("### Informações clínicas")
+        st.markdown("### InformaÃ§Ãµes clÃ­nicas")
         st.write(f"**Queixa principal:** {cli.queixa_principal or ''}")
-        st.write(f"**Neoplasia:** {'Sim' if cli.neoplasia else 'Não'}")
-        st.write(f"**Epilepsia:** {'Sim' if cli.epilepsia else 'Não'}")
+        st.write(f"**Neoplasia:** {'Sim' if cli.neoplasia else 'NÃ£o'}")
+        st.write(f"**Epilepsia:** {'Sim' if cli.epilepsia else 'NÃ£o'}")
         st.write(f"**Funcionamento intestinal:** {cli.funcionamento_intestinal or ''}")
         st.write(f"**Uso de vitaminas:** {cli.uso_vitaminas or ''}")
         st.write(f"**Exames recentes:** {cli.exames_recentes or ''}")
 
-        st.markdown("### Histórico / outras condições")
+        st.markdown("### HistÃ³rico / outras condiÃ§Ãµes")
         st.text_area(
             "Dados complementares",
             value=cli.outras_condicoes or "",
@@ -3717,9 +3743,9 @@ def tela_ficha_cliente():
             key=f"ficha_outras_{cli.id}",
         )
 
-        st.markdown("### Marcação corporal")
+        st.markdown("### MarcaÃ§Ã£o corporal")
         st.text_area(
-            "Marcação corporal",
+            "MarcaÃ§Ã£o corporal",
             value=cli.marcacao_corporal or "",
             height=120,
             disabled=True,
@@ -3727,7 +3753,7 @@ def tela_ficha_cliente():
         )
 
         st.markdown("---")
-        abas = st.tabs(["Atendimentos", "Biometria", "Pré-avaliações"])
+        abas = st.tabs(["Atendimentos", "Biometria", "PrÃ©-avaliaÃ§Ãµes"])
 
         with abas[0]:
             atend = pd.read_sql(
@@ -3772,18 +3798,18 @@ def tela_ficha_cliente():
                     aval["criado_em"] = pd.to_datetime(aval["criado_em"], errors="coerce").dt.strftime("%d/%m/%Y %H:%M")
                 st.dataframe(aval, use_container_width=True, hide_index=True)
             else:
-                st.info("Nenhuma pré-avaliação encontrada.")
+                st.info("Nenhuma prÃ©-avaliaÃ§Ã£o encontrada.")
     finally:
         db.close()
 
 
 # ====== TELA: VENDAS ======
 def tela_vendas():
-    header_titulo("Vendas", "Registro de vendas unitárias e pacotes")
+    header_titulo("Vendas", "Registro de vendas unitÃ¡rias e pacotes")
 
     db = SessionLocal()
     try:
-        # ── Inicializa itens da venda na sessão ──
+        # â”€â”€ Inicializa itens da venda na sessÃ£o â”€â”€
         if "venda_itens" not in st.session_state:
             st.session_state["venda_itens"] = []
 
@@ -3814,29 +3840,29 @@ def tela_vendas():
         with col_v1:
             data_venda = st.date_input("Data da venda", value=_hoje(), key="venda_data", format="DD/MM/YYYY")
         with col_v2:
-            pagamento = st.selectbox("Forma de pagamento*", ["Cartão de Crédito", "Cartão de Débito", "Pix"], key="venda_pag")
+            pagamento = st.selectbox("Forma de pagamento*", ["CartÃ£o de CrÃ©dito", "CartÃ£o de DÃ©bito", "Pix"], key="venda_pag")
 
-        obs_venda = st.text_input("Observações (opcional)", key="venda_obs")
+        obs_venda = st.text_input("ObservaÃ§Ãµes (opcional)", key="venda_obs")
 
         st.markdown("#### Itens da venda")
 
-        # ── Adicionar item ──
-        with st.expander("➕ Adicionar item", expanded=True):
+        # â”€â”€ Adicionar item â”€â”€
+        with st.expander("âž• Adicionar item", expanded=True):
             # Buscar procedimentos cadastrados para auto-preencher
             _procs_cadastrados = db.query(Tratamento).filter(Tratamento.ativo == True).order_by(Tratamento.nome).all()
-            _nomes_procs = ["— digitar manualmente —"] + [p.nome for p in _procs_cadastrados]
+            _nomes_procs = ["â€” digitar manualmente â€”"] + [p.nome for p in _procs_cadastrados]
             _mapa_procs = {p.nome: p for p in _procs_cadastrados}
 
             col_i0, col_i1 = st.columns([2, 2])
             with col_i0:
                 proc_selecionado = st.selectbox("Procedimento cadastrado", _nomes_procs, key="item_proc_sel")
             with col_i1:
-                tipo_item = st.selectbox("Tipo", ["Unitário", "Pacote"], key="item_tipo")
+                tipo_item = st.selectbox("Tipo", ["UnitÃ¡rio", "Pacote"], key="item_tipo")
 
             # Auto-preencher valor se selecionou procedimento cadastrado
             _val_default = 0.0
             _sessoes_default = 2
-            if proc_selecionado != "— digitar manualmente —" and proc_selecionado in _mapa_procs:
+            if proc_selecionado != "â€” digitar manualmente â€”" and proc_selecionado in _mapa_procs:
                 _p_ref = _mapa_procs[proc_selecionado]
                 if tipo_item == "Pacote" and _p_ref.valor_pacote:
                     _val_default = _p_ref.valor_pacote
@@ -3846,7 +3872,7 @@ def tela_vendas():
 
             col_i2, col_i3 = st.columns([3, 1])
             with col_i2:
-                if proc_selecionado == "— digitar manualmente —":
+                if proc_selecionado == "â€” digitar manualmente â€”":
                     proc_item = st.text_input("Procedimento*", key="item_proc")
                 else:
                     proc_item = proc_selecionado
@@ -3856,7 +3882,7 @@ def tela_vendas():
 
             sessoes_item = 1
             if tipo_item == "Pacote":
-                sessoes_item = st.number_input("Nº de sessões*", min_value=2, step=1, value=_sessoes_default, key="item_sessoes")
+                sessoes_item = st.number_input("NÂº de sessÃµes*", min_value=2, step=1, value=_sessoes_default, key="item_sessoes")
 
             if st.button("Adicionar item", use_container_width=True):
                 if not proc_item.strip():
@@ -3872,25 +3898,25 @@ def tela_vendas():
                     })
                     st.rerun()
 
-        # ── Lista de itens adicionados ──
+        # â”€â”€ Lista de itens adicionados â”€â”€
         itens = st.session_state["venda_itens"]
         if itens:
             st.markdown("**Itens adicionados:**")
             for i, it in enumerate(itens):
                 col_it, col_rm = st.columns([5, 1])
                 with col_it:
-                    tipo_label = "📦 Pacote" if it["tipo"] == "pacote" else "1️⃣ Unitário"
-                    sessoes_label = f" — {it['sessoes_total']} sessões" if it["tipo"] == "pacote" else ""
-                    st.write(f"**{it['procedimento']}** {tipo_label}{sessoes_label} — R$ {it['valor']:.2f}")
+                    tipo_label = "ðŸ“¦ Pacote" if it["tipo"] == "pacote" else "1ï¸âƒ£ UnitÃ¡rio"
+                    sessoes_label = f" â€” {it['sessoes_total']} sessÃµes" if it["tipo"] == "pacote" else ""
+                    st.write(f"**{it['procedimento']}** {tipo_label}{sessoes_label} â€” R$ {it['valor']:.2f}")
                 with col_rm:
-                    if st.button("✕", key=f"rm_item_{i}"):
+                    if st.button("âœ•", key=f"rm_item_{i}"):
                         st.session_state["venda_itens"].pop(i)
                         st.rerun()
 
             total = sum(it["valor"] for it in itens)
             st.markdown(f"**Total: R$ {total:.2f}**")
 
-            if st.button("💾 Salvar Venda", use_container_width=True, type="primary"):
+            if st.button("ðŸ’¾ Salvar Venda", use_container_width=True, type="primary"):
                 if not venda_cliente_id:
                     st.error("Selecione a cliente.")
                 else:
@@ -3920,13 +3946,13 @@ def tela_vendas():
         else:
             st.info("Nenhum item adicionado ainda.")
 
-        # ── Vendas recentes ──
+        # â”€â”€ Vendas recentes â”€â”€
         st.markdown("---")
         st.markdown("### Vendas recentes")
 
         col_filtro_v, _ = st.columns([1, 3])
         with col_filtro_v:
-            filtro_tipo_venda = st.selectbox("Filtrar por tipo", ["Todos", "Pacote", "Unitário"], key="venda_filtro_tipo")
+            filtro_tipo_venda = st.selectbox("Filtrar por tipo", ["Todos", "Pacote", "UnitÃ¡rio"], key="venda_filtro_tipo")
 
         vendas_rec = db.query(Sale).order_by(Sale.data_venda.desc(), Sale.id.desc()).limit(50).all()
         if vendas_rec:
@@ -3938,36 +3964,36 @@ def tela_vendas():
                 elif "pacote" in tipos_itens:
                     tipo_venda = "Pacote"
                 else:
-                    tipo_venda = "Unitário"
+                    tipo_venda = "UnitÃ¡rio"
 
                 # Aplicar filtro
                 if filtro_tipo_venda == "Pacote" and "pacote" not in tipos_itens:
                     continue
-                if filtro_tipo_venda == "Unitário" and "unitario" not in tipos_itens:
+                if filtro_tipo_venda == "UnitÃ¡rio" and "unitario" not in tipos_itens:
                     continue
 
                 procs = ", ".join(f"{it.procedimento}" for it in v.itens)
                 col_info_v, col_menu_v = st.columns([6, 0.4])
                 with col_info_v:
                     st.write(
-                        f"**{v.data_venda.strftime('%d/%m/%Y')}** — "
-                        f"{v.cliente.nome if v.cliente else '—'} | "
+                        f"**{v.data_venda.strftime('%d/%m/%Y')}** â€” "
+                        f"{v.cliente.nome if v.cliente else 'â€”'} | "
                         f"{tipo_venda} | {procs} | "
                         f"R$ {v.valor_total:.2f} | {v.forma_pagamento}"
                     )
                 with col_menu_v:
-                    with st.popover("⋮", use_container_width=True):
-                        if st.button("✏️ Editar", key=f"venda_edit_{v.id}"):
+                    with st.popover("â‹®", use_container_width=True):
+                        if st.button("âœï¸ Editar", key=f"venda_edit_{v.id}"):
                             st.session_state["venda_editando"] = v.id
                             st.rerun()
-                        if st.button("🗑️ Excluir", key=f"venda_del_{v.id}"):
+                        if st.button("ðŸ—‘ï¸ Excluir", key=f"venda_del_{v.id}"):
                             db.delete(v)
                             db.commit()
                             st.rerun()
         else:
             st.info("Nenhuma venda registrada.")
 
-        # ── Formulário de edição de venda ──
+        # â”€â”€ FormulÃ¡rio de ediÃ§Ã£o de venda â”€â”€
         if st.session_state.get("venda_editando"):
             _vid = st.session_state["venda_editando"]
             _venda_ed = db.get(Sale, _vid)
@@ -3978,15 +4004,15 @@ def tela_vendas():
                     _ed_data_v = st.date_input("Data", value=_venda_ed.data_venda, format="DD/MM/YYYY", key="ed_venda_data")
                     _ed_pag_v = st.selectbox(
                         "Forma de pagamento",
-                        ["Cartão de Crédito", "Cartão de Débito", "Pix"],
-                        index=["Cartão de Crédito", "Cartão de Débito", "Pix"].index(_venda_ed.forma_pagamento)
-                        if _venda_ed.forma_pagamento in ["Cartão de Crédito", "Cartão de Débito", "Pix"] else 0,
+                        ["CartÃ£o de CrÃ©dito", "CartÃ£o de DÃ©bito", "Pix"],
+                        index=["CartÃ£o de CrÃ©dito", "CartÃ£o de DÃ©bito", "Pix"].index(_venda_ed.forma_pagamento)
+                        if _venda_ed.forma_pagamento in ["CartÃ£o de CrÃ©dito", "CartÃ£o de DÃ©bito", "Pix"] else 0,
                         key="ed_venda_pag",
                     )
-                    _ed_obs_v = st.text_input("Observações", value=_venda_ed.observacoes or "", key="ed_venda_obs")
+                    _ed_obs_v = st.text_input("ObservaÃ§Ãµes", value=_venda_ed.observacoes or "", key="ed_venda_obs")
                     col_sv2, col_cn2 = st.columns(2)
                     with col_sv2:
-                        _salvar_venda_ed = st.form_submit_button("💾 Salvar", use_container_width=True)
+                        _salvar_venda_ed = st.form_submit_button("ðŸ’¾ Salvar", use_container_width=True)
                     with col_cn2:
                         _cancelar_venda_ed = st.form_submit_button("Cancelar", use_container_width=True)
                 if _salvar_venda_ed:
@@ -4004,15 +4030,15 @@ def tela_vendas():
         db.close()
 
 
-# ====== TELA: USUÁRIOS ======
+# ====== TELA: USUÃRIOS ======
 def _modal_editar_usuario(uid: int):
-    @st.dialog("Editar Usuário", width="large")
+    @st.dialog("Editar UsuÃ¡rio", width="large")
     def _abrir():
         db = SessionLocal()
         try:
             u = db.get(User, uid)
             if not u:
-                st.error("Usuário não encontrado.")
+                st.error("UsuÃ¡rio nÃ£o encontrado.")
                 return
             nome_e = st.text_input("Nome", value=u.nome, key=f"dlg_ed_nome_{uid}")
             email_e = st.text_input("E-mail", value=u.email, key=f"dlg_ed_email_{uid}")
@@ -4028,7 +4054,7 @@ def _modal_editar_usuario(uid: int):
             )
             col_s, col_c = st.columns(2)
             with col_s:
-                if st.button("💾 Salvar alterações", use_container_width=True, key=f"dlg_ed_salvar_{uid}"):
+                if st.button("ðŸ’¾ Salvar alteraÃ§Ãµes", use_container_width=True, key=f"dlg_ed_salvar_{uid}"):
                     u.nome = nome_e
                     u.email = email_e
                     u.perfil = perfil_e
@@ -4036,7 +4062,7 @@ def _modal_editar_usuario(uid: int):
                     if nova_senha_e:
                         u.senha_hash = hash_password(nova_senha_e)
                     db.commit()
-                    st.success("Usuário atualizado.")
+                    st.success("UsuÃ¡rio atualizado.")
                     st.rerun()
             with col_c:
                 if st.button("Cancelar", use_container_width=True, key=f"dlg_ed_cancel_{uid}"):
@@ -4047,15 +4073,15 @@ def _modal_editar_usuario(uid: int):
 
 
 def _modal_excluir_usuario(uid: int, nome_usuario: str):
-    @st.dialog(f"Excluir usuário", width="small")
+    @st.dialog(f"Excluir usuÃ¡rio", width="small")
     def _abrir():
-        st.warning(f"Tem certeza que deseja excluir o usuário **{nome_usuario}**? Esta ação é irreversível.")
+        st.warning(f"Tem certeza que deseja excluir o usuÃ¡rio **{nome_usuario}**? Esta aÃ§Ã£o Ã© irreversÃ­vel.")
         col_c, col_d = st.columns(2)
         with col_c:
             if st.button("Cancelar", use_container_width=True, key=f"dlg_del_cancel_{uid}"):
                 st.rerun()
         with col_d:
-            if st.button("🗑️ Confirmar exclusão", use_container_width=True,
+            if st.button("ðŸ—‘ï¸ Confirmar exclusÃ£o", use_container_width=True,
                           key=f"dlg_del_confirm_{uid}", type="primary"):
                 db = SessionLocal()
                 try:
@@ -4065,7 +4091,7 @@ def _modal_excluir_usuario(uid: int, nome_usuario: str):
                         db.commit()
                 finally:
                     db.close()
-                st.success(f"Usuário {nome_usuario} excluído.")
+                st.success(f"UsuÃ¡rio {nome_usuario} excluÃ­do.")
                 st.rerun()
     _abrir()
 
@@ -4077,14 +4103,14 @@ def tela_cadastros():
     try:
         aba_mat, aba_trat = st.tabs(["Materiais", "Procedimentos"])
 
-        # ────── ABA MATERIAIS ──────
+        # â”€â”€â”€â”€â”€â”€ ABA MATERIAIS â”€â”€â”€â”€â”€â”€
         with aba_mat:
             st.markdown("### Novo Material")
             col1, col2, col3 = st.columns([3, 2, 1])
             with col1:
                 nome_mat = st.text_input("Nome do material", key="mat_nome")
             with col2:
-                tipo_mat = st.selectbox("Tipo", ["Injetável", "Descartável"], key="mat_tipo")
+                tipo_mat = st.selectbox("Tipo", ["InjetÃ¡vel", "DescartÃ¡vel"], key="mat_tipo")
             with col3:
                 st.markdown("<br>", unsafe_allow_html=True)
                 if st.button("Salvar", key="mat_salvar", use_container_width=True):
@@ -4096,7 +4122,7 @@ def tela_cadastros():
                             Material.ativo == True
                         ).first()
                         if existe:
-                            st.warning("Já existe um material com este nome.")
+                            st.warning("JÃ¡ existe um material com este nome.")
                         else:
                             db.add(Material(nome=nome_mat.strip(), tipo=tipo_mat))
                             db.commit()
@@ -4112,15 +4138,15 @@ def tela_cadastros():
                     c1.write(mat.nome)
                     c2.write(mat.tipo)
                     with c3:
-                        with st.popover("⋮", use_container_width=True):
-                            if st.button("✏️ Editar", key=f"mat_edit_{mat.id}"):
+                        with st.popover("â‹®", use_container_width=True):
+                            if st.button("âœï¸ Editar", key=f"mat_edit_{mat.id}"):
                                 st.session_state["mat_editando"] = mat.id
                                 st.rerun()
-                            if st.button("🗑️ Excluir", key=f"del_mat_{mat.id}", help="Excluir"):
+                            if st.button("ðŸ—‘ï¸ Excluir", key=f"del_mat_{mat.id}", help="Excluir"):
                                 mat.ativo = False
                                 db.commit()
                                 st.rerun()
-                # Formulário de edição de material
+                # FormulÃ¡rio de ediÃ§Ã£o de material
                 if st.session_state.get("mat_editando"):
                     _mid = st.session_state["mat_editando"]
                     _mat_ed = db.get(Material, _mid)
@@ -4130,14 +4156,14 @@ def tela_cadastros():
                         with st.form("form_editar_mat", clear_on_submit=False):
                             _ed_mat_nome = st.text_input("Nome", value=_mat_ed.nome, key="ed_mat_nome")
                             _ed_mat_tipo = st.selectbox(
-                                "Tipo", ["Injetável", "Descartável"],
-                                index=["Injetável", "Descartável"].index(_mat_ed.tipo)
-                                if _mat_ed.tipo in ["Injetável", "Descartável"] else 0,
+                                "Tipo", ["InjetÃ¡vel", "DescartÃ¡vel"],
+                                index=["InjetÃ¡vel", "DescartÃ¡vel"].index(_mat_ed.tipo)
+                                if _mat_ed.tipo in ["InjetÃ¡vel", "DescartÃ¡vel"] else 0,
                                 key="ed_mat_tipo",
                             )
                             col_msv, col_mcn = st.columns(2)
                             with col_msv:
-                                _salvar_mat = st.form_submit_button("💾 Salvar", use_container_width=True)
+                                _salvar_mat = st.form_submit_button("ðŸ’¾ Salvar", use_container_width=True)
                             with col_mcn:
                                 _cancelar_mat = st.form_submit_button("Cancelar", use_container_width=True)
                         if _salvar_mat:
@@ -4156,17 +4182,17 @@ def tela_cadastros():
             else:
                 st.info("Nenhum material cadastrado ainda.")
 
-        # ────── ABA PROCEDIMENTOS ──────
+        # â”€â”€â”€â”€â”€â”€ ABA PROCEDIMENTOS â”€â”€â”€â”€â”€â”€
         with aba_trat:
             st.markdown("### Novo Procedimento")
             col1, col2 = st.columns(2)
             with col1:
                 nome_trat = st.text_input("Nome do procedimento*", key="trat_nome")
-                desc_trat = st.text_input("Descrição (opcional)", key="trat_desc")
+                desc_trat = st.text_input("DescriÃ§Ã£o (opcional)", key="trat_desc")
             with col2:
-                valor_unit = st.number_input("Valor unitário (R$)", min_value=0.0, step=0.01, key="trat_val_unit")
+                valor_unit = st.number_input("Valor unitÃ¡rio (R$)", min_value=0.0, step=0.01, key="trat_val_unit")
                 valor_pac = st.number_input("Valor pacote (R$)", min_value=0.0, step=0.01, key="trat_val_pac")
-                sessoes_pac = st.number_input("Sessões do pacote", min_value=0, step=1, value=0, key="trat_sessoes")
+                sessoes_pac = st.number_input("SessÃµes do pacote", min_value=0, step=1, value=0, key="trat_sessoes")
 
             if st.button("Salvar procedimento", key="trat_salvar", use_container_width=True):
                 if not nome_trat.strip():
@@ -4177,7 +4203,7 @@ def tela_cadastros():
                         Tratamento.ativo == True
                     ).first()
                     if existe:
-                        st.warning("Já existe um procedimento com este nome.")
+                        st.warning("JÃ¡ existe um procedimento com este nome.")
                     else:
                         db.add(Tratamento(
                             nome=nome_trat.strip(),
@@ -4199,18 +4225,18 @@ def tela_cadastros():
                 for trat in tratamentos:
                     rows_proc.append({
                         "Nome": trat.nome,
-                        "Descrição": trat.descricao or "—",
-                        "Valor Unit. (R$)": f"{trat.valor_unitario:.2f}" if trat.valor_unitario else "—",
-                        "Valor Pacote (R$)": f"{trat.valor_pacote:.2f}" if trat.valor_pacote else "—",
-                        "Sessões Pacote": trat.sessoes_pacote or "—",
+                        "DescriÃ§Ã£o": trat.descricao or "â€”",
+                        "Valor Unit. (R$)": f"{trat.valor_unitario:.2f}" if trat.valor_unitario else "â€”",
+                        "Valor Pacote (R$)": f"{trat.valor_pacote:.2f}" if trat.valor_pacote else "â€”",
+                        "SessÃµes Pacote": trat.sessoes_pacote or "â€”",
                     })
                 st.dataframe(pd.DataFrame(rows_proc), use_container_width=True, hide_index=True)
 
-                # Botão excluir por nome
+                # BotÃ£o excluir por nome
                 for trat in tratamentos:
                     col_n, col_del = st.columns([6, 1])
                     with col_del:
-                        if st.button("🗑️", key=f"del_trat_{trat.id}", help=f"Excluir {trat.nome}"):
+                        if st.button("ðŸ—‘ï¸", key=f"del_trat_{trat.id}", help=f"Excluir {trat.nome}"):
                             trat.ativo = False
                             db.commit()
                             st.rerun()
@@ -4221,19 +4247,19 @@ def tela_cadastros():
 
 
 def tela_usuarios():
-    header_titulo("Usuários", "Perfis e acesso ao sistema")
+    header_titulo("UsuÃ¡rios", "Perfis e acesso ao sistema")
     perfil_atual = st.session_state.user.get("perfil", "")
     user_id_atual = st.session_state.user.get("id")
     is_admin = perfil_atual == "admin"
 
     db = SessionLocal()
     try:
-        # ── Tabela com seleção (somente admin) ─────────────────────────────
+        # â”€â”€ Tabela com seleÃ§Ã£o (somente admin) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         if is_admin:
-            st.markdown("### Usuários cadastrados")
+            st.markdown("### UsuÃ¡rios cadastrados")
             todos = db.query(User).order_by(User.id.asc()).all()
 
-            # Linha de checkbox por usuário
+            # Linha de checkbox por usuÃ¡rio
             _sel_id = st.session_state.get("usr_selecionado_id")
             for u in todos:
                 col_chk, col_info, col_ed, col_del = st.columns([0.3, 4, 1, 1])
@@ -4250,25 +4276,25 @@ def tela_usuarios():
                         st.session_state["usr_selecionado_id"] = None
                         st.rerun()
                 with col_info:
-                    ativo_tag = "🟢" if u.ativo else "🔴"
+                    ativo_tag = "ðŸŸ¢" if u.ativo else "ðŸ”´"
                     st.markdown(
-                        f"{ativo_tag} **{u.nome}** &nbsp;·&nbsp; {u.email} &nbsp;·&nbsp; "
+                        f"{ativo_tag} **{u.nome}** &nbsp;Â·&nbsp; {u.email} &nbsp;Â·&nbsp; "
                         f"<span style='font-size:0.8rem;color:#9b7e69'>{u.perfil}</span>",
                         unsafe_allow_html=True,
                     )
                 with col_ed:
                     if u.id == _sel_id:
-                        if st.button("✏️ Editar", key=f"usr_btn_ed_{u.id}", use_container_width=True):
+                        if st.button("âœï¸ Editar", key=f"usr_btn_ed_{u.id}", use_container_width=True):
                             _modal_editar_usuario(u.id)
                 with col_del:
                     if u.id == _sel_id and u.id != user_id_atual:
-                        if st.button("🗑️ Excluir", key=f"usr_btn_del_{u.id}", use_container_width=True):
+                        if st.button("ðŸ—‘ï¸ Excluir", key=f"usr_btn_del_{u.id}", use_container_width=True):
                             _modal_excluir_usuario(u.id, u.nome)
 
             st.markdown("---")
 
-        # ── Novo usuário (todos os perfis podem criar) ─────────────────────
-        st.markdown("### Novo usuário")
+        # â”€â”€ Novo usuÃ¡rio (todos os perfis podem criar) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        st.markdown("### Novo usuÃ¡rio")
         col1, col2, col3 = st.columns(3)
         with col1:
             nome_n = st.text_input("Nome", key="usr_new_nome")
@@ -4279,19 +4305,19 @@ def tela_usuarios():
             ativo_n = st.checkbox("Ativo", value=True, key="usr_new_ativo")
         with col3:
             st.markdown("&nbsp;", unsafe_allow_html=True)
-            if st.button("Criar usuário", use_container_width=True, key="usr_btn_criar"):
+            if st.button("Criar usuÃ¡rio", use_container_width=True, key="usr_btn_criar"):
                 if not (nome_n and email_n and senha_n):
                     st.error("Preencha nome, e-mail e senha.")
                 else:
                     existe = db.query(User).filter(User.email == email_n).first()
                     if existe:
-                        st.error("Já existe um usuário com este e-mail.")
+                        st.error("JÃ¡ existe um usuÃ¡rio com este e-mail.")
                     else:
                         db.add(User(nome=nome_n, email=email_n,
                                     senha_hash=hash_password(senha_n),
                                     perfil=perfil_n, ativo=ativo_n))
                         db.commit()
-                        st.success("Usuário criado.")
+                        st.success("UsuÃ¡rio criado.")
                         st.rerun()
     finally:
         db.close()
@@ -4305,7 +4331,7 @@ def main():
 
     sidebar_menu()
 
-    # ── Header global com saudação ──
+    # â”€â”€ Header global com saudaÃ§Ã£o â”€â”€
     user = st.session_state.user
     hora = _agora().hour
     saudacao = "Bom dia" if hora < 12 else ("Boa tarde" if hora < 18 else "Boa noite")
@@ -4314,13 +4340,13 @@ def main():
     st.markdown(f"""
     <div class="gf-header">
         <div class="gf-header-left">
-            <span class="gf-header-greeting">{saudacao} ✦</span>
+            <span class="gf-header-greeting">{saudacao} âœ¦</span>
             <span class="gf-header-name">{user['nome']}</span>
-            <span class="gf-header-clinic">Gabriela Franco Saúde Integrativa</span>
+            <span class="gf-header-clinic">Gabriela Franco SaÃºde Integrativa</span>
         </div>
         <div class="gf-header-right">
-            <span class="gf-header-date">📅 {data_hoje}</span>
-            <span class="gf-header-time">🕐 {hora_agora}</span>
+            <span class="gf-header-date">ðŸ“… {data_hoje}</span>
+            <span class="gf-header-time">ðŸ• {hora_agora}</span>
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -4333,49 +4359,51 @@ def main():
         tela_agenda()
     elif rota in ("Clientes", "Cadastro de Cliente", "Ficha do Cliente"):
         tela_clientes()
-    elif rota == "Pré-avaliação":
+    elif rota == "PrÃ©-avaliaÃ§Ã£o":
         tela_pre_avaliacao()
     elif rota == "Atendimentos":
         tela_atendimentos()
     elif rota == "Biometria":
         tela_biometria()
     elif rota == "Vendas":
-        # Verificar permissão
+        # Verificar permissÃ£o
         perfil = st.session_state.user.get("perfil", "") if st.session_state.user else ""
         if perfil in ["admin", "recepcao"]:
             tela_vendas()
         else:
-            st.error("Você não tem permissão para acessar esta página.")
+            st.error("VocÃª nÃ£o tem permissÃ£o para acessar esta pÃ¡gina.")
             st.info("Contate o administrador do sistema.")
     elif rota == "Estoque":
         tela_estoque()
-    elif rota == "Relatórios":
-        # Verificar permissão - apenas admin
+    elif rota == "RelatÃ³rios":
+        # Verificar permissÃ£o - apenas admin
         perfil = st.session_state.user.get("perfil", "") if st.session_state.user else ""
         if perfil == "admin":
             tela_relatorios()
         else:
-            st.error("Você não tem permissão para acessar esta página.")
+            st.error("VocÃª nÃ£o tem permissÃ£o para acessar esta pÃ¡gina.")
             st.info("Contate o administrador do sistema.")
     elif rota == "Contratos":
         tela_contratos()
-    elif rota == "Usuários":
-        # Verificar permissão - apenas admin
+    elif rota == "UsuÃ¡rios":
+        # Verificar permissÃ£o - apenas admin
         perfil = st.session_state.user.get("perfil", "") if st.session_state.user else ""
         if perfil == "admin":
             tela_usuarios()
         else:
-            st.error("Você não tem permissão para acessar esta página.")
+            st.error("VocÃª nÃ£o tem permissÃ£o para acessar esta pÃ¡gina.")
             st.info("Contate o administrador do sistema.")
     elif rota == "Cadastros":
-        # Verificar permissão
+        # Verificar permissÃ£o
         perfil = st.session_state.user.get("perfil", "") if st.session_state.user else ""
         if perfil in ["admin", "recepcao"]:
             tela_cadastros()
         else:
-            st.error("Você não tem permissão para acessar esta página.")
+            st.error("VocÃª nÃ£o tem permissÃ£o para acessar esta pÃ¡gina.")
             st.info("Contate o administrador do sistema.")
 
 
 if __name__ == "__main__":
     main()
+
+
