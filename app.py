@@ -3285,7 +3285,7 @@ def tela_estoque():
                     except Exception:
                         _prod_nome_mov = "—"
                         _lote_str_mov = "—"
-                    _data_mov = str(_mov.criado_em)[:10] if _mov.data else "—"
+                    _data_mov = str(_mov.criado_em)[:10] if _mov.criado_em else "—"
                     col_mov_info, col_mov_del = st.columns([6, 0.4])
                     with col_mov_info:
                         st.write(
