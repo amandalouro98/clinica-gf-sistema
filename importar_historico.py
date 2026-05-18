@@ -7,7 +7,19 @@ from datetime import date
 from utils.db import SessionLocal, engine
 from models.base import Base
 from models.client import Client
-from models.appointment import Appointment
+from models.appointment import Appointment, AppointmentMaterial
+from models.stock import Product, StockLote, StockMovement
+from models.user import User
+from models.assessment import Assessment
+from models.biometrics import Biometrics
+from models.contract import Contract
+from models.schedule import ScheduledAppointment
+from models.professional import Professional
+from models.sale import Sale, SaleItem, SessionUsage
+from models.schedule_log import AgendaLog
+from models.dose_table import DoseTable
+from models.material import Material
+from models.tratamento import Tratamento
 
 Base.metadata.create_all(bind=engine)
 
