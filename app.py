@@ -13,15 +13,44 @@ def _agora():
     return datetime.now(BR_TZ)
 
 def _mostrar_pdf(pdf_bytes, nome_arquivo, key_suffix=""):
-    """Botão de download do PDF - no iPhone abre compartilhamento nativo"""
-    st.download_button(
-        label=f"📄 Baixar / Compartilhar: {nome_arquivo}",
-        data=pdf_bytes,
-        file_name=nome_arquivo,
-        mime="application/pdf",
-        key=f"dl_pdf_{key_suffix}",
-        use_container_width=True,
-    )
+    """PDF com botão de compartilhar nativo (iOS/Android) + download fallback"""
+    import base64
+    b64 = base64.b64encode(pdf_bytes).decode()
+    st.markdown(f'''
+    <script>
+    async function compartilharPDF_{key_suffix.replace("-","_")}() {{
+        try {{
+            const b64 = "{b64}";
+            const byteChars = atob(b64);
+            const byteArray = new Uint8Array(byteChars.length);
+            for (let i = 0; i < byteChars.length; i++) byteArray[i] = byteChars.charCodeAt(i);
+            const file = new File([byteArray], "{nome_arquivo}", {{type: "application/pdf"}});
+            if (navigator.canShare && navigator.canShare({{files: [file]}})) {{
+                await navigator.share({{files: [file], title: "{nome_arquivo}"}});
+            }} else {{
+                // Fallback: download direto
+                const link = document.createElement("a");
+                link.href = "data:application/pdf;base64," + b64;
+                link.download = "{nome_arquivo}";
+                link.click();
+            }}
+        }} catch(e) {{
+            if (e.name !== "AbortError") {{
+                const link = document.createElement("a");
+                link.href = "data:application/pdf;base64,{b64}";
+                link.download = "{nome_arquivo}";
+                link.click();
+            }}
+        }}
+    }}
+    </script>
+    <button onclick="compartilharPDF_{key_suffix.replace("-","_")}()" style="
+        width:100%;padding:12px;margin:8px 0;
+        background:#d59c9c;color:white;border:none;border-radius:8px;
+        font-size:1em;font-weight:600;cursor:pointer;">
+        📤 Compartilhar / Baixar: {nome_arquivo}
+    </button>
+    ''', unsafe_allow_html=True)
 from dotenv import load_dotenv
 from streamlit_searchbox import st_searchbox
 
@@ -3729,7 +3758,7 @@ def tela_vendas():
 
             # Auto-preencher valor se selecionou procedimento cadastrado
             _val_default = 0.0
-            _sessoes_default = 1
+            _sessoes_default = 2
             if proc_selecionado != "— digitar manualmente —" and proc_selecionado in _mapa_procs:
                 _p_ref = _mapa_procs[proc_selecionado]
                 if tipo_item == "Pacote" and _p_ref.valor_pacote:
