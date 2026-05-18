@@ -1478,10 +1478,32 @@ def tela_agenda():
                 with col_nome:
                     st.write(p.nome)
                 with col_btn:
-                    if st.button("Remover", key=f"rem_prof_{p.id}", use_container_width=True):
-                        db.delete(p)
-                        db.commit()
-                        st.rerun()
+                    with st.popover("⋮", use_container_width=True):
+                        if st.button("✏️ Editar", key=f"edit_prof_{p.id}"):
+                            st.session_state["prof_editando"] = p.id
+                            st.rerun()
+                        if st.button("🗑️ Excluir", key=f"rem_prof_{p.id}"):
+                            db.delete(p)
+                            db.commit()
+                            st.rerun()
+
+            if st.session_state.get("prof_editando"):
+                _pid = st.session_state["prof_editando"]
+                _prof = db.get(Professional, _pid)
+                if _prof:
+                    st.markdown("---")
+                    _pn = st.text_input("Nome", value=_prof.nome, key=f"pe_nome_{_pid}")
+                    _ps, _pc = st.columns(2)
+                    with _ps:
+                        if st.button("💾 Salvar", key=f"pe_salvar_{_pid}", use_container_width=True):
+                            _prof.nome = _pn
+                            db.commit()
+                            del st.session_state["prof_editando"]
+                            st.rerun()
+                    with _pc:
+                        if st.button("❌ Cancelar", key=f"pe_cancel_{_pid}", use_container_width=True):
+                            del st.session_state["prof_editando"]
+                            st.rerun()
         else:
             st.info("Nenhum profissional cadastrado.")
 
@@ -3000,12 +3022,58 @@ def tela_biometria():
                 )
                 st.altair_chart(chart, use_container_width=True)
 
-                historico["data_medicao"] = (
-                    pd.to_datetime(historico["data_medicao"], errors="coerce")
-                    .dt.strftime("%d/%m/%Y")
-                )
                 st.markdown("#### Histórico completo")
-                st.dataframe(historico, use_container_width=True, hide_index=True)
+                bios = (
+                    db.query(Biometrics)
+                    .filter(Biometrics.cliente_id == cid)
+                    .order_by(Biometrics.data_medicao.desc())
+                    .all()
+                )
+                for b in bios:
+                    col_b, col_ba = st.columns([9, 1])
+                    with col_b:
+                        st.markdown(f"**{b.data_medicao.strftime('%d/%m/%Y') if b.data_medicao else '—'}** | Peso: {b.peso or 0}kg | Cintura: {b.cintura or 0} | Abdômen: {b.abdomen or 0} | Quadril: {b.quadril or 0} | Braço: {b.braco or 0} | Coxa: {b.coxa or 0}")
+                    with col_ba:
+                        with st.popover("⋮", use_container_width=True):
+                            if st.button("✏️ Editar", key=f"bio_edit_{b.id}"):
+                                st.session_state["bio_editando"] = b.id
+                                st.rerun()
+                            if st.button("🗑️ Excluir", key=f"bio_del_{b.id}"):
+                                db.delete(b)
+                                db.commit()
+                                st.success("Medida excluída!")
+                                st.rerun()
+
+                # Edição inline de biometria
+                if st.session_state.get("bio_editando"):
+                    _bid = st.session_state["bio_editando"]
+                    _bio = db.get(Biometrics, _bid)
+                    if _bio:
+                        st.markdown("---")
+                        st.markdown("#### ✏️ Editar medida")
+                        _bc1, _bc2, _bc3 = st.columns(3)
+                        with _bc1:
+                            _bp = st.number_input("Peso", value=float(_bio.peso or 0), key=f"be_peso_{_bid}")
+                            _bci = st.number_input("Cintura", value=float(_bio.cintura or 0), key=f"be_cint_{_bid}")
+                        with _bc2:
+                            _bab = st.number_input("Abdômen", value=float(_bio.abdomen or 0), key=f"be_abd_{_bid}")
+                            _bqu = st.number_input("Quadril", value=float(_bio.quadril or 0), key=f"be_quad_{_bid}")
+                        with _bc3:
+                            _bbr = st.number_input("Braço", value=float(_bio.braco or 0), key=f"be_brac_{_bid}")
+                            _bcx = st.number_input("Coxa", value=float(_bio.coxa or 0), key=f"be_coxa_{_bid}")
+                        _bs, _bc = st.columns(2)
+                        with _bs:
+                            if st.button("💾 Salvar", key=f"be_salvar_{_bid}", use_container_width=True):
+                                _bio.peso = _bp; _bio.cintura = _bci; _bio.abdomen = _bab
+                                _bio.quadril = _bqu; _bio.braco = _bbr; _bio.coxa = _bcx
+                                db.commit()
+                                st.success("Atualizado!")
+                                del st.session_state["bio_editando"]
+                                st.rerun()
+                        with _bc:
+                            if st.button("❌ Cancelar", key=f"be_cancel_{_bid}", use_container_width=True):
+                                del st.session_state["bio_editando"]
+                                st.rerun()
     finally:
         db.close()
 
@@ -3124,11 +3192,23 @@ def tela_estoque():
 
         # ---------- ABA 2: Movimentações ----------
         with aba2:
-            dfm = pd.read_sql(
-                db.query(StockMovement).order_by(StockMovement.criado_em.desc()).statement,
-                db.bind,
-            )
-            st.dataframe(dfm, use_container_width=True)
+            movs = db.query(StockMovement).order_by(StockMovement.criado_em.desc()).limit(100).all()
+            if movs:
+                for mv in movs:
+                    col_mv, col_mva = st.columns([9, 1])
+                    with col_mv:
+                        _prod_nome = mv.produto.nome if mv.produto else "—"
+                        _data_mv = mv.criado_em.strftime("%d/%m/%Y %H:%M") if mv.criado_em else "—"
+                        st.markdown(f"**{_data_mv}** | {_prod_nome} | {mv.tipo} | Qtd: {mv.quantidade} | {mv.motivo or '—'}")
+                    with col_mva:
+                        with st.popover("⋮", use_container_width=True):
+                            if st.button("🗑️ Excluir", key=f"mov_del_{mv.id}"):
+                                db.delete(mv)
+                                db.commit()
+                                st.success("Movimentação excluída!")
+                                st.rerun()
+            else:
+                st.info("Nenhuma movimentação registrada.")
 
             st.markdown("### Movimentar manualmente")
             produtos = db.query(Product).order_by(Product.nome.asc()).all()
@@ -3875,6 +3955,9 @@ def tela_vendas():
                     st.markdown(f"**{v.data_venda.strftime('%d/%m/%Y')}** | {v.cliente.nome if v.cliente else '—'} | {tipo_venda} | {procs} | R$ {v.valor_total:.2f} | {v.forma_pagamento}")
                 with col_acoes_v:
                     with st.popover("⋮", use_container_width=True):
+                        if st.button("✏️ Editar", key=f"venda_edit_{v.id}"):
+                            st.session_state["venda_editando"] = v.id
+                            st.rerun()
                         if st.button("🗑️ Excluir", key=f"venda_del_{v.id}"):
                             for it in v.itens:
                                 db.delete(it)
@@ -3882,6 +3965,55 @@ def tela_vendas():
                             db.commit()
                             st.success("Venda excluída!")
                             st.rerun()
+
+        # Modal de edição de venda
+        if st.session_state.get("venda_editando"):
+            _vid = st.session_state["venda_editando"]
+            _venda_ed = db.get(Sale, _vid)
+            if _venda_ed:
+                st.markdown("---")
+                st.markdown(f"### ✏️ Editando Venda #{_vid}")
+                col_ed1, col_ed2 = st.columns(2)
+                with col_ed1:
+                    _ed_data = st.date_input("Data", value=_venda_ed.data_venda, key=f"ved_data_{_vid}")
+                    _ed_pagto = st.selectbox("Pagamento", ["Pix", "Cartão Crédito", "Cartão Débito", "Dinheiro", "Outro"],
+                        index=["Pix", "Cartão Crédito", "Cartão Débito", "Dinheiro", "Outro"].index(_venda_ed.forma_pagamento) if _venda_ed.forma_pagamento in ["Pix", "Cartão Crédito", "Cartão Débito", "Dinheiro", "Outro"] else 4,
+                        key=f"ved_pagto_{_vid}")
+                with col_ed2:
+                    _ed_valor = st.number_input("Valor Total (R$)", value=float(_venda_ed.valor_total or 0), min_value=0.0, step=0.01, key=f"ved_valor_{_vid}")
+                    _ed_obs = st.text_input("Observações", value=_venda_ed.observacoes or "", key=f"ved_obs_{_vid}")
+
+                # Editar itens
+                st.markdown("**Itens:**")
+                for _it in _venda_ed.itens:
+                    _c1, _c2, _c3 = st.columns([3, 2, 2])
+                    with _c1:
+                        _it._ed_proc = st.text_input("Procedimento", value=_it.procedimento, key=f"vit_proc_{_it.id}")
+                    with _c2:
+                        _it._ed_tipo = st.selectbox("Tipo", ["unitario", "pacote"],
+                            index=0 if _it.tipo == "unitario" else 1, key=f"vit_tipo_{_it.id}")
+                    with _c3:
+                        _it._ed_valor = st.number_input("Valor", value=float(_it.valor or 0), min_value=0.0, step=0.01, key=f"vit_val_{_it.id}")
+
+                col_sv, col_cn = st.columns(2)
+                with col_sv:
+                    if st.button("💾 Salvar", key=f"ved_salvar_{_vid}", use_container_width=True):
+                        _venda_ed.data_venda = _ed_data
+                        _venda_ed.forma_pagamento = _ed_pagto
+                        _venda_ed.valor_total = _ed_valor
+                        _venda_ed.observacoes = _ed_obs or None
+                        for _it in _venda_ed.itens:
+                            _it.procedimento = st.session_state.get(f"vit_proc_{_it.id}", _it.procedimento)
+                            _it.tipo = st.session_state.get(f"vit_tipo_{_it.id}", _it.tipo)
+                            _it.valor = st.session_state.get(f"vit_val_{_it.id}", _it.valor)
+                        db.commit()
+                        st.success("Venda atualizada!")
+                        del st.session_state["venda_editando"]
+                        st.rerun()
+                with col_cn:
+                    if st.button("❌ Cancelar", key=f"ved_cancelar_{_vid}", use_container_width=True):
+                        del st.session_state["venda_editando"]
+                        st.rerun()
         else:
             st.info("Nenhuma venda registrada.")
     finally:
@@ -3996,10 +4128,34 @@ def tela_cadastros():
                     c1.write(mat.nome)
                     c2.write(mat.tipo)
                     with c3:
-                        if st.button("🗑️", key=f"del_mat_{mat.id}", help="Excluir"):
-                            mat.ativo = False
-                            db.commit()
-                            st.rerun()
+                        with st.popover("⋮", use_container_width=True):
+                            if st.button("✏️ Editar", key=f"edit_mat_{mat.id}"):
+                                st.session_state["mat_editando"] = mat.id
+                                st.rerun()
+                            if st.button("🗑️ Excluir", key=f"del_mat_{mat.id}"):
+                                mat.ativo = False
+                                db.commit()
+                                st.rerun()
+
+                if st.session_state.get("mat_editando"):
+                    _mid = st.session_state["mat_editando"]
+                    _mat = db.get(Material, _mid)
+                    if _mat:
+                        st.markdown("---")
+                        _mn = st.text_input("Nome", value=_mat.nome, key=f"me_nome_{_mid}")
+                        _mt = st.selectbox("Tipo", ["Injetável", "Descartável"],
+                            index=0 if _mat.tipo == "Injetável" else 1, key=f"me_tipo_{_mid}")
+                        _ms, _mc = st.columns(2)
+                        with _ms:
+                            if st.button("💾 Salvar", key=f"me_salvar_{_mid}", use_container_width=True):
+                                _mat.nome = _mn; _mat.tipo = _mt
+                                db.commit()
+                                del st.session_state["mat_editando"]
+                                st.rerun()
+                        with _mc:
+                            if st.button("❌ Cancelar", key=f"me_cancel_{_mid}", use_container_width=True):
+                                del st.session_state["mat_editando"]
+                                st.rerun()
             else:
                 st.info("Nenhum material cadastrado ainda.")
 
