@@ -2402,15 +2402,53 @@ def _modal_tabela_doses():
                 ).order_by(DoseTable.criado_em.desc()).all()
                 
                 if doses:
-                    dados = [{
-                        "Data": d.data_registro.strftime("%d/%m/%Y") if d.data_registro else "—",
-                        "Medicação": d.medicacao,
-                        "Semana": d.semana or "—",
-                        "Dose": d.dose or "—",
-                        "Via": d.via or "—",
-                        "Peso": f"{d.peso} kg" if d.peso else "—",
-                    } for d in doses]
-                    st.dataframe(pd.DataFrame(dados), use_container_width=True, hide_index=True)
+                    for i, d in enumerate(doses):
+                        col_info, col_acoes = st.columns([8, 1])
+                        with col_info:
+                            st.markdown(f"**{d.data_registro.strftime('%d/%m/%Y') if d.data_registro else '—'}** | {d.medicacao} | Sem {d.semana or '—'} | {d.dose or '—'} | {d.via or '—'} | {f'{d.peso} kg' if d.peso else '—'}")
+                        with col_acoes:
+                            with st.popover("⋮", use_container_width=True):
+                                if st.button("✏️ Editar", key=f"dose_edit_{d.id}"):
+                                    st.session_state["dose_editando"] = d.id
+                                    st.rerun()
+                                if st.button("🗑️ Excluir", key=f"dose_del_{d.id}"):
+                                    db.delete(d)
+                                    db.commit()
+                                    st.success("Dose excluída!")
+                                    st.rerun()
+                        
+                        # Form de edição inline
+                        if st.session_state.get("dose_editando") == d.id:
+                            with st.container():
+                                st.markdown("**Editar dose:**")
+                                ec1, ec2, ec3 = st.columns(3)
+                                with ec1:
+                                    new_data = st.date_input("Data", value=d.data_registro, key=f"dose_ed_data_{d.id}")
+                                    new_med = st.text_input("Medicação", value=d.medicacao or "", key=f"dose_ed_med_{d.id}")
+                                with ec2:
+                                    new_semana = st.text_input("Semana", value=str(d.semana or ""), key=f"dose_ed_sem_{d.id}")
+                                    new_dose = st.text_input("Dose", value=d.dose or "", key=f"dose_ed_dose_{d.id}")
+                                with ec3:
+                                    new_via = st.text_input("Via", value=d.via or "", key=f"dose_ed_via_{d.id}")
+                                    new_peso = st.text_input("Peso (kg)", value=str(d.peso or ""), key=f"dose_ed_peso_{d.id}")
+                                bc1, bc2 = st.columns(2)
+                                with bc1:
+                                    if st.button("💾 Salvar", key=f"dose_save_{d.id}", use_container_width=True):
+                                        d.data_registro = new_data
+                                        d.medicacao = new_med
+                                        d.semana = new_semana if new_semana else None
+                                        d.dose = new_dose if new_dose else None
+                                        d.via = new_via if new_via else None
+                                        d.peso = float(new_peso) if new_peso else None
+                                        db.commit()
+                                        del st.session_state["dose_editando"]
+                                        st.success("Dose atualizada!")
+                                        st.rerun()
+                                with bc2:
+                                    if st.button("❌ Cancelar", key=f"dose_cancel_{d.id}", use_container_width=True):
+                                        del st.session_state["dose_editando"]
+                                        st.rerun()
+                        st.markdown("---")
                     
                     # Botão PDF sempre visível quando há cliente selecionado
                     st.markdown("---")
@@ -2508,18 +2546,14 @@ def _modal_tabela_doses():
                             pdf_bytes = bytes(pdf.output())
                             import base64
                             b64_pdf = base64.b64encode(pdf_bytes).decode()
-                            col_dl, col_view = st.columns(2)
-                            with col_dl:
-                                st.download_button(
-                                    "⬇️ Baixar PDF",
-                                    data=pdf_bytes,
-                                    file_name=f"tabela_doses_{cli.nome.replace(' ', '_') if cli else 'cliente'}.pdf",
-                                    mime="application/pdf",
-                                    use_container_width=True,
-                                    key="dose_download"
-                                )
-                            with col_view:
-                                st.markdown(f'<a href="data:application/pdf;base64,{b64_pdf}" target="_blank" style="display:inline-block;width:100%;text-align:center;padding:0.5rem 1rem;background:#d59c9c;color:white;border-radius:8px;text-decoration:none;font-weight:600;">📤 Abrir / Compartilhar</a>', unsafe_allow_html=True)
+                            st.download_button(
+                                "⬇️ Baixar PDF",
+                                data=pdf_bytes,
+                                file_name=f"tabela_doses_{cli.nome.replace(' ', '_') if cli else 'cliente'}.pdf",
+                                mime="application/pdf",
+                                use_container_width=True,
+                                key="dose_download"
+                            )
                         except Exception as e:
                             st.error(f"Erro ao gerar PDF: {e}")
                 else:
@@ -2611,20 +2645,14 @@ def _modal_tabela_doses():
                             pdf.cell(0, 8, "Nenhuma dose registrada.", ln=True, align="C")
                             
                             pdf_bytes = bytes(pdf.output())
-                            import base64 as _b64v
-                            b64_pdf_v = _b64v.b64encode(pdf_bytes).decode()
-                            col_dl2, col_view2 = st.columns(2)
-                            with col_dl2:
-                                st.download_button(
-                                    "⬇️ Baixar PDF",
-                                    data=pdf_bytes,
-                                    file_name=f"tabela_doses_{cli.nome.replace(' ', '_') if cli else 'cliente'}.pdf",
-                                    mime="application/pdf",
-                                    use_container_width=True,
-                                    key="dose_download_vazio"
-                                )
-                            with col_view2:
-                                st.markdown(f'<a href="data:application/pdf;base64,{b64_pdf_v}" target="_blank" style="display:inline-block;width:100%;text-align:center;padding:0.5rem 1rem;background:#d59c9c;color:white;border-radius:8px;text-decoration:none;font-weight:600;">📤 Abrir / Compartilhar</a>', unsafe_allow_html=True)
+                            st.download_button(
+                                "⬇️ Baixar PDF",
+                                data=pdf_bytes,
+                                file_name=f"tabela_doses_{cli.nome.replace(' ', '_') if cli else 'cliente'}.pdf",
+                                mime="application/pdf",
+                                use_container_width=True,
+                                key="dose_download_vazio"
+                            )
                         except Exception as e:
                             st.error(f"Erro ao gerar PDF: {e}")
             else:
@@ -3315,15 +3343,9 @@ def tela_relatorios():
                     _pdf.cell(0, 8, f"Receita no período: R$ {_val_vendas:,.2f}", ln=True)
                     
                     _pdf_bytes = bytes(_pdf.output())
-                    import base64 as _b64r
-                    _b64_rel = _b64r.b64encode(_pdf_bytes).decode()
-                    _col_r1, _col_r2 = st.columns(2)
-                    with _col_r1:
-                        st.download_button("⬇️ Baixar PDF", data=_pdf_bytes,
-                                           file_name=f"relatorio_{_r_ini}_{_r_fim}.pdf",
-                                           mime="application/pdf", key="dl_pdf_rel")
-                    with _col_r2:
-                        st.markdown(f'<a href="data:application/pdf;base64,{_b64_rel}" target="_blank" style="display:inline-block;width:100%;text-align:center;padding:0.5rem 1rem;background:#d59c9c;color:white;border-radius:8px;text-decoration:none;font-weight:600;">📤 Abrir / Compartilhar</a>', unsafe_allow_html=True)
+                    st.download_button("⬇️ Baixar PDF", data=_pdf_bytes,
+                                       file_name=f"relatorio_{_r_ini}_{_r_fim}.pdf",
+                                       mime="application/pdf", key="dl_pdf_rel")
                 except Exception as _e:
                     st.error(f"Erro ao gerar PDF: {_e}")
 
@@ -3482,13 +3504,7 @@ def tela_contratos():
                 path = gerar_pdf_contrato(c.id, destino=f"contrato_{c.id}.pdf")
                 with open(path, "rb") as f:
                     _contrato_bytes = f.read()
-                import base64 as _b64c
-                _b64_contrato = _b64c.b64encode(_contrato_bytes).decode()
-                _col_c1, _col_c2 = st.columns(2)
-                with _col_c1:
-                    st.download_button("⬇️ Baixar PDF", data=_contrato_bytes, file_name=f"contrato_{c.id}.pdf")
-                with _col_c2:
-                    st.markdown(f'<a href="data:application/pdf;base64,{_b64_contrato}" target="_blank" style="display:inline-block;width:100%;text-align:center;padding:0.5rem 1rem;background:#d59c9c;color:white;border-radius:8px;text-decoration:none;font-weight:600;">📤 Abrir / Compartilhar</a>', unsafe_allow_html=True)
+                st.download_button("⬇️ Baixar PDF", data=_contrato_bytes, file_name=f"contrato_{c.id}.pdf")
                 st.success("Contrato gerado.")
     finally:
         db.close()
@@ -3763,7 +3779,6 @@ def tela_vendas():
 
         vendas_rec = db.query(Sale).order_by(Sale.data_venda.desc(), Sale.id.desc()).limit(50).all()
         if vendas_rec:
-            rows_v = []
             for v in vendas_rec:
                 # Determinar tipo predominante da venda
                 tipos_itens = set(it.tipo for it in v.itens)
@@ -3781,18 +3796,18 @@ def tela_vendas():
                     continue
 
                 procs = ", ".join(f"{it.procedimento}" for it in v.itens)
-                rows_v.append({
-                    "Data": v.data_venda.strftime("%d/%m/%Y"),
-                    "Cliente": v.cliente.nome if v.cliente else "—",
-                    "Tipo": tipo_venda,
-                    "Procedimentos": procs,
-                    "Valor Total (R$)": f"{v.valor_total:.2f}",
-                    "Pagamento": v.forma_pagamento,
-                })
-            if rows_v:
-                st.dataframe(pd.DataFrame(rows_v), use_container_width=True, hide_index=True)
-            else:
-                st.info("Nenhuma venda encontrada com esse filtro.")
+                col_info_v, col_acoes_v = st.columns([9, 1])
+                with col_info_v:
+                    st.markdown(f"**{v.data_venda.strftime('%d/%m/%Y')}** | {v.cliente.nome if v.cliente else '—'} | {tipo_venda} | {procs} | R$ {v.valor_total:.2f} | {v.forma_pagamento}")
+                with col_acoes_v:
+                    with st.popover("⋮", use_container_width=True):
+                        if st.button("🗑️ Excluir", key=f"venda_del_{v.id}"):
+                            for it in v.itens:
+                                db.delete(it)
+                            db.delete(v)
+                            db.commit()
+                            st.success("Venda excluída!")
+                            st.rerun()
         else:
             st.info("Nenhuma venda registrada.")
     finally:
@@ -3952,26 +3967,50 @@ def tela_cadastros():
             st.markdown("### Procedimentos Cadastrados")
             tratamentos = db.query(Tratamento).filter(Tratamento.ativo == True).order_by(Tratamento.nome.asc()).all()
             if tratamentos:
-                import pandas as pd
-                rows_proc = []
                 for trat in tratamentos:
-                    rows_proc.append({
-                        "Nome": trat.nome,
-                        "Descrição": trat.descricao or "—",
-                        "Valor Unit. (R$)": f"{trat.valor_unitario:.2f}" if trat.valor_unitario else "—",
-                        "Valor Pacote (R$)": f"{trat.valor_pacote:.2f}" if trat.valor_pacote else "—",
-                        "Sessões Pacote": trat.sessoes_pacote or "—",
-                    })
-                st.dataframe(pd.DataFrame(rows_proc), use_container_width=True, hide_index=True)
-
-                # Botão excluir por nome
-                for trat in tratamentos:
-                    col_n, col_del = st.columns([6, 1])
-                    with col_del:
-                        if st.button("🗑️", key=f"del_trat_{trat.id}", help=f"Excluir {trat.nome}"):
-                            trat.ativo = False
-                            db.commit()
-                            st.rerun()
+                    col_info_t, col_acoes_t = st.columns([9, 1])
+                    with col_info_t:
+                        val_unit = f"R$ {trat.valor_unitario:.2f}" if trat.valor_unitario else "—"
+                        val_pac = f"R$ {trat.valor_pacote:.2f}" if trat.valor_pacote else "—"
+                        sessoes = str(trat.sessoes_pacote) if trat.sessoes_pacote else "—"
+                        st.markdown(f"**{trat.nome}** | {trat.descricao or '—'} | Unit: {val_unit} | Pac: {val_pac} | Sessões: {sessoes}")
+                    with col_acoes_t:
+                        with st.popover("⋮", use_container_width=True):
+                            if st.button("✏️ Editar", key=f"trat_edit_{trat.id}"):
+                                st.session_state["trat_editando"] = trat.id
+                                st.rerun()
+                            if st.button("🗑️ Excluir", key=f"trat_del_{trat.id}"):
+                                trat.ativo = False
+                                db.commit()
+                                st.success("Procedimento excluído!")
+                                st.rerun()
+                    
+                    if st.session_state.get("trat_editando") == trat.id:
+                        with st.container():
+                            ec1, ec2 = st.columns(2)
+                            with ec1:
+                                new_nome = st.text_input("Nome", value=trat.nome, key=f"trat_ed_nome_{trat.id}")
+                                new_desc = st.text_input("Descrição", value=trat.descricao or "", key=f"trat_ed_desc_{trat.id}")
+                            with ec2:
+                                new_vunit = st.number_input("Valor Unitário", value=trat.valor_unitario or 0.0, key=f"trat_ed_vunit_{trat.id}")
+                                new_vpac = st.number_input("Valor Pacote", value=trat.valor_pacote or 0.0, key=f"trat_ed_vpac_{trat.id}")
+                                new_sess = st.number_input("Sessões Pacote", value=trat.sessoes_pacote or 0, min_value=0, key=f"trat_ed_sess_{trat.id}")
+                            bc1, bc2 = st.columns(2)
+                            with bc1:
+                                if st.button("💾 Salvar", key=f"trat_save_{trat.id}", use_container_width=True):
+                                    trat.nome = new_nome
+                                    trat.descricao = new_desc if new_desc else None
+                                    trat.valor_unitario = new_vunit if new_vunit > 0 else None
+                                    trat.valor_pacote = new_vpac if new_vpac > 0 else None
+                                    trat.sessoes_pacote = new_sess if new_sess > 0 else None
+                                    db.commit()
+                                    del st.session_state["trat_editando"]
+                                    st.success("Procedimento atualizado!")
+                                    st.rerun()
+                            with bc2:
+                                if st.button("❌ Cancelar", key=f"trat_cancel_{trat.id}", use_container_width=True):
+                                    del st.session_state["trat_editando"]
+                                    st.rerun()
             else:
                 st.info("Nenhum procedimento cadastrado ainda.")
     finally:
