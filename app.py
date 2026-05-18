@@ -11,6 +11,23 @@ def _hoje():
 
 def _agora():
     return datetime.now(BR_TZ)
+
+def _mostrar_pdf(pdf_bytes, nome_arquivo, key_suffix=""):
+    """Mostra PDF inline com opção de fechar e compartilhar"""
+    import base64
+    b64 = base64.b64encode(pdf_bytes).decode()
+    st.markdown(f'''
+    <div style="position:relative;border:1px solid #d59c9c;border-radius:8px;overflow:hidden;margin:1rem 0;">
+        <div style="background:#d59c9c;padding:8px 12px;display:flex;justify-content:space-between;align-items:center;">
+            <span style="color:white;font-weight:600;">📄 {nome_arquivo}</span>
+            <a href="data:application/pdf;base64,{b64}" download="{nome_arquivo}" style="color:white;text-decoration:none;background:#4a3030;padding:4px 12px;border-radius:4px;font-size:0.85em;">⬇️ Salvar / Compartilhar</a>
+        </div>
+        <iframe src="data:application/pdf;base64,{b64}" width="100%" height="500px" style="border:none;"></iframe>
+    </div>
+    ''', unsafe_allow_html=True)
+    if st.button("❌ Fechar PDF", key=f"fechar_pdf_{key_suffix}", use_container_width=True):
+        st.session_state[f"mostrar_pdf_{key_suffix}"] = False
+        st.rerun()
 from dotenv import load_dotenv
 from streamlit_searchbox import st_searchbox
 
@@ -1950,13 +1967,7 @@ def tela_clientes():
                                     pdf.ln()
                                 
                                 pdf_bytes = bytes(pdf.output())
-                                st.download_button(
-                                    "⬇️ Baixar PDF",
-                                    data=pdf_bytes,
-                                    file_name=f"tabela_doses_{cli.nome.replace(' ', '_') if cli else 'cliente'}.pdf",
-                                    mime="application/pdf",
-                                    use_container_width=True
-                                )
+                                _mostrar_pdf(pdf_bytes, f"tabela_doses_{cli.nome.replace(' ', '_') if cli else 'cliente'}.pdf", "dose_hist")
                             except Exception as e:
                                 st.error(f"Erro ao gerar PDF: {e}")
                     else:
@@ -2254,15 +2265,8 @@ def _modal_receituario_popup():
                             
                             pdf_bytes = bytes(pdf.output())
                             
-                            # Download automático do PDF
-                            st.download_button(
-                                label="📥 PDF gerado! Clique para baixar",
-                                data=pdf_bytes,
-                                file_name=f"receituario_{cliente.nome.replace(' ', '_')}_{data_rec.strftime('%Y%m%d')}.pdf",
-                                mime="application/pdf",
-                                use_container_width=True,
-                                key="rec_popup_download"
-                            )
+                            # Mostrar PDF inline
+                            _mostrar_pdf(pdf_bytes, f"receituario_{cliente.nome.replace(' ', '_')}_{data_rec.strftime('%Y%m%d')}.pdf", "receituario")
                         except Exception as e:
                             st.error(f"Erro ao gerar PDF: {e}")
             else:
@@ -2544,16 +2548,8 @@ def _modal_tabela_doses():
                                 pdf.ln()
                             
                             pdf_bytes = bytes(pdf.output())
-                            import base64
-                            b64_pdf = base64.b64encode(pdf_bytes).decode()
-                            st.download_button(
-                                "⬇️ Baixar PDF",
-                                data=pdf_bytes,
-                                file_name=f"tabela_doses_{cli.nome.replace(' ', '_') if cli else 'cliente'}.pdf",
-                                mime="application/pdf",
-                                use_container_width=True,
-                                key="dose_download"
-                            )
+                            nome_arq = f"tabela_doses_{cli.nome.replace(' ', '_') if cli else 'cliente'}.pdf"
+                            _mostrar_pdf(pdf_bytes, nome_arq, "dose")
                         except Exception as e:
                             st.error(f"Erro ao gerar PDF: {e}")
                 else:
@@ -2645,14 +2641,8 @@ def _modal_tabela_doses():
                             pdf.cell(0, 8, "Nenhuma dose registrada.", ln=True, align="C")
                             
                             pdf_bytes = bytes(pdf.output())
-                            st.download_button(
-                                "⬇️ Baixar PDF",
-                                data=pdf_bytes,
-                                file_name=f"tabela_doses_{cli.nome.replace(' ', '_') if cli else 'cliente'}.pdf",
-                                mime="application/pdf",
-                                use_container_width=True,
-                                key="dose_download_vazio"
-                            )
+                            nome_arq = f"tabela_doses_{cli.nome.replace(' ', '_') if cli else 'cliente'}.pdf"
+                            _mostrar_pdf(pdf_bytes, nome_arq, "dose_vazio")
                         except Exception as e:
                             st.error(f"Erro ao gerar PDF: {e}")
             else:
@@ -2852,6 +2842,7 @@ def tela_atendimentos():
                     "Selecionar": False,
                     "Data": at.data.strftime("%d/%m/%Y") if at.data else "—",
                     "Cliente": cli.nome if cli else "—",
+                    "Protocolo": (at.protocolo_atendimento[:50] + "...") if at.protocolo_atendimento and len(at.protocolo_atendimento) > 50 else (at.protocolo_atendimento or "—"),
                     "Queixa": (at.queixa_consulta[:50] + "...") if at.queixa_consulta and len(at.queixa_consulta) > 50 else (at.queixa_consulta or "—"),
                     "Tipo Tratamento": at.tipo_tratamento or "—",
                     "Observações": (at.observacoes[:50] + "...") if at.observacoes and len(at.observacoes) > 50 else (at.observacoes or "—"),
@@ -2865,7 +2856,7 @@ def tela_atendimentos():
                 column_config={
                     "Selecionar": st.column_config.CheckboxColumn("Selecionar", default=False),
                 },
-                disabled=["Data", "Cliente", "Queixa", "Tipo Tratamento", "Observações"],
+                disabled=["Data", "Cliente", "Protocolo", "Queixa", "Tipo Tratamento", "Observações"],
                 key="at_hist_editor"
             )
 
@@ -3033,7 +3024,7 @@ def tela_estoque():
                     novo_lote = StockLote(
                         produto_id=mapa_prod[prod_compra],
                         lote=lote_compra or None,
-                        quantidade_atual=qtd_compra,
+                        quantidade_atual=0,
                         quantidade_minima=qtd_min_compra,
                         data_validade=validade_compra,
                         fornecedor=fornecedor_compra or None,
@@ -3055,19 +3046,47 @@ def tela_estoque():
                 .all()
             )
             if lotes:
-                dados_est = [
-                    {
-                        "Produto": lt.produto.nome,
-                        "Categoria": lt.produto.categoria,
-                        "Lote": lt.lote or "S/N",
-                        "Quantidade": lt.quantidade_atual,
-                        "Qtd mínima": lt.quantidade_minima,
-                        "Validade": formatar_data_br(lt.data_validade),
-                        "Fornecedor": lt.fornecedor or "",
-                    }
-                    for lt in lotes
-                ]
-                st.dataframe(pd.DataFrame(dados_est), use_container_width=True, hide_index=True)
+                for lt in lotes:
+                    col_info_e, col_acoes_e = st.columns([9, 1])
+                    with col_info_e:
+                        st.markdown(f"**{lt.produto.nome}** | {lt.produto.categoria} | Lote: {lt.lote or 'S/N'} | Qtd: {lt.quantidade_atual} | Min: {lt.quantidade_minima} | Val: {formatar_data_br(lt.data_validade)} | {lt.fornecedor or '—'}")
+                    with col_acoes_e:
+                        with st.popover("⋮", use_container_width=True):
+                            if st.button("✏️ Editar", key=f"est_edit_{lt.id}"):
+                                st.session_state["est_editando"] = lt.id
+                                st.rerun()
+                            if st.button("🗑️ Excluir", key=f"est_del_{lt.id}"):
+                                db.delete(lt)
+                                db.commit()
+                                st.success("Lote excluído!")
+                                st.rerun()
+                    
+                    if st.session_state.get("est_editando") == lt.id:
+                        with st.container():
+                            ec1, ec2 = st.columns(2)
+                            with ec1:
+                                new_lote = st.text_input("Lote", value=lt.lote or "", key=f"est_ed_lote_{lt.id}")
+                                new_qtd = st.number_input("Quantidade", value=float(lt.quantidade_atual), key=f"est_ed_qtd_{lt.id}")
+                                new_qtd_min = st.number_input("Qtd mínima", value=float(lt.quantidade_minima), key=f"est_ed_min_{lt.id}")
+                            with ec2:
+                                new_val = st.date_input("Validade", value=lt.data_validade, key=f"est_ed_val_{lt.id}")
+                                new_forn = st.text_input("Fornecedor", value=lt.fornecedor or "", key=f"est_ed_forn_{lt.id}")
+                            bc1, bc2 = st.columns(2)
+                            with bc1:
+                                if st.button("💾 Salvar", key=f"est_save_{lt.id}", use_container_width=True):
+                                    lt.lote = new_lote if new_lote else None
+                                    lt.quantidade_atual = new_qtd
+                                    lt.quantidade_minima = new_qtd_min
+                                    lt.data_validade = new_val
+                                    lt.fornecedor = new_forn if new_forn else None
+                                    db.commit()
+                                    del st.session_state["est_editando"]
+                                    st.success("Lote atualizado!")
+                                    st.rerun()
+                            with bc2:
+                                if st.button("❌ Cancelar", key=f"est_cancel_{lt.id}", use_container_width=True):
+                                    del st.session_state["est_editando"]
+                                    st.rerun()
             else:
                 st.info("Nenhum lote cadastrado ainda.")
 
@@ -3133,9 +3152,43 @@ def tela_estoque():
         # ---------- ABA 3: Cadastro de Produtos ----------
         with aba3:
             st.markdown("### Produtos cadastrados")
-            df_prods = pd.read_sql(db.query(Product).statement, db.bind)
-            if not df_prods.empty:
-                st.dataframe(df_prods[["id", "nome", "categoria"]], use_container_width=True, hide_index=True)
+            prods_cad = db.query(Product).order_by(Product.nome.asc()).all()
+            if prods_cad:
+                for p in prods_cad:
+                    col_info_p, col_acoes_p = st.columns([9, 1])
+                    with col_info_p:
+                        st.markdown(f"**{p.nome}** | {p.categoria or '—'}")
+                    with col_acoes_p:
+                        with st.popover("⋮", use_container_width=True):
+                            if st.button("✏️ Editar", key=f"prod_edit_{p.id}"):
+                                st.session_state["prod_editando"] = p.id
+                                st.rerun()
+                            if st.button("🗑️ Excluir", key=f"prod_del_{p.id}"):
+                                db.delete(p)
+                                db.commit()
+                                st.success("Produto excluído!")
+                                st.rerun()
+                    
+                    if st.session_state.get("prod_editando") == p.id:
+                        with st.container():
+                            ec1, ec2 = st.columns(2)
+                            with ec1:
+                                new_nome_p = st.text_input("Nome", value=p.nome, key=f"prod_ed_nome_{p.id}")
+                            with ec2:
+                                new_cat_p = st.text_input("Categoria", value=p.categoria or "", key=f"prod_ed_cat_{p.id}")
+                            bc1, bc2 = st.columns(2)
+                            with bc1:
+                                if st.button("💾 Salvar", key=f"prod_save_{p.id}", use_container_width=True):
+                                    p.nome = new_nome_p
+                                    p.categoria = new_cat_p if new_cat_p else None
+                                    db.commit()
+                                    del st.session_state["prod_editando"]
+                                    st.success("Produto atualizado!")
+                                    st.rerun()
+                            with bc2:
+                                if st.button("❌ Cancelar", key=f"prod_cancel_{p.id}", use_container_width=True):
+                                    del st.session_state["prod_editando"]
+                                    st.rerun()
             else:
                 st.info("Nenhum produto cadastrado ainda.")
 
@@ -3343,9 +3396,7 @@ def tela_relatorios():
                     _pdf.cell(0, 8, f"Receita no período: R$ {_val_vendas:,.2f}", ln=True)
                     
                     _pdf_bytes = bytes(_pdf.output())
-                    st.download_button("⬇️ Baixar PDF", data=_pdf_bytes,
-                                       file_name=f"relatorio_{_r_ini}_{_r_fim}.pdf",
-                                       mime="application/pdf", key="dl_pdf_rel")
+                    _mostrar_pdf(_pdf_bytes, f"relatorio_{_r_ini}_{_r_fim}.pdf", "rel")
                 except Exception as _e:
                     st.error(f"Erro ao gerar PDF: {_e}")
 
@@ -3504,7 +3555,7 @@ def tela_contratos():
                 path = gerar_pdf_contrato(c.id, destino=f"contrato_{c.id}.pdf")
                 with open(path, "rb") as f:
                     _contrato_bytes = f.read()
-                st.download_button("⬇️ Baixar PDF", data=_contrato_bytes, file_name=f"contrato_{c.id}.pdf")
+                _mostrar_pdf(_contrato_bytes, f"contrato_{c.id}.pdf", f"contrato_{c.id}")
                 st.success("Contrato gerado.")
     finally:
         db.close()
