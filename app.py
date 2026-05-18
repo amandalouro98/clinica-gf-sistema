@@ -11,46 +11,6 @@ def _hoje():
 
 def _agora():
     return datetime.now(BR_TZ)
-
-def _mostrar_pdf(pdf_bytes, nome_arquivo, key_suffix=""):
-    """PDF com botão de compartilhar nativo (iOS/Android) + download fallback"""
-    import base64
-    b64 = base64.b64encode(pdf_bytes).decode()
-    st.markdown(f'''
-    <script>
-    async function compartilharPDF_{key_suffix.replace("-","_")}() {{
-        try {{
-            const b64 = "{b64}";
-            const byteChars = atob(b64);
-            const byteArray = new Uint8Array(byteChars.length);
-            for (let i = 0; i < byteChars.length; i++) byteArray[i] = byteChars.charCodeAt(i);
-            const file = new File([byteArray], "{nome_arquivo}", {{type: "application/pdf"}});
-            if (navigator.canShare && navigator.canShare({{files: [file]}})) {{
-                await navigator.share({{files: [file], title: "{nome_arquivo}"}});
-            }} else {{
-                // Fallback: download direto
-                const link = document.createElement("a");
-                link.href = "data:application/pdf;base64," + b64;
-                link.download = "{nome_arquivo}";
-                link.click();
-            }}
-        }} catch(e) {{
-            if (e.name !== "AbortError") {{
-                const link = document.createElement("a");
-                link.href = "data:application/pdf;base64,{b64}";
-                link.download = "{nome_arquivo}";
-                link.click();
-            }}
-        }}
-    }}
-    </script>
-    <button onclick="compartilharPDF_{key_suffix.replace("-","_")}()" style="
-        width:100%;padding:12px;margin:8px 0;
-        background:#d59c9c;color:white;border:none;border-radius:8px;
-        font-size:1em;font-weight:600;cursor:pointer;">
-        📤 Compartilhar / Baixar: {nome_arquivo}
-    </button>
-    ''', unsafe_allow_html=True)
 from dotenv import load_dotenv
 from streamlit_searchbox import st_searchbox
 
@@ -1478,32 +1438,10 @@ def tela_agenda():
                 with col_nome:
                     st.write(p.nome)
                 with col_btn:
-                    with st.popover("⋮", use_container_width=True):
-                        if st.button("✏️ Editar", key=f"edit_prof_{p.id}"):
-                            st.session_state["prof_editando"] = p.id
-                            st.rerun()
-                        if st.button("🗑️ Excluir", key=f"rem_prof_{p.id}"):
-                            db.delete(p)
-                            db.commit()
-                            st.rerun()
-
-            if st.session_state.get("prof_editando"):
-                _pid = st.session_state["prof_editando"]
-                _prof = db.get(Professional, _pid)
-                if _prof:
-                    st.markdown("---")
-                    _pn = st.text_input("Nome", value=_prof.nome, key=f"pe_nome_{_pid}")
-                    _ps, _pc = st.columns(2)
-                    with _ps:
-                        if st.button("💾 Salvar", key=f"pe_salvar_{_pid}", use_container_width=True):
-                            _prof.nome = _pn
-                            db.commit()
-                            del st.session_state["prof_editando"]
-                            st.rerun()
-                    with _pc:
-                        if st.button("❌ Cancelar", key=f"pe_cancel_{_pid}", use_container_width=True):
-                            del st.session_state["prof_editando"]
-                            st.rerun()
+                    if st.button("Remover", key=f"rem_prof_{p.id}", use_container_width=True):
+                        db.delete(p)
+                        db.commit()
+                        st.rerun()
         else:
             st.info("Nenhum profissional cadastrado.")
 
@@ -2012,7 +1950,13 @@ def tela_clientes():
                                     pdf.ln()
                                 
                                 pdf_bytes = bytes(pdf.output())
-                                _mostrar_pdf(pdf_bytes, f"tabela_doses_{cli.nome.replace(' ', '_') if cli else 'cliente'}.pdf", "dose_hist")
+                                st.download_button(
+                                    "⬇️ Baixar PDF",
+                                    data=pdf_bytes,
+                                    file_name=f"tabela_doses_{cli.nome.replace(' ', '_') if cli else 'cliente'}.pdf",
+                                    mime="application/pdf",
+                                    use_container_width=True
+                                )
                             except Exception as e:
                                 st.error(f"Erro ao gerar PDF: {e}")
                     else:
@@ -2310,8 +2254,15 @@ def _modal_receituario_popup():
                             
                             pdf_bytes = bytes(pdf.output())
                             
-                            # Mostrar PDF inline
-                            _mostrar_pdf(pdf_bytes, f"receituario_{cliente.nome.replace(' ', '_')}_{data_rec.strftime('%Y%m%d')}.pdf", "receituario")
+                            # Download automático do PDF
+                            st.download_button(
+                                label="📥 PDF gerado! Clique para baixar",
+                                data=pdf_bytes,
+                                file_name=f"receituario_{cliente.nome.replace(' ', '_')}_{data_rec.strftime('%Y%m%d')}.pdf",
+                                mime="application/pdf",
+                                use_container_width=True,
+                                key="rec_popup_download"
+                            )
                         except Exception as e:
                             st.error(f"Erro ao gerar PDF: {e}")
             else:
@@ -2451,53 +2402,15 @@ def _modal_tabela_doses():
                 ).order_by(DoseTable.criado_em.desc()).all()
                 
                 if doses:
-                    for i, d in enumerate(doses):
-                        col_info, col_acoes = st.columns([8, 1])
-                        with col_info:
-                            st.markdown(f"**{d.data_registro.strftime('%d/%m/%Y') if d.data_registro else '—'}** | {d.medicacao} | Sem {d.semana or '—'} | {d.dose or '—'} | {d.via or '—'} | {f'{d.peso} kg' if d.peso else '—'}")
-                        with col_acoes:
-                            with st.popover("⋮", use_container_width=True):
-                                if st.button("✏️ Editar", key=f"dose_edit_{d.id}"):
-                                    st.session_state["dose_editando"] = d.id
-                                    st.rerun()
-                                if st.button("🗑️ Excluir", key=f"dose_del_{d.id}"):
-                                    db.delete(d)
-                                    db.commit()
-                                    st.success("Dose excluída!")
-                                    st.rerun()
-                        
-                        # Form de edição inline
-                        if st.session_state.get("dose_editando") == d.id:
-                            with st.container():
-                                st.markdown("**Editar dose:**")
-                                ec1, ec2, ec3 = st.columns(3)
-                                with ec1:
-                                    new_data = st.date_input("Data", value=d.data_registro, key=f"dose_ed_data_{d.id}")
-                                    new_med = st.text_input("Medicação", value=d.medicacao or "", key=f"dose_ed_med_{d.id}")
-                                with ec2:
-                                    new_semana = st.text_input("Semana", value=str(d.semana or ""), key=f"dose_ed_sem_{d.id}")
-                                    new_dose = st.text_input("Dose", value=d.dose or "", key=f"dose_ed_dose_{d.id}")
-                                with ec3:
-                                    new_via = st.text_input("Via", value=d.via or "", key=f"dose_ed_via_{d.id}")
-                                    new_peso = st.text_input("Peso (kg)", value=str(d.peso or ""), key=f"dose_ed_peso_{d.id}")
-                                bc1, bc2 = st.columns(2)
-                                with bc1:
-                                    if st.button("💾 Salvar", key=f"dose_save_{d.id}", use_container_width=True):
-                                        d.data_registro = new_data
-                                        d.medicacao = new_med
-                                        d.semana = new_semana if new_semana else None
-                                        d.dose = new_dose if new_dose else None
-                                        d.via = new_via if new_via else None
-                                        d.peso = float(new_peso) if new_peso else None
-                                        db.commit()
-                                        del st.session_state["dose_editando"]
-                                        st.success("Dose atualizada!")
-                                        st.rerun()
-                                with bc2:
-                                    if st.button("❌ Cancelar", key=f"dose_cancel_{d.id}", use_container_width=True):
-                                        del st.session_state["dose_editando"]
-                                        st.rerun()
-                        st.markdown("---")
+                    dados = [{
+                        "Data": d.data_registro.strftime("%d/%m/%Y") if d.data_registro else "—",
+                        "Medicação": d.medicacao,
+                        "Semana": d.semana or "—",
+                        "Dose": d.dose or "—",
+                        "Via": d.via or "—",
+                        "Peso": f"{d.peso} kg" if d.peso else "—",
+                    } for d in doses]
+                    st.dataframe(pd.DataFrame(dados), use_container_width=True, hide_index=True)
                     
                     # Botão PDF sempre visível quando há cliente selecionado
                     st.markdown("---")
@@ -2593,8 +2506,20 @@ def _modal_tabela_doses():
                                 pdf.ln()
                             
                             pdf_bytes = bytes(pdf.output())
-                            nome_arq = f"tabela_doses_{cli.nome.replace(' ', '_') if cli else 'cliente'}.pdf"
-                            _mostrar_pdf(pdf_bytes, nome_arq, "dose")
+                            import base64
+                            b64_pdf = base64.b64encode(pdf_bytes).decode()
+                            col_dl, col_view = st.columns(2)
+                            with col_dl:
+                                st.download_button(
+                                    "⬇️ Baixar PDF",
+                                    data=pdf_bytes,
+                                    file_name=f"tabela_doses_{cli.nome.replace(' ', '_') if cli else 'cliente'}.pdf",
+                                    mime="application/pdf",
+                                    use_container_width=True,
+                                    key="dose_download"
+                                )
+                            with col_view:
+                                st.markdown(f'<a href="data:application/pdf;base64,{b64_pdf}" target="_blank" style="display:inline-block;width:100%;text-align:center;padding:0.5rem 1rem;background:#d59c9c;color:white;border-radius:8px;text-decoration:none;font-weight:600;">📤 Abrir / Compartilhar</a>', unsafe_allow_html=True)
                         except Exception as e:
                             st.error(f"Erro ao gerar PDF: {e}")
                 else:
@@ -2686,8 +2611,20 @@ def _modal_tabela_doses():
                             pdf.cell(0, 8, "Nenhuma dose registrada.", ln=True, align="C")
                             
                             pdf_bytes = bytes(pdf.output())
-                            nome_arq = f"tabela_doses_{cli.nome.replace(' ', '_') if cli else 'cliente'}.pdf"
-                            _mostrar_pdf(pdf_bytes, nome_arq, "dose_vazio")
+                            import base64 as _b64v
+                            b64_pdf_v = _b64v.b64encode(pdf_bytes).decode()
+                            col_dl2, col_view2 = st.columns(2)
+                            with col_dl2:
+                                st.download_button(
+                                    "⬇️ Baixar PDF",
+                                    data=pdf_bytes,
+                                    file_name=f"tabela_doses_{cli.nome.replace(' ', '_') if cli else 'cliente'}.pdf",
+                                    mime="application/pdf",
+                                    use_container_width=True,
+                                    key="dose_download_vazio"
+                                )
+                            with col_view2:
+                                st.markdown(f'<a href="data:application/pdf;base64,{b64_pdf_v}" target="_blank" style="display:inline-block;width:100%;text-align:center;padding:0.5rem 1rem;background:#d59c9c;color:white;border-radius:8px;text-decoration:none;font-weight:600;">📤 Abrir / Compartilhar</a>', unsafe_allow_html=True)
                         except Exception as e:
                             st.error(f"Erro ao gerar PDF: {e}")
             else:
@@ -2887,7 +2824,6 @@ def tela_atendimentos():
                     "Selecionar": False,
                     "Data": at.data.strftime("%d/%m/%Y") if at.data else "—",
                     "Cliente": cli.nome if cli else "—",
-                    "Protocolo": (at.protocolo_atendimento[:50] + "...") if at.protocolo_atendimento and len(at.protocolo_atendimento) > 50 else (at.protocolo_atendimento or "—"),
                     "Queixa": (at.queixa_consulta[:50] + "...") if at.queixa_consulta and len(at.queixa_consulta) > 50 else (at.queixa_consulta or "—"),
                     "Tipo Tratamento": at.tipo_tratamento or "—",
                     "Observações": (at.observacoes[:50] + "...") if at.observacoes and len(at.observacoes) > 50 else (at.observacoes or "—"),
@@ -2901,7 +2837,7 @@ def tela_atendimentos():
                 column_config={
                     "Selecionar": st.column_config.CheckboxColumn("Selecionar", default=False),
                 },
-                disabled=["Data", "Cliente", "Protocolo", "Queixa", "Tipo Tratamento", "Observações"],
+                disabled=["Data", "Cliente", "Queixa", "Tipo Tratamento", "Observações"],
                 key="at_hist_editor"
             )
 
@@ -3022,58 +2958,12 @@ def tela_biometria():
                 )
                 st.altair_chart(chart, use_container_width=True)
 
-                st.markdown("#### Histórico completo")
-                bios = (
-                    db.query(Biometrics)
-                    .filter(Biometrics.cliente_id == cid)
-                    .order_by(Biometrics.data_medicao.desc())
-                    .all()
+                historico["data_medicao"] = (
+                    pd.to_datetime(historico["data_medicao"], errors="coerce")
+                    .dt.strftime("%d/%m/%Y")
                 )
-                for b in bios:
-                    col_b, col_ba = st.columns([9, 1])
-                    with col_b:
-                        st.markdown(f"**{b.data_medicao.strftime('%d/%m/%Y') if b.data_medicao else '—'}** | Peso: {b.peso or 0}kg | Cintura: {b.cintura or 0} | Abdômen: {b.abdomen or 0} | Quadril: {b.quadril or 0} | Braço: {b.braco or 0} | Coxa: {b.coxa or 0}")
-                    with col_ba:
-                        with st.popover("⋮", use_container_width=True):
-                            if st.button("✏️ Editar", key=f"bio_edit_{b.id}"):
-                                st.session_state["bio_editando"] = b.id
-                                st.rerun()
-                            if st.button("🗑️ Excluir", key=f"bio_del_{b.id}"):
-                                db.delete(b)
-                                db.commit()
-                                st.success("Medida excluída!")
-                                st.rerun()
-
-                # Edição inline de biometria
-                if st.session_state.get("bio_editando"):
-                    _bid = st.session_state["bio_editando"]
-                    _bio = db.get(Biometrics, _bid)
-                    if _bio:
-                        st.markdown("---")
-                        st.markdown("#### ✏️ Editar medida")
-                        _bc1, _bc2, _bc3 = st.columns(3)
-                        with _bc1:
-                            _bp = st.number_input("Peso", value=float(_bio.peso or 0), key=f"be_peso_{_bid}")
-                            _bci = st.number_input("Cintura", value=float(_bio.cintura or 0), key=f"be_cint_{_bid}")
-                        with _bc2:
-                            _bab = st.number_input("Abdômen", value=float(_bio.abdomen or 0), key=f"be_abd_{_bid}")
-                            _bqu = st.number_input("Quadril", value=float(_bio.quadril or 0), key=f"be_quad_{_bid}")
-                        with _bc3:
-                            _bbr = st.number_input("Braço", value=float(_bio.braco or 0), key=f"be_brac_{_bid}")
-                            _bcx = st.number_input("Coxa", value=float(_bio.coxa or 0), key=f"be_coxa_{_bid}")
-                        _bs, _bc = st.columns(2)
-                        with _bs:
-                            if st.button("💾 Salvar", key=f"be_salvar_{_bid}", use_container_width=True):
-                                _bio.peso = _bp; _bio.cintura = _bci; _bio.abdomen = _bab
-                                _bio.quadril = _bqu; _bio.braco = _bbr; _bio.coxa = _bcx
-                                db.commit()
-                                st.success("Atualizado!")
-                                del st.session_state["bio_editando"]
-                                st.rerun()
-                        with _bc:
-                            if st.button("❌ Cancelar", key=f"be_cancel_{_bid}", use_container_width=True):
-                                del st.session_state["bio_editando"]
-                                st.rerun()
+                st.markdown("#### Histórico completo")
+                st.dataframe(historico, use_container_width=True, hide_index=True)
     finally:
         db.close()
 
@@ -3115,7 +3005,7 @@ def tela_estoque():
                     novo_lote = StockLote(
                         produto_id=mapa_prod[prod_compra],
                         lote=lote_compra or None,
-                        quantidade_atual=0,
+                        quantidade_atual=qtd_compra,
                         quantidade_minima=qtd_min_compra,
                         data_validade=validade_compra,
                         fornecedor=fornecedor_compra or None,
@@ -3137,47 +3027,19 @@ def tela_estoque():
                 .all()
             )
             if lotes:
-                for lt in lotes:
-                    col_info_e, col_acoes_e = st.columns([9, 1])
-                    with col_info_e:
-                        st.markdown(f"**{lt.produto.nome}** | {lt.produto.categoria} | Lote: {lt.lote or 'S/N'} | Qtd: {lt.quantidade_atual} | Min: {lt.quantidade_minima} | Val: {formatar_data_br(lt.data_validade)} | {lt.fornecedor or '—'}")
-                    with col_acoes_e:
-                        with st.popover("⋮", use_container_width=True):
-                            if st.button("✏️ Editar", key=f"est_edit_{lt.id}"):
-                                st.session_state["est_editando"] = lt.id
-                                st.rerun()
-                            if st.button("🗑️ Excluir", key=f"est_del_{lt.id}"):
-                                db.delete(lt)
-                                db.commit()
-                                st.success("Lote excluído!")
-                                st.rerun()
-                    
-                    if st.session_state.get("est_editando") == lt.id:
-                        with st.container():
-                            ec1, ec2 = st.columns(2)
-                            with ec1:
-                                new_lote = st.text_input("Lote", value=lt.lote or "", key=f"est_ed_lote_{lt.id}")
-                                new_qtd = st.number_input("Quantidade", value=float(lt.quantidade_atual), key=f"est_ed_qtd_{lt.id}")
-                                new_qtd_min = st.number_input("Qtd mínima", value=float(lt.quantidade_minima), key=f"est_ed_min_{lt.id}")
-                            with ec2:
-                                new_val = st.date_input("Validade", value=lt.data_validade, key=f"est_ed_val_{lt.id}")
-                                new_forn = st.text_input("Fornecedor", value=lt.fornecedor or "", key=f"est_ed_forn_{lt.id}")
-                            bc1, bc2 = st.columns(2)
-                            with bc1:
-                                if st.button("💾 Salvar", key=f"est_save_{lt.id}", use_container_width=True):
-                                    lt.lote = new_lote if new_lote else None
-                                    lt.quantidade_atual = new_qtd
-                                    lt.quantidade_minima = new_qtd_min
-                                    lt.data_validade = new_val
-                                    lt.fornecedor = new_forn if new_forn else None
-                                    db.commit()
-                                    del st.session_state["est_editando"]
-                                    st.success("Lote atualizado!")
-                                    st.rerun()
-                            with bc2:
-                                if st.button("❌ Cancelar", key=f"est_cancel_{lt.id}", use_container_width=True):
-                                    del st.session_state["est_editando"]
-                                    st.rerun()
+                dados_est = [
+                    {
+                        "Produto": lt.produto.nome,
+                        "Categoria": lt.produto.categoria,
+                        "Lote": lt.lote or "S/N",
+                        "Quantidade": lt.quantidade_atual,
+                        "Qtd mínima": lt.quantidade_minima,
+                        "Validade": formatar_data_br(lt.data_validade),
+                        "Fornecedor": lt.fornecedor or "",
+                    }
+                    for lt in lotes
+                ]
+                st.dataframe(pd.DataFrame(dados_est), use_container_width=True, hide_index=True)
             else:
                 st.info("Nenhum lote cadastrado ainda.")
 
@@ -3192,23 +3054,11 @@ def tela_estoque():
 
         # ---------- ABA 2: Movimentações ----------
         with aba2:
-            movs = db.query(StockMovement).order_by(StockMovement.criado_em.desc()).limit(100).all()
-            if movs:
-                for mv in movs:
-                    col_mv, col_mva = st.columns([9, 1])
-                    with col_mv:
-                        _prod_nome = mv.produto.nome if mv.produto else "—"
-                        _data_mv = mv.criado_em.strftime("%d/%m/%Y %H:%M") if mv.criado_em else "—"
-                        st.markdown(f"**{_data_mv}** | {_prod_nome} | {mv.tipo} | Qtd: {mv.quantidade} | {mv.motivo or '—'}")
-                    with col_mva:
-                        with st.popover("⋮", use_container_width=True):
-                            if st.button("🗑️ Excluir", key=f"mov_del_{mv.id}"):
-                                db.delete(mv)
-                                db.commit()
-                                st.success("Movimentação excluída!")
-                                st.rerun()
-            else:
-                st.info("Nenhuma movimentação registrada.")
+            dfm = pd.read_sql(
+                db.query(StockMovement).order_by(StockMovement.criado_em.desc()).statement,
+                db.bind,
+            )
+            st.dataframe(dfm, use_container_width=True)
 
             st.markdown("### Movimentar manualmente")
             produtos = db.query(Product).order_by(Product.nome.asc()).all()
@@ -3255,43 +3105,9 @@ def tela_estoque():
         # ---------- ABA 3: Cadastro de Produtos ----------
         with aba3:
             st.markdown("### Produtos cadastrados")
-            prods_cad = db.query(Product).order_by(Product.nome.asc()).all()
-            if prods_cad:
-                for p in prods_cad:
-                    col_info_p, col_acoes_p = st.columns([9, 1])
-                    with col_info_p:
-                        st.markdown(f"**{p.nome}** | {p.categoria or '—'}")
-                    with col_acoes_p:
-                        with st.popover("⋮", use_container_width=True):
-                            if st.button("✏️ Editar", key=f"prod_edit_{p.id}"):
-                                st.session_state["prod_editando"] = p.id
-                                st.rerun()
-                            if st.button("🗑️ Excluir", key=f"prod_del_{p.id}"):
-                                db.delete(p)
-                                db.commit()
-                                st.success("Produto excluído!")
-                                st.rerun()
-                    
-                    if st.session_state.get("prod_editando") == p.id:
-                        with st.container():
-                            ec1, ec2 = st.columns(2)
-                            with ec1:
-                                new_nome_p = st.text_input("Nome", value=p.nome, key=f"prod_ed_nome_{p.id}")
-                            with ec2:
-                                new_cat_p = st.text_input("Categoria", value=p.categoria or "", key=f"prod_ed_cat_{p.id}")
-                            bc1, bc2 = st.columns(2)
-                            with bc1:
-                                if st.button("💾 Salvar", key=f"prod_save_{p.id}", use_container_width=True):
-                                    p.nome = new_nome_p
-                                    p.categoria = new_cat_p if new_cat_p else None
-                                    db.commit()
-                                    del st.session_state["prod_editando"]
-                                    st.success("Produto atualizado!")
-                                    st.rerun()
-                            with bc2:
-                                if st.button("❌ Cancelar", key=f"prod_cancel_{p.id}", use_container_width=True):
-                                    del st.session_state["prod_editando"]
-                                    st.rerun()
+            df_prods = pd.read_sql(db.query(Product).statement, db.bind)
+            if not df_prods.empty:
+                st.dataframe(df_prods[["id", "nome", "categoria"]], use_container_width=True, hide_index=True)
             else:
                 st.info("Nenhum produto cadastrado ainda.")
 
@@ -3499,7 +3315,15 @@ def tela_relatorios():
                     _pdf.cell(0, 8, f"Receita no período: R$ {_val_vendas:,.2f}", ln=True)
                     
                     _pdf_bytes = bytes(_pdf.output())
-                    _mostrar_pdf(_pdf_bytes, f"relatorio_{_r_ini}_{_r_fim}.pdf", "rel")
+                    import base64 as _b64r
+                    _b64_rel = _b64r.b64encode(_pdf_bytes).decode()
+                    _col_r1, _col_r2 = st.columns(2)
+                    with _col_r1:
+                        st.download_button("⬇️ Baixar PDF", data=_pdf_bytes,
+                                           file_name=f"relatorio_{_r_ini}_{_r_fim}.pdf",
+                                           mime="application/pdf", key="dl_pdf_rel")
+                    with _col_r2:
+                        st.markdown(f'<a href="data:application/pdf;base64,{_b64_rel}" target="_blank" style="display:inline-block;width:100%;text-align:center;padding:0.5rem 1rem;background:#d59c9c;color:white;border-radius:8px;text-decoration:none;font-weight:600;">📤 Abrir / Compartilhar</a>', unsafe_allow_html=True)
                 except Exception as _e:
                     st.error(f"Erro ao gerar PDF: {_e}")
 
@@ -3658,7 +3482,13 @@ def tela_contratos():
                 path = gerar_pdf_contrato(c.id, destino=f"contrato_{c.id}.pdf")
                 with open(path, "rb") as f:
                     _contrato_bytes = f.read()
-                _mostrar_pdf(_contrato_bytes, f"contrato_{c.id}.pdf", f"contrato_{c.id}")
+                import base64 as _b64c
+                _b64_contrato = _b64c.b64encode(_contrato_bytes).decode()
+                _col_c1, _col_c2 = st.columns(2)
+                with _col_c1:
+                    st.download_button("⬇️ Baixar PDF", data=_contrato_bytes, file_name=f"contrato_{c.id}.pdf")
+                with _col_c2:
+                    st.markdown(f'<a href="data:application/pdf;base64,{_b64_contrato}" target="_blank" style="display:inline-block;width:100%;text-align:center;padding:0.5rem 1rem;background:#d59c9c;color:white;border-radius:8px;text-decoration:none;font-weight:600;">📤 Abrir / Compartilhar</a>', unsafe_allow_html=True)
                 st.success("Contrato gerado.")
     finally:
         db.close()
@@ -3838,7 +3668,7 @@ def tela_vendas():
 
             # Auto-preencher valor se selecionou procedimento cadastrado
             _val_default = 0.0
-            _sessoes_default = 2
+            _sessoes_default = 1
             if proc_selecionado != "— digitar manualmente —" and proc_selecionado in _mapa_procs:
                 _p_ref = _mapa_procs[proc_selecionado]
                 if tipo_item == "Pacote" and _p_ref.valor_pacote:
@@ -3933,6 +3763,7 @@ def tela_vendas():
 
         vendas_rec = db.query(Sale).order_by(Sale.data_venda.desc(), Sale.id.desc()).limit(50).all()
         if vendas_rec:
+            rows_v = []
             for v in vendas_rec:
                 # Determinar tipo predominante da venda
                 tipos_itens = set(it.tipo for it in v.itens)
@@ -3950,70 +3781,18 @@ def tela_vendas():
                     continue
 
                 procs = ", ".join(f"{it.procedimento}" for it in v.itens)
-                col_info_v, col_acoes_v = st.columns([9, 1])
-                with col_info_v:
-                    st.markdown(f"**{v.data_venda.strftime('%d/%m/%Y')}** | {v.cliente.nome if v.cliente else '—'} | {tipo_venda} | {procs} | R$ {v.valor_total:.2f} | {v.forma_pagamento}")
-                with col_acoes_v:
-                    with st.popover("⋮", use_container_width=True):
-                        if st.button("✏️ Editar", key=f"venda_edit_{v.id}"):
-                            st.session_state["venda_editando"] = v.id
-                            st.rerun()
-                        if st.button("🗑️ Excluir", key=f"venda_del_{v.id}"):
-                            for it in v.itens:
-                                db.delete(it)
-                            db.delete(v)
-                            db.commit()
-                            st.success("Venda excluída!")
-                            st.rerun()
-
-        # Modal de edição de venda
-        if st.session_state.get("venda_editando"):
-            _vid = st.session_state["venda_editando"]
-            _venda_ed = db.get(Sale, _vid)
-            if _venda_ed:
-                st.markdown("---")
-                st.markdown(f"### ✏️ Editando Venda #{_vid}")
-                col_ed1, col_ed2 = st.columns(2)
-                with col_ed1:
-                    _ed_data = st.date_input("Data", value=_venda_ed.data_venda, key=f"ved_data_{_vid}")
-                    _ed_pagto = st.selectbox("Pagamento", ["Pix", "Cartão Crédito", "Cartão Débito", "Dinheiro", "Outro"],
-                        index=["Pix", "Cartão Crédito", "Cartão Débito", "Dinheiro", "Outro"].index(_venda_ed.forma_pagamento) if _venda_ed.forma_pagamento in ["Pix", "Cartão Crédito", "Cartão Débito", "Dinheiro", "Outro"] else 4,
-                        key=f"ved_pagto_{_vid}")
-                with col_ed2:
-                    _ed_valor = st.number_input("Valor Total (R$)", value=float(_venda_ed.valor_total or 0), min_value=0.0, step=0.01, key=f"ved_valor_{_vid}")
-                    _ed_obs = st.text_input("Observações", value=_venda_ed.observacoes or "", key=f"ved_obs_{_vid}")
-
-                # Editar itens
-                st.markdown("**Itens:**")
-                for _it in _venda_ed.itens:
-                    _c1, _c2, _c3 = st.columns([3, 2, 2])
-                    with _c1:
-                        _it._ed_proc = st.text_input("Procedimento", value=_it.procedimento, key=f"vit_proc_{_it.id}")
-                    with _c2:
-                        _it._ed_tipo = st.selectbox("Tipo", ["unitario", "pacote"],
-                            index=0 if _it.tipo == "unitario" else 1, key=f"vit_tipo_{_it.id}")
-                    with _c3:
-                        _it._ed_valor = st.number_input("Valor", value=float(_it.valor or 0), min_value=0.0, step=0.01, key=f"vit_val_{_it.id}")
-
-                col_sv, col_cn = st.columns(2)
-                with col_sv:
-                    if st.button("💾 Salvar", key=f"ved_salvar_{_vid}", use_container_width=True):
-                        _venda_ed.data_venda = _ed_data
-                        _venda_ed.forma_pagamento = _ed_pagto
-                        _venda_ed.valor_total = _ed_valor
-                        _venda_ed.observacoes = _ed_obs or None
-                        for _it in _venda_ed.itens:
-                            _it.procedimento = st.session_state.get(f"vit_proc_{_it.id}", _it.procedimento)
-                            _it.tipo = st.session_state.get(f"vit_tipo_{_it.id}", _it.tipo)
-                            _it.valor = st.session_state.get(f"vit_val_{_it.id}", _it.valor)
-                        db.commit()
-                        st.success("Venda atualizada!")
-                        del st.session_state["venda_editando"]
-                        st.rerun()
-                with col_cn:
-                    if st.button("❌ Cancelar", key=f"ved_cancelar_{_vid}", use_container_width=True):
-                        del st.session_state["venda_editando"]
-                        st.rerun()
+                rows_v.append({
+                    "Data": v.data_venda.strftime("%d/%m/%Y"),
+                    "Cliente": v.cliente.nome if v.cliente else "—",
+                    "Tipo": tipo_venda,
+                    "Procedimentos": procs,
+                    "Valor Total (R$)": f"{v.valor_total:.2f}",
+                    "Pagamento": v.forma_pagamento,
+                })
+            if rows_v:
+                st.dataframe(pd.DataFrame(rows_v), use_container_width=True, hide_index=True)
+            else:
+                st.info("Nenhuma venda encontrada com esse filtro.")
         else:
             st.info("Nenhuma venda registrada.")
     finally:
@@ -4128,34 +3907,10 @@ def tela_cadastros():
                     c1.write(mat.nome)
                     c2.write(mat.tipo)
                     with c3:
-                        with st.popover("⋮", use_container_width=True):
-                            if st.button("✏️ Editar", key=f"edit_mat_{mat.id}"):
-                                st.session_state["mat_editando"] = mat.id
-                                st.rerun()
-                            if st.button("🗑️ Excluir", key=f"del_mat_{mat.id}"):
-                                mat.ativo = False
-                                db.commit()
-                                st.rerun()
-
-                if st.session_state.get("mat_editando"):
-                    _mid = st.session_state["mat_editando"]
-                    _mat = db.get(Material, _mid)
-                    if _mat:
-                        st.markdown("---")
-                        _mn = st.text_input("Nome", value=_mat.nome, key=f"me_nome_{_mid}")
-                        _mt = st.selectbox("Tipo", ["Injetável", "Descartável"],
-                            index=0 if _mat.tipo == "Injetável" else 1, key=f"me_tipo_{_mid}")
-                        _ms, _mc = st.columns(2)
-                        with _ms:
-                            if st.button("💾 Salvar", key=f"me_salvar_{_mid}", use_container_width=True):
-                                _mat.nome = _mn; _mat.tipo = _mt
-                                db.commit()
-                                del st.session_state["mat_editando"]
-                                st.rerun()
-                        with _mc:
-                            if st.button("❌ Cancelar", key=f"me_cancel_{_mid}", use_container_width=True):
-                                del st.session_state["mat_editando"]
-                                st.rerun()
+                        if st.button("🗑️", key=f"del_mat_{mat.id}", help="Excluir"):
+                            mat.ativo = False
+                            db.commit()
+                            st.rerun()
             else:
                 st.info("Nenhum material cadastrado ainda.")
 
@@ -4197,50 +3952,26 @@ def tela_cadastros():
             st.markdown("### Procedimentos Cadastrados")
             tratamentos = db.query(Tratamento).filter(Tratamento.ativo == True).order_by(Tratamento.nome.asc()).all()
             if tratamentos:
+                import pandas as pd
+                rows_proc = []
                 for trat in tratamentos:
-                    col_info_t, col_acoes_t = st.columns([9, 1])
-                    with col_info_t:
-                        val_unit = f"R$ {trat.valor_unitario:.2f}" if trat.valor_unitario else "—"
-                        val_pac = f"R$ {trat.valor_pacote:.2f}" if trat.valor_pacote else "—"
-                        sessoes = str(trat.sessoes_pacote) if trat.sessoes_pacote else "—"
-                        st.markdown(f"**{trat.nome}** | {trat.descricao or '—'} | Unit: {val_unit} | Pac: {val_pac} | Sessões: {sessoes}")
-                    with col_acoes_t:
-                        with st.popover("⋮", use_container_width=True):
-                            if st.button("✏️ Editar", key=f"trat_edit_{trat.id}"):
-                                st.session_state["trat_editando"] = trat.id
-                                st.rerun()
-                            if st.button("🗑️ Excluir", key=f"trat_del_{trat.id}"):
-                                trat.ativo = False
-                                db.commit()
-                                st.success("Procedimento excluído!")
-                                st.rerun()
-                    
-                    if st.session_state.get("trat_editando") == trat.id:
-                        with st.container():
-                            ec1, ec2 = st.columns(2)
-                            with ec1:
-                                new_nome = st.text_input("Nome", value=trat.nome, key=f"trat_ed_nome_{trat.id}")
-                                new_desc = st.text_input("Descrição", value=trat.descricao or "", key=f"trat_ed_desc_{trat.id}")
-                            with ec2:
-                                new_vunit = st.number_input("Valor Unitário", value=trat.valor_unitario or 0.0, key=f"trat_ed_vunit_{trat.id}")
-                                new_vpac = st.number_input("Valor Pacote", value=trat.valor_pacote or 0.0, key=f"trat_ed_vpac_{trat.id}")
-                                new_sess = st.number_input("Sessões Pacote", value=trat.sessoes_pacote or 0, min_value=0, key=f"trat_ed_sess_{trat.id}")
-                            bc1, bc2 = st.columns(2)
-                            with bc1:
-                                if st.button("💾 Salvar", key=f"trat_save_{trat.id}", use_container_width=True):
-                                    trat.nome = new_nome
-                                    trat.descricao = new_desc if new_desc else None
-                                    trat.valor_unitario = new_vunit if new_vunit > 0 else None
-                                    trat.valor_pacote = new_vpac if new_vpac > 0 else None
-                                    trat.sessoes_pacote = new_sess if new_sess > 0 else None
-                                    db.commit()
-                                    del st.session_state["trat_editando"]
-                                    st.success("Procedimento atualizado!")
-                                    st.rerun()
-                            with bc2:
-                                if st.button("❌ Cancelar", key=f"trat_cancel_{trat.id}", use_container_width=True):
-                                    del st.session_state["trat_editando"]
-                                    st.rerun()
+                    rows_proc.append({
+                        "Nome": trat.nome,
+                        "Descrição": trat.descricao or "—",
+                        "Valor Unit. (R$)": f"{trat.valor_unitario:.2f}" if trat.valor_unitario else "—",
+                        "Valor Pacote (R$)": f"{trat.valor_pacote:.2f}" if trat.valor_pacote else "—",
+                        "Sessões Pacote": trat.sessoes_pacote or "—",
+                    })
+                st.dataframe(pd.DataFrame(rows_proc), use_container_width=True, hide_index=True)
+
+                # Botão excluir por nome
+                for trat in tratamentos:
+                    col_n, col_del = st.columns([6, 1])
+                    with col_del:
+                        if st.button("🗑️", key=f"del_trat_{trat.id}", help=f"Excluir {trat.nome}"):
+                            trat.ativo = False
+                            db.commit()
+                            st.rerun()
             else:
                 st.info("Nenhum procedimento cadastrado ainda.")
     finally:
