@@ -7,20 +7,9 @@ from datetime import date
 from utils.db import SessionLocal, engine
 from models.base import Base
 from models.client import Client
-from models.appointment import Appointment, AppointmentMaterial
-from models.stock import Product, StockLote, StockMovement
-from models.user import User
-from models.assessment import Assessment
-from models.biometrics import Biometrics
-from models.contract import Contract
-from models.schedule import ScheduledAppointment
-from models.professional import Professional
-from models.sale import Sale, SaleItem, SessionUsage
-from models.schedule_log import AgendaLog
-from models.dose_table import DoseTable
-from models.material import Material
-from models.tratamento import Tratamento
+from models.appointment import Appointment
 
+# Criar tabelas se não existirem
 Base.metadata.create_all(bind=engine)
 
 df = pd.read_excel("histórico de atendimentos.xlsx")
@@ -48,7 +37,7 @@ try:
         else:
             data_at = pd.to_datetime(data_at).date()
 
-        # Buscar cliente pelo nome
+        # Buscar ou criar cliente
         cliente = db.query(Client).filter(Client.nome.ilike(f"%{nome_cliente}%")).first()
         if not cliente:
             cliente = Client(nome=nome_cliente, telefone="", email="")
