@@ -64,9 +64,9 @@ from models.base import Base
 from models.user import User
 from models.client import Client
 from models.assessment import Assessment
-from models.stock import Product, StockLote, StockMovement
 from models.appointment import Appointment, AppointmentMaterial
 from models.biometrics import Biometrics
+from models.stock import Product, StockLote, StockMovement
 from models.contract import Contract
 from models.schedule import ScheduledAppointment
 from models.professional import Professional

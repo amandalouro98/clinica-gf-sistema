@@ -32,5 +32,5 @@ class AppointmentMaterial(Base):
     quantidade = Column(Float, nullable=False)
 
     atendimento = relationship("Appointment")
-    lote = relationship("StockLote", overlaps="movimentos")
-    produto = relationship("Product", overlaps="lotes")
+    lote = relationship("StockLote")
+    produto = relationship("Product")
