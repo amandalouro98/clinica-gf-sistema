@@ -3162,28 +3162,102 @@ def tela_estoque():
             st.markdown("---")
             st.markdown("### Estoque atual")
 
+            # Filtro por categoria
+            _categorias_est = ["Todas"] + sorted(list(set(p.categoria for p in db.query(Product).all() if p.categoria)))
+            _cat_filtro = st.selectbox("Filtrar por categoria", _categorias_est, key="est_filtro_cat")
+
             lotes = (
                 db.query(StockLote)
                 .join(Product)
                 .order_by(Product.nome.asc(), StockLote.data_validade.asc())
                 .all()
             )
+            
+            # Aplicar filtro
+            if _cat_filtro != "Todas":
+                lotes = [lt for lt in lotes if lt.produto and lt.produto.categoria == _cat_filtro]
+            
             if lotes:
-                dados_est = [
-                    {
-                        "Produto": lt.produto.nome,
-                        "Categoria": lt.produto.categoria,
+                dados_est = []
+                ids_lotes = []
+                for lt in lotes:
+                    ids_lotes.append(lt.id)
+                    dados_est.append({
+                        "Selecionar": False,
+                        "Produto": lt.produto.nome if lt.produto else "—",
+                        "Categoria": lt.produto.categoria if lt.produto else "—",
                         "Lote": lt.lote or "S/N",
                         "Quantidade": lt.quantidade_atual,
                         "Qtd mínima": lt.quantidade_minima,
                         "Validade": formatar_data_br(lt.data_validade),
                         "Fornecedor": lt.fornecedor or "",
-                    }
-                    for lt in lotes
-                ]
-                st.dataframe(pd.DataFrame(dados_est), use_container_width=True, hide_index=True)
+                    })
+                
+                df_est = pd.DataFrame(dados_est)
+                edited_df_est = st.data_editor(
+                    df_est,
+                    hide_index=True,
+                    column_config={"Selecionar": st.column_config.CheckboxColumn("Selecionar", default=False)},
+                    disabled=["Produto", "Categoria", "Lote", "Quantidade", "Qtd mínima", "Validade", "Fornecedor"],
+                    key="est_editor"
+                )
+                
+                # Identificar linha selecionada
+                linha_sel_est = None
+                for i, row in edited_df_est.iterrows():
+                    if row.get("Selecionar"):
+                        linha_sel_est = ids_lotes[i]
+                        break
+                
+                # Botões de ação
+                col_est1, col_est2, col_est3 = st.columns([1, 1, 4])
+                with col_est1:
+                    btn_editar_est = st.button("✏️ Editar", key="btn_editar_est", disabled=(linha_sel_est is None))
+                with col_est2:
+                    btn_excluir_est = st.button("🗑️ Excluir", key="btn_excluir_est", disabled=(linha_sel_est is None))
+                
+                if btn_excluir_est and linha_sel_est:
+                    lt_del = db.get(StockLote, linha_sel_est)
+                    if lt_del:
+                        db.delete(lt_del)
+                        db.commit()
+                        st.success("Lote excluído!")
+                        st.rerun()
+                
+                if btn_editar_est and linha_sel_est:
+                    st.session_state["est_editando"] = linha_sel_est
+                    st.rerun()
+                
+                # Form de edição
+                if st.session_state.get("est_editando"):
+                    lt_ed = db.get(StockLote, st.session_state["est_editando"])
+                    if lt_ed:
+                        st.markdown("---")
+                        st.markdown("#### ✏️ Editar lote")
+                        ec1, ec2 = st.columns(2)
+                        with ec1:
+                            new_qtd = st.number_input("Quantidade", value=float(lt_ed.quantidade_atual or 0), key="est_ed_qtd")
+                            new_val = st.date_input("Validade", value=lt_ed.data_validade, key="est_ed_val")
+                        with ec2:
+                            new_forn = st.text_input("Fornecedor", value=lt_ed.fornecedor or "", key="est_ed_forn")
+                            new_lote = st.text_input("Lote", value=lt_ed.lote or "", key="est_ed_lote")
+                        bc1, bc2 = st.columns(2)
+                        with bc1:
+                            if st.button("💾 Salvar", key="est_save", use_container_width=True):
+                                lt_ed.quantidade_atual = new_qtd
+                                lt_ed.data_validade = new_val
+                                lt_ed.fornecedor = new_forn if new_forn else None
+                                lt_ed.lote = new_lote if new_lote else None
+                                db.commit()
+                                del st.session_state["est_editando"]
+                                st.success("Lote atualizado!")
+                                st.rerun()
+                        with bc2:
+                            if st.button("❌ Cancelar", key="est_cancel", use_container_width=True):
+                                del st.session_state["est_editando"]
+                                st.rerun()
             else:
-                st.info("Nenhum lote cadastrado ainda.")
+                st.info("Nenhum lote cadastrado.")
 
             st.markdown("### Alertas")
             baixo, validadep = alertas()
@@ -3211,7 +3285,7 @@ def tela_estoque():
                     except Exception:
                         _prod_nome_mov = "—"
                         _lote_str_mov = "—"
-                    _data_mov = str(_mov.data)[:10] if _mov.data else "—"
+                    _data_mov = str(_mov.criado_em)[:10] if _mov.data else "—"
                     col_mov_info, col_mov_del = st.columns([6, 0.4])
                     with col_mov_info:
                         st.write(
