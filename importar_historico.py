@@ -4,22 +4,23 @@ Uso: python importar_historico.py
 """
 import pandas as pd
 from datetime import date
-from utils.db import SessionLocal, engine
-from models.base import Base
-from models.client import Client
-from models.appointment import Appointment
+from sqlalchemy import create_engine, text
+from dotenv import load_dotenv
+import os
 
-# Criar tabelas se não existirem
-Base.metadata.create_all(bind=engine)
+load_dotenv()
+
+# Conexão direta sem importar models
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@db:5432/clinica")
+engine = create_engine(DATABASE_URL)
 
 df = pd.read_excel("histórico de atendimentos.xlsx")
 print(f"Total de registros no Excel: {len(df)}")
 
-db = SessionLocal()
-try:
+with engine.connect() as conn:
     inseridos = 0
     clientes_criados = set()
-
+    
     for _, row in df.iterrows():
         data_at = row.get("DATA")
         nome_cliente = str(row.get("CLIENTE", "")).strip()
@@ -36,31 +37,48 @@ try:
             data_at = date.today()
         else:
             data_at = pd.to_datetime(data_at).date()
+        mes = data_at.strftime("%Y-%m")
 
-        # Buscar ou criar cliente
-        cliente = db.query(Client).filter(Client.nome.ilike(f"%{nome_cliente}%")).first()
-        if not cliente:
-            cliente = Client(nome=nome_cliente, telefone="", email="")
-            db.add(cliente)
-            db.flush()
+        # Buscar cliente pelo nome (ILIKE = case insensitive)
+        result = conn.execute(text("SELECT id FROM clientes WHERE nome ILIKE :nome"), {"nome": f"%{nome_cliente}%"})
+        cliente_row = result.fetchone()
+        
+        if cliente_row:
+            cliente_id = cliente_row[0]
+        else:
+            # Criar novo cliente
+            result = conn.execute(
+                text("INSERT INTO clientes (nome, telefone, email) VALUES (:nome, '', '') RETURNING id"),
+                {"nome": nome_cliente}
+            )
+            cliente_id = result.fetchone()[0]
             clientes_criados.add(nome_cliente)
             print(f"  Cliente criado: {nome_cliente}")
+            conn.commit()
 
-        mes = data_at.strftime("%Y-%m")
-        at = Appointment(
-            data=data_at,
-            mes=mes,
-            cliente_id=cliente.id,
-            protocolo_atendimento=protocolo,
-            queixa_consulta=queixa,
-            tipo_tratamento=tipo_trat,
-            observacoes=obs,
+        # Inserir atendimento
+        conn.execute(
+            text("""
+                INSERT INTO atendimentos (data, mes, cliente_id, protocolo_atendimento, queixa_consulta, tipo_tratamento, observacoes)
+                VALUES (:data, :mes, :cliente_id, :protocolo, :queixa, :tipo_trat, :obs)
+            """),
+            {
+                "data": data_at,
+                "mes": mes,
+                "cliente_id": cliente_id,
+                "protocolo": protocolo,
+                "queixa": queixa,
+                "tipo_trat": tipo_trat,
+                "obs": obs
+            }
         )
-        db.add(at)
         inseridos += 1
-
-    db.commit()
+        
+        # Commit a cada 100 registros
+        if inseridos % 100 == 0:
+            conn.commit()
+            print(f"  {inseridos} registros processados...")
+    
+    conn.commit()
     print(f"\nImportacao concluida! {inseridos} atendimentos inseridos.")
     print(f"Clientes novos criados: {len(clientes_criados)}")
-finally:
-    db.close()
