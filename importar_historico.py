@@ -1,6 +1,7 @@
 """
 Importa o histórico de atendimentos do Excel para o banco de dados.
 Uso: python importar_historico.py
+Versao: 2.0 - Sem dependencia de models
 """
 import pandas as pd
 from datetime import date
