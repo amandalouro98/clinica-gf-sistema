@@ -24,9 +24,9 @@ from models.base import Base
 from models.user import User
 from models.client import Client
 from models.assessment import Assessment
+from models.stock import Product, StockLote, StockMovement
 from models.appointment import Appointment, AppointmentMaterial
 from models.biometrics import Biometrics
-from models.stock import Product, StockLote, StockMovement
 from models.contract import Contract
 from models.schedule import ScheduledAppointment
 from models.professional import Professional
@@ -278,6 +278,47 @@ def _render_calendario(dias: list, ags_por_dia: dict, semana: bool = False) -> s
         f'{colunas}'
         f'</div>'
     )
+
+
+def _mostrar_pdf(pdf_bytes, nome_arquivo, key_suffix=""):
+    """PDF com botão de compartilhar nativo (iOS/Android) + download fallback"""
+    import base64
+    b64 = base64.b64encode(pdf_bytes).decode()
+    st.markdown(f'''
+    <script>
+    async function compartilharPDF_{key_suffix.replace("-","_")}() {{
+        try {{
+            const b64 = "{b64}";
+            const byteChars = atob(b64);
+            const byteArray = new Uint8Array(byteChars.length);
+            for (let i = 0; i < byteChars.length; i++) byteArray[i] = byteChars.charCodeAt(i);
+            const file = new File([byteArray], "{nome_arquivo}", {{type: "application/pdf"}});
+            if (navigator.canShare && navigator.canShare({{files: [file]}})) {{
+                await navigator.share({{files: [file], title: "{nome_arquivo}"}});
+            }} else {{
+                // Fallback: download direto
+                const link = document.createElement("a");
+                link.href = "data:application/pdf;base64," + b64;
+                link.download = "{nome_arquivo}";
+                link.click();
+            }}
+        }} catch(e) {{
+            if (e.name !== "AbortError") {{
+                const link = document.createElement("a");
+                link.href = "data:application/pdf;base64,{b64}";
+                link.download = "{nome_arquivo}";
+                link.click();
+            }}
+        }}
+    }}
+    </script>
+    <button onclick="compartilharPDF_{key_suffix.replace("-","_")}()" style="
+        width:100%;padding:12px;margin:8px 0;
+        background:#d59c9c;color:white;border:none;border-radius:8px;
+        font-size:1em;font-weight:600;cursor:pointer;">
+        📤 Compartilhar / Baixar: {nome_arquivo}
+    </button>
+    ''', unsafe_allow_html=True)
 
 
 # ====== LOGIN ======
@@ -1428,7 +1469,7 @@ def tela_agenda():
         profs_db = db.query(Professional).order_by(Professional.nome.asc()).all()
         if profs_db:
             for p in profs_db:
-                col_cor, col_nome, col_btn = st.columns([0.4, 4, 1])
+                col_cor, col_nome, col_btn = st.columns([0.4, 4, 0.4])
                 with col_cor:
                     st.markdown(
                         f'<div style="width:22px;height:22px;background:{p.cor};'
@@ -1438,9 +1479,46 @@ def tela_agenda():
                 with col_nome:
                     st.write(p.nome)
                 with col_btn:
-                    if st.button("Remover", key=f"rem_prof_{p.id}", use_container_width=True):
-                        db.delete(p)
-                        db.commit()
+                    with st.popover("⋮", use_container_width=True):
+                        if st.button("✏️ Editar", key=f"prof_edit_{p.id}"):
+                            st.session_state["prof_editando"] = p.id
+                            st.rerun()
+                        if st.button("🗑️ Remover", key=f"rem_prof_{p.id}", use_container_width=True):
+                            db.delete(p)
+                            db.commit()
+                            st.rerun()
+            # Formulário de edição de profissional
+            if st.session_state.get("prof_editando"):
+                _pid = st.session_state["prof_editando"]
+                _prof_ed = db.get(Professional, _pid)
+                if _prof_ed:
+                    st.markdown("---")
+                    st.markdown("##### Editar Profissional")
+                    with st.form("form_editar_prof", clear_on_submit=False):
+                        _ed_prof_nome = st.text_input("Nome", value=_prof_ed.nome, key="ed_prof_nome")
+                        _ed_prof_cor = st.selectbox(
+                            "Cor", list(CORES_PROFISSIONAIS.keys()),
+                            index=list(CORES_PROFISSIONAIS.values()).index(_prof_ed.cor)
+                            if _prof_ed.cor in CORES_PROFISSIONAIS.values() else 0,
+                            key="ed_prof_cor",
+                        )
+                        col_psv, col_pcn = st.columns(2)
+                        with col_psv:
+                            _salvar_prof = st.form_submit_button("💾 Salvar", use_container_width=True)
+                        with col_pcn:
+                            _cancelar_prof = st.form_submit_button("Cancelar", use_container_width=True)
+                    if _salvar_prof:
+                        if not _ed_prof_nome.strip():
+                            st.error("Informe o nome.")
+                        else:
+                            _prof_ed.nome = _ed_prof_nome.strip()
+                            _prof_ed.cor = CORES_PROFISSIONAIS[_ed_prof_cor]
+                            db.commit()
+                            st.success("Profissional atualizado!")
+                            st.session_state.pop("prof_editando", None)
+                            st.rerun()
+                    if _cancelar_prof:
+                        st.session_state.pop("prof_editando", None)
                         st.rerun()
         else:
             st.info("Nenhum profissional cadastrado.")
@@ -2824,6 +2902,7 @@ def tela_atendimentos():
                     "Selecionar": False,
                     "Data": at.data.strftime("%d/%m/%Y") if at.data else "—",
                     "Cliente": cli.nome if cli else "—",
+                    "Protocolo": (at.protocolo_atendimento[:50] + "...") if at.protocolo_atendimento and len(at.protocolo_atendimento) > 50 else (at.protocolo_atendimento or "—"),
                     "Queixa": (at.queixa_consulta[:50] + "...") if at.queixa_consulta and len(at.queixa_consulta) > 50 else (at.queixa_consulta or "—"),
                     "Tipo Tratamento": at.tipo_tratamento or "—",
                     "Observações": (at.observacoes[:50] + "...") if at.observacoes and len(at.observacoes) > 50 else (at.observacoes or "—"),
@@ -2837,7 +2916,7 @@ def tela_atendimentos():
                 column_config={
                     "Selecionar": st.column_config.CheckboxColumn("Selecionar", default=False),
                 },
-                disabled=["Data", "Cliente", "Queixa", "Tipo Tratamento", "Observações"],
+                disabled=["Data", "Cliente", "Protocolo", "Queixa", "Tipo Tratamento", "Observações"],
                 key="at_hist_editor"
             )
 
@@ -2963,7 +3042,70 @@ def tela_biometria():
                     .dt.strftime("%d/%m/%Y")
                 )
                 st.markdown("#### Histórico completo")
-                st.dataframe(historico, use_container_width=True, hide_index=True)
+                bio_records = (
+                    db.query(Biometrics)
+                    .filter(Biometrics.cliente_id == cid)
+                    .order_by(Biometrics.data_medicao.desc())
+                    .all()
+                )
+                for _bio in bio_records:
+                    _data_bio = _bio.data_medicao.strftime("%d/%m/%Y") if _bio.data_medicao else "—"
+                    col_bio_info, col_bio_menu = st.columns([6, 0.4])
+                    with col_bio_info:
+                        st.write(
+                            f"**{_data_bio}** — Peso: {_bio.peso or '—'} kg | "
+                            f"Cintura: {_bio.cintura or '—'} | Abdômen: {_bio.abdomen or '—'} | "
+                            f"Quadril: {_bio.quadril or '—'} | Braço: {_bio.braco or '—'} | "
+                            f"Coxa: {_bio.coxa or '—'}"
+                        )
+                    with col_bio_menu:
+                        with st.popover("⋮", use_container_width=True):
+                            if st.button("✏️ Editar", key=f"bio_edit_{_bio.id}"):
+                                st.session_state["bio_editando"] = _bio.id
+                                st.rerun()
+                            if st.button("🗑️ Excluir", key=f"bio_del_{_bio.id}"):
+                                db.delete(_bio)
+                                db.commit()
+                                st.rerun()
+                # Formulário de edição de biometria
+                if st.session_state.get("bio_editando"):
+                    _bid = st.session_state["bio_editando"]
+                    _bio_ed = db.get(Biometrics, _bid)
+                    if _bio_ed and _bio_ed.cliente_id == cid:
+                        st.markdown("---")
+                        st.markdown("##### Editar Biometria")
+                        with st.form("form_editar_bio", clear_on_submit=False):
+                            _ed_bio_data = st.date_input("Data", value=_bio_ed.data_medicao, format="DD/MM/YYYY", key="ed_bio_data")
+                            col_eb1, col_eb2, col_eb3 = st.columns(3)
+                            with col_eb1:
+                                _ed_bio_peso = st.number_input("Peso (kg)", value=float(_bio_ed.peso or 0), min_value=0.0, step=0.1, key="ed_bio_peso")
+                                _ed_bio_cin = st.number_input("Cintura (cm)", value=float(_bio_ed.cintura or 0), min_value=0.0, step=0.1, key="ed_bio_cin")
+                            with col_eb2:
+                                _ed_bio_abd = st.number_input("Abdômen (cm)", value=float(_bio_ed.abdomen or 0), min_value=0.0, step=0.1, key="ed_bio_abd")
+                                _ed_bio_qua = st.number_input("Quadril (cm)", value=float(_bio_ed.quadril or 0), min_value=0.0, step=0.1, key="ed_bio_qua")
+                            with col_eb3:
+                                _ed_bio_bra = st.number_input("Braço (cm)", value=float(_bio_ed.braco or 0), min_value=0.0, step=0.1, key="ed_bio_bra")
+                                _ed_bio_cox = st.number_input("Coxa (cm)", value=float(_bio_ed.coxa or 0), min_value=0.0, step=0.1, key="ed_bio_cox")
+                            col_ebsv, col_ebcn = st.columns(2)
+                            with col_ebsv:
+                                _salvar_bio_ed = st.form_submit_button("💾 Salvar", use_container_width=True)
+                            with col_ebcn:
+                                _cancelar_bio_ed = st.form_submit_button("Cancelar", use_container_width=True)
+                        if _salvar_bio_ed:
+                            _bio_ed.data_medicao = _ed_bio_data
+                            _bio_ed.peso = _ed_bio_peso
+                            _bio_ed.cintura = _ed_bio_cin
+                            _bio_ed.abdomen = _ed_bio_abd
+                            _bio_ed.quadril = _ed_bio_qua
+                            _bio_ed.braco = _ed_bio_bra
+                            _bio_ed.coxa = _ed_bio_cox
+                            db.commit()
+                            st.success("Biometria atualizada!")
+                            st.session_state.pop("bio_editando", None)
+                            st.rerun()
+                        if _cancelar_bio_ed:
+                            st.session_state.pop("bio_editando", None)
+                            st.rerun()
     finally:
         db.close()
 
@@ -3054,11 +3196,36 @@ def tela_estoque():
 
         # ---------- ABA 2: Movimentações ----------
         with aba2:
-            dfm = pd.read_sql(
-                db.query(StockMovement).order_by(StockMovement.criado_em.desc()).statement,
-                db.bind,
+            movs_lista = (
+                db.query(StockMovement)
+                .order_by(StockMovement.criado_em.desc())
+                .all()
             )
-            st.dataframe(dfm, use_container_width=True)
+            if movs_lista:
+                for _mov in movs_lista:
+                    # Tenta resolver nome do produto pelo lote
+                    try:
+                        _lt_mov = db.get(StockLote, _mov.lote_id)
+                        _prod_nome_mov = _lt_mov.produto.nome if _lt_mov and _lt_mov.produto else "—"
+                        _lote_str_mov = _lt_mov.lote or "S/N" if _lt_mov else "—"
+                    except Exception:
+                        _prod_nome_mov = "—"
+                        _lote_str_mov = "—"
+                    _data_mov = str(_mov.data)[:10] if _mov.data else "—"
+                    col_mov_info, col_mov_del = st.columns([6, 0.4])
+                    with col_mov_info:
+                        st.write(
+                            f"**{_data_mov}** — {_prod_nome_mov} | Lote: {_lote_str_mov} | "
+                            f"{_mov.tipo or '—'} | Qtd: {_mov.quantidade} | {_mov.motivo or '—'}"
+                        )
+                    with col_mov_del:
+                        with st.popover("⋮", use_container_width=True):
+                            if st.button("🗑️ Excluir", key=f"mov_del_{_mov.id}"):
+                                db.delete(_mov)
+                                db.commit()
+                                st.rerun()
+            else:
+                st.info("Nenhuma movimentação registrada.")
 
             st.markdown("### Movimentar manualmente")
             produtos = db.query(Product).order_by(Product.nome.asc()).all()
@@ -3668,7 +3835,7 @@ def tela_vendas():
 
             # Auto-preencher valor se selecionou procedimento cadastrado
             _val_default = 0.0
-            _sessoes_default = 1
+            _sessoes_default = 2
             if proc_selecionado != "— digitar manualmente —" and proc_selecionado in _mapa_procs:
                 _p_ref = _mapa_procs[proc_selecionado]
                 if tipo_item == "Pacote" and _p_ref.valor_pacote:
@@ -3763,7 +3930,6 @@ def tela_vendas():
 
         vendas_rec = db.query(Sale).order_by(Sale.data_venda.desc(), Sale.id.desc()).limit(50).all()
         if vendas_rec:
-            rows_v = []
             for v in vendas_rec:
                 # Determinar tipo predominante da venda
                 tipos_itens = set(it.tipo for it in v.itens)
@@ -3781,20 +3947,59 @@ def tela_vendas():
                     continue
 
                 procs = ", ".join(f"{it.procedimento}" for it in v.itens)
-                rows_v.append({
-                    "Data": v.data_venda.strftime("%d/%m/%Y"),
-                    "Cliente": v.cliente.nome if v.cliente else "—",
-                    "Tipo": tipo_venda,
-                    "Procedimentos": procs,
-                    "Valor Total (R$)": f"{v.valor_total:.2f}",
-                    "Pagamento": v.forma_pagamento,
-                })
-            if rows_v:
-                st.dataframe(pd.DataFrame(rows_v), use_container_width=True, hide_index=True)
-            else:
-                st.info("Nenhuma venda encontrada com esse filtro.")
+                col_info_v, col_menu_v = st.columns([6, 0.4])
+                with col_info_v:
+                    st.write(
+                        f"**{v.data_venda.strftime('%d/%m/%Y')}** — "
+                        f"{v.cliente.nome if v.cliente else '—'} | "
+                        f"{tipo_venda} | {procs} | "
+                        f"R$ {v.valor_total:.2f} | {v.forma_pagamento}"
+                    )
+                with col_menu_v:
+                    with st.popover("⋮", use_container_width=True):
+                        if st.button("✏️ Editar", key=f"venda_edit_{v.id}"):
+                            st.session_state["venda_editando"] = v.id
+                            st.rerun()
+                        if st.button("🗑️ Excluir", key=f"venda_del_{v.id}"):
+                            db.delete(v)
+                            db.commit()
+                            st.rerun()
         else:
             st.info("Nenhuma venda registrada.")
+
+        # ── Formulário de edição de venda ──
+        if st.session_state.get("venda_editando"):
+            _vid = st.session_state["venda_editando"]
+            _venda_ed = db.get(Sale, _vid)
+            if _venda_ed:
+                st.markdown("---")
+                st.markdown("#### Editar Venda")
+                with st.form("form_editar_venda", clear_on_submit=False):
+                    _ed_data_v = st.date_input("Data", value=_venda_ed.data_venda, format="DD/MM/YYYY", key="ed_venda_data")
+                    _ed_pag_v = st.selectbox(
+                        "Forma de pagamento",
+                        ["Cartão de Crédito", "Cartão de Débito", "Pix"],
+                        index=["Cartão de Crédito", "Cartão de Débito", "Pix"].index(_venda_ed.forma_pagamento)
+                        if _venda_ed.forma_pagamento in ["Cartão de Crédito", "Cartão de Débito", "Pix"] else 0,
+                        key="ed_venda_pag",
+                    )
+                    _ed_obs_v = st.text_input("Observações", value=_venda_ed.observacoes or "", key="ed_venda_obs")
+                    col_sv2, col_cn2 = st.columns(2)
+                    with col_sv2:
+                        _salvar_venda_ed = st.form_submit_button("💾 Salvar", use_container_width=True)
+                    with col_cn2:
+                        _cancelar_venda_ed = st.form_submit_button("Cancelar", use_container_width=True)
+                if _salvar_venda_ed:
+                    _venda_ed.data_venda = _ed_data_v
+                    _venda_ed.forma_pagamento = _ed_pag_v
+                    _venda_ed.observacoes = _ed_obs_v or None
+                    db.commit()
+                    st.success("Venda atualizada!")
+                    st.session_state.pop("venda_editando", None)
+                    st.rerun()
+                if _cancelar_venda_ed:
+                    st.session_state.pop("venda_editando", None)
+                    st.rerun()
     finally:
         db.close()
 
@@ -3903,13 +4108,50 @@ def tela_cadastros():
             materiais = db.query(Material).filter(Material.ativo == True).order_by(Material.nome.asc()).all()
             if materiais:
                 for mat in materiais:
-                    c1, c2, c3 = st.columns([4, 2, 1])
+                    c1, c2, c3 = st.columns([4, 2, 0.4])
                     c1.write(mat.nome)
                     c2.write(mat.tipo)
                     with c3:
-                        if st.button("🗑️", key=f"del_mat_{mat.id}", help="Excluir"):
-                            mat.ativo = False
-                            db.commit()
+                        with st.popover("⋮", use_container_width=True):
+                            if st.button("✏️ Editar", key=f"mat_edit_{mat.id}"):
+                                st.session_state["mat_editando"] = mat.id
+                                st.rerun()
+                            if st.button("🗑️ Excluir", key=f"del_mat_{mat.id}", help="Excluir"):
+                                mat.ativo = False
+                                db.commit()
+                                st.rerun()
+                # Formulário de edição de material
+                if st.session_state.get("mat_editando"):
+                    _mid = st.session_state["mat_editando"]
+                    _mat_ed = db.get(Material, _mid)
+                    if _mat_ed and _mat_ed.ativo:
+                        st.markdown("---")
+                        st.markdown("##### Editar Material")
+                        with st.form("form_editar_mat", clear_on_submit=False):
+                            _ed_mat_nome = st.text_input("Nome", value=_mat_ed.nome, key="ed_mat_nome")
+                            _ed_mat_tipo = st.selectbox(
+                                "Tipo", ["Injetável", "Descartável"],
+                                index=["Injetável", "Descartável"].index(_mat_ed.tipo)
+                                if _mat_ed.tipo in ["Injetável", "Descartável"] else 0,
+                                key="ed_mat_tipo",
+                            )
+                            col_msv, col_mcn = st.columns(2)
+                            with col_msv:
+                                _salvar_mat = st.form_submit_button("💾 Salvar", use_container_width=True)
+                            with col_mcn:
+                                _cancelar_mat = st.form_submit_button("Cancelar", use_container_width=True)
+                        if _salvar_mat:
+                            if not _ed_mat_nome.strip():
+                                st.error("Informe o nome do material.")
+                            else:
+                                _mat_ed.nome = _ed_mat_nome.strip()
+                                _mat_ed.tipo = _ed_mat_tipo
+                                db.commit()
+                                st.success("Material atualizado!")
+                                st.session_state.pop("mat_editando", None)
+                                st.rerun()
+                        if _cancelar_mat:
+                            st.session_state.pop("mat_editando", None)
                             st.rerun()
             else:
                 st.info("Nenhum material cadastrado ainda.")
