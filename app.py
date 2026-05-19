@@ -3207,13 +3207,24 @@ def tela_estoque():
                 ids_lotes = []
                 for lt in lotes:
                     ids_lotes.append(lt.id)
+                    # Calcular saldo do produto (entradas - saídas de todas as movimentações)
+                    entradas = db.query(func.sum(StockMovement.quantidade)).filter(
+                        StockMovement.produto_id == lt.produto_id,
+                        StockMovement.tipo == "entrada"
+                    ).scalar() or 0
+                    saidas = db.query(func.sum(StockMovement.quantidade)).filter(
+                        StockMovement.produto_id == lt.produto_id,
+                        StockMovement.tipo == "saida"
+                    ).scalar() or 0
+                    saldo_produto = float(entradas) - float(saidas)
+                    
                     dados_est.append({
                         "Selecionar": False,
                         "Produto": lt.produto.nome if lt.produto else "—",
                         "Categoria": lt.produto.categoria if lt.produto else "—",
                         "Lote": lt.lote or "S/N",
-                        "Quantidade": lt.quantidade_atual,
-                        # "Qtd mínima" removido - alerta fixo em 5 unidades
+                        "Qtd Comprada": lt.quantidade_atual,
+                        "Saldo": round(saldo_produto, 2),
                         "Validade": formatar_data_br(lt.data_validade),
                         "Fornecedor": lt.fornecedor or "",
                     })
