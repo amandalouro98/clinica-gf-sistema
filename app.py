@@ -1069,13 +1069,13 @@ def tela_agenda():
                             except Exception:
                                 pass
                         db.commit()
-                        if int(num_semanas) > 1:
-                            st.success(f"{int(num_semanas)} agendamentos criados (recorrência semanal)!")
+                        if int(num_repeticoes) > 1:
+                            st.success(f"{int(num_repeticoes)} agendamentos criados (recorrência {tipo_recorrencia.lower()})!")
                         else:
                             st.success("Agendamento salvo!")
                         for _k in ["ag_cliente","ag_prof","ag_proc","ag_hora_ini",
                                     "ag_duracao","ag_obs","ag_sala","ag_data",
-                                    "ag_pacote_item_id","ag_recorrente","ag_num_semanas"]:
+                                    "ag_pacote_item_id","ag_recorrente","ag_tipo_recorrencia","ag_num_repeticoes"]:
                             st.session_state.pop(_k, None)
                     st.rerun()
 
