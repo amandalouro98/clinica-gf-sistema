@@ -4295,24 +4295,84 @@ def tela_cadastros():
             if tratamentos:
                 import pandas as pd
                 rows_proc = []
+                ids_trat = []
                 for trat in tratamentos:
+                    ids_trat.append(trat.id)
                     rows_proc.append({
+                        "Selecionar": False,
                         "Nome": trat.nome,
                         "Descrição": trat.descricao or "—",
                         "Valor Unit. (R$)": f"{trat.valor_unitario:.2f}" if trat.valor_unitario else "—",
                         "Valor Pacote (R$)": f"{trat.valor_pacote:.2f}" if trat.valor_pacote else "—",
                         "Sessões Pacote": trat.sessoes_pacote or "—",
                     })
-                st.dataframe(pd.DataFrame(rows_proc), use_container_width=True, hide_index=True)
-
-                # Botão excluir por nome
-                for trat in tratamentos:
-                    col_n, col_del = st.columns([6, 1])
-                    with col_del:
-                        if st.button("🗑️", key=f"del_trat_{trat.id}", help=f"Excluir {trat.nome}"):
-                            trat.ativo = False
-                            db.commit()
-                            st.rerun()
+                
+                df_proc = pd.DataFrame(rows_proc)
+                edited_df_proc = st.data_editor(
+                    df_proc,
+                    hide_index=True,
+                    column_config={"Selecionar": st.column_config.CheckboxColumn("Selecionar", default=False)},
+                    disabled=["Nome", "Descrição", "Valor Unit. (R$)", "Valor Pacote (R$)", "Sessões Pacote"],
+                    key="proc_editor"
+                )
+                
+                # Identificar linha selecionada
+                linha_sel_proc = None
+                for i, row in edited_df_proc.iterrows():
+                    if row.get("Selecionar"):
+                        linha_sel_proc = ids_trat[i]
+                        break
+                
+                # Botões de ação
+                col_proc1, col_proc2, col_proc3 = st.columns([1, 1, 4])
+                with col_proc1:
+                    btn_editar_proc = st.button("✏️ Editar", key="btn_editar_proc", disabled=(linha_sel_proc is None))
+                with col_proc2:
+                    btn_excluir_proc = st.button("🗑️ Excluir", key="btn_excluir_proc", disabled=(linha_sel_proc is None))
+                
+                if btn_excluir_proc and linha_sel_proc:
+                    trat_del = db.get(Tratamento, linha_sel_proc)
+                    if trat_del:
+                        trat_del.ativo = False
+                        db.commit()
+                        st.success("Procedimento excluído!")
+                        st.rerun()
+                
+                if btn_editar_proc and linha_sel_proc:
+                    st.session_state["proc_editando"] = linha_sel_proc
+                    st.rerun()
+                
+                # Form de edição
+                if st.session_state.get("proc_editando"):
+                    trat_ed = db.get(Tratamento, st.session_state["proc_editando"])
+                    if trat_ed:
+                        st.markdown("---")
+                        st.markdown("#### ✏️ Editar procedimento")
+                        pec1, pec2 = st.columns(2)
+                        with pec1:
+                            new_nome_proc = st.text_input("Nome", value=trat_ed.nome, key="proc_ed_nome")
+                            new_desc_proc = st.text_area("Descrição", value=trat_ed.descricao or "", key="proc_ed_desc")
+                            new_val_unit = st.number_input("Valor Unitário (R$)", value=float(trat_ed.valor_unitario or 0), min_value=0.0, step=0.01, key="proc_ed_vunit")
+                        with pec2:
+                            new_val_pac = st.number_input("Valor Pacote (R$)", value=float(trat_ed.valor_pacote or 0), min_value=0.0, step=0.01, key="proc_ed_vpac")
+                            new_sess_pac = st.number_input("Sessões Pacote", value=int(trat_ed.sessoes_pacote or 0), min_value=0, step=1, key="proc_ed_sess")
+                        
+                        bpc1, bpc2 = st.columns(2)
+                        with bpc1:
+                            if st.button("💾 Salvar", key="proc_save", use_container_width=True):
+                                trat_ed.nome = new_nome_proc
+                                trat_ed.descricao = new_desc_proc if new_desc_proc else None
+                                trat_ed.valor_unitario = new_val_unit if new_val_unit > 0 else None
+                                trat_ed.valor_pacote = new_val_pac if new_val_pac > 0 else None
+                                trat_ed.sessoes_pacote = new_sess_pac if new_sess_pac > 0 else None
+                                db.commit()
+                                del st.session_state["proc_editando"]
+                                st.success("Procedimento atualizado!")
+                                st.rerun()
+                        with bpc2:
+                            if st.button("❌ Cancelar", key="proc_cancel", use_container_width=True):
+                                del st.session_state["proc_editando"]
+                                st.rerun()
             else:
                 st.info("Nenhum procedimento cadastrado ainda.")
     finally:
