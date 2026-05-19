@@ -3192,6 +3192,10 @@ def tela_estoque():
             _categorias_est = ["Todas"] + sorted(list(set(p.categoria for p in db.query(Product).all() if p.categoria)))
             _cat_filtro = st.selectbox("Filtrar por categoria", _categorias_est, key="est_filtro_cat")
 
+            # Filtro por produto
+            _produtos_est = ["Todos"] + sorted(list(set(p.nome for p in db.query(Product).all() if p.nome)))
+            _prod_filtro = st.selectbox("Filtrar por produto", _produtos_est, key="est_filtro_prod")
+
             lotes = (
                 db.query(StockLote)
                 .join(Product)
@@ -3199,9 +3203,11 @@ def tela_estoque():
                 .all()
             )
             
-            # Aplicar filtro
+            # Aplicar filtros
             if _cat_filtro != "Todas":
                 lotes = [lt for lt in lotes if lt.produto and lt.produto.categoria == _cat_filtro]
+            if _prod_filtro != "Todos":
+                lotes = [lt for lt in lotes if lt.produto and lt.produto.nome == _prod_filtro]
             
             if lotes:
                 dados_est = []
