@@ -943,14 +943,21 @@ def tela_agenda():
 
                 # Recorrência
                 if not modo_edicao:
-                    recorrente = st.checkbox("Repetir semanalmente", key="ag_recorrente")
+                    recorrente = st.checkbox("Recorrência", key="ag_recorrente")
                     if recorrente:
-                        num_semanas = st.number_input("Quantas semanas?", min_value=2, max_value=52, value=4, step=1, key="ag_num_semanas")
+                        tipo_recorrencia = st.selectbox(
+                            "Tipo de recorrência",
+                            ["Semanal", "Quinzenal", "Mensal", "Bimestral", "Trimestral", "Semestral"],
+                            key="ag_tipo_recorrencia"
+                        )
+                        num_repeticoes = st.number_input("Quantas vezes?", min_value=2, max_value=52, value=4, step=1, key="ag_num_repeticoes")
                     else:
-                        num_semanas = 1
+                        tipo_recorrencia = None
+                        num_repeticoes = 1
                 else:
                     recorrente = False
-                    num_semanas = 1
+                    tipo_recorrencia = None
+                    num_repeticoes = 1
 
             btn_label = "💾 Salvar alterações" if modo_edicao else "💾 Salvar agendamento"
             if st.button(btn_label, use_container_width=True, key="ag_salvar"):
@@ -1006,8 +1013,26 @@ def tela_agenda():
                     else:
                         _pacote_item_id = st.session_state.pop("ag_pacote_item_id", None)
                         # Criar agendamentos (1 ou múltiplos se recorrente)
-                        for _sem_i in range(int(num_semanas)):
-                            _data_sem = data_ag + timedelta(weeks=_sem_i)
+                        for _rep_i in range(int(num_repeticoes)):
+                            # Calcular data baseada no tipo de recorrência
+                            if tipo_recorrencia == "Semanal":
+                                _data_sem = data_ag + timedelta(weeks=_rep_i)
+                            elif tipo_recorrencia == "Quinzenal":
+                                _data_sem = data_ag + timedelta(weeks=_rep_i * 2)
+                            elif tipo_recorrencia == "Mensal":
+                                _data_sem = data_ag + timedelta(days=_rep_i * 30)
+                            elif tipo_recorrencia == "Bimestral":
+                                _data_sem = data_ag + timedelta(days=_rep_i * 60)
+                            elif tipo_recorrencia == "Trimestral":
+                                _data_sem = data_ag + timedelta(days=_rep_i * 90)
+                            elif tipo_recorrencia == "Semestral":
+                                _data_sem = data_ag + timedelta(days=_rep_i * 180)
+                            else:
+                                _data_sem = data_ag + timedelta(weeks=_rep_i)
+                            
+                            # Pular sábado (5) e domingo (6)
+                            while _data_sem.weekday() >= 5:
+                                _data_sem = _data_sem + timedelta(days=1)
                             novo = ScheduledAppointment(
                                 data=_data_sem,
                                 hora_inicio=hora_inicio,
