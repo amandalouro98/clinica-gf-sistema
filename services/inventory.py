@@ -31,7 +31,7 @@ def movimentar(lote_id: int, tipo: str, quantidade: float, motivo: str = ""):
 
 
 def alertas():
-    """Retorna lotes com estoque baixo (<=10) e lotes com validade nos próximos 30 dias."""
+    """Retorna lotes com estoque baixo (<=5) e lotes com validade nos próximos 30 dias."""
     db = SessionLocal()
     try:
         hoje = date.today()
@@ -39,7 +39,7 @@ def alertas():
         baixo = (
             db.query(StockLote)
             .options(joinedload(StockLote.produto))
-            .filter(StockLote.quantidade_atual <= 10)
+            .filter(StockLote.quantidade_atual <= 5)
             .filter(StockLote.quantidade_atual > 0)
             .all()
         )

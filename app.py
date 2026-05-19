@@ -3173,7 +3173,7 @@ def tela_estoque():
                         produto_id=mapa_prod[prod_compra],
                         lote=lote_compra or None,
                         quantidade_atual=qtd_compra,
-                        quantidade_minima=qtd_min_compra,
+                        quantidade_minima=0,
                         data_validade=validade_compra,
                         fornecedor=fornecedor_compra or None,
                         data_entrada=data_ent_compra,
@@ -3213,7 +3213,7 @@ def tela_estoque():
                         "Categoria": lt.produto.categoria if lt.produto else "—",
                         "Lote": lt.lote or "S/N",
                         "Quantidade": lt.quantidade_atual,
-                        "Qtd mínima": lt.quantidade_minima,
+                        # "Qtd mínima" removido - alerta fixo em 5 unidades
                         "Validade": formatar_data_br(lt.data_validade),
                         "Fornecedor": lt.fornecedor or "",
                     })
@@ -3223,7 +3223,7 @@ def tela_estoque():
                     df_est,
                     hide_index=True,
                     column_config={"Selecionar": st.column_config.CheckboxColumn("Selecionar", default=False)},
-                    disabled=["Produto", "Categoria", "Lote", "Quantidade", "Qtd mínima", "Validade", "Fornecedor"],
+                    disabled=["Produto", "Categoria", "Lote", "Quantidade", "Validade", "Fornecedor"],
                     key="est_editor"
                 )
                 
@@ -3288,7 +3288,7 @@ def tela_estoque():
             baixo, validadep = alertas()
             if baixo:
                 nomes = [f"{lt.produto.nome} (lote: {lt.lote or 'S/N'})" for lt in baixo]
-                st.warning(f"Estoque baixo: {', '.join(nomes)}")
+                st.warning(f"Estoque baixo (≤5 unidades): {', '.join(nomes)}")
             if validadep:
                 nomes_v = [f"{lt.produto.nome} (lote: {lt.lote or 'S/N'})" for lt in validadep]
                 st.warning(f"Validade próxima (30 dias): {', '.join(nomes_v)}")
@@ -3628,7 +3628,7 @@ def tela_relatorios():
                     _qtd_total = sum(float(_l.quantidade_atual or 0) for _l in _lotes)
                     _lotes_str = ", ".join([f"Lote {_l.lote or 'S/N'}: {_l.quantidade_atual}" for _l in _lotes]) or "—"
                     _alerta = "⚠️ Baixo" if any(
-                        float(_l.quantidade_atual or 0) <= float(_l.quantidade_minima or 0) for _l in _lotes
+                        float(_l.quantidade_atual or 0) <= 5 for _l in _lotes
                     ) else "OK"
                     _rows_e.append({
                         "Produto": _p.nome,
