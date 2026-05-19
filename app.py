@@ -3368,8 +3368,7 @@ def tela_estoque():
                 else:
                     st.error("Selecione produto, lote e informe quantidade.")
 
-        finally:
-        db.close()
+    finally:\r\n        db.close()()
 
 
 # ====== TELA: RELATÓRIOS ======
