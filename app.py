@@ -20,6 +20,7 @@ load_dotenv()
 
 # ====== IMPORTS DO PROJETO ======
 from utils.db import SessionLocal, engine
+from sqlalchemy import func
 from models.base import Base
 from models.user import User
 from models.client import Client
