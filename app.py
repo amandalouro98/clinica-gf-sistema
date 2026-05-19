@@ -3287,7 +3287,7 @@ def tela_estoque():
             st.markdown("### Alertas")
             baixo, validadep = alertas()
             if baixo:
-                nomes = [f"{lt.produto.nome} (lote: {lt.lote or 'S/N'})" for lt in baixo]
+                nomes = [f"{prod.nome} (saldo: {sum([l.quantidade_atual or 0 for l in db.query(StockLote).filter(StockLote.produto_id == prod.id).all()])} unidades)" for prod in baixo]
                 st.warning(f"Estoque baixo (≤5 unidades): {', '.join(nomes)}")
             if validadep:
                 nomes_v = [f"{lt.produto.nome} (lote: {lt.lote or 'S/N'})" for lt in validadep]

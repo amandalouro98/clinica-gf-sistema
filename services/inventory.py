@@ -1,4 +1,5 @@
 from datetime import date, timedelta
+from sqlalchemy import func
 from sqlalchemy.orm import joinedload
 from utils.db import SessionLocal
 from models.stock import StockLote, StockMovement, Product
@@ -31,18 +32,26 @@ def movimentar(lote_id: int, tipo: str, quantidade: float, motivo: str = ""):
 
 
 def alertas():
-    """Retorna lotes com estoque baixo (<=5) e lotes com validade nos próximos 30 dias."""
+    """Retorna produtos com saldo total baixo (<=5) e lotes com validade próxima."""
     db = SessionLocal()
     try:
         hoje = date.today()
         limite = hoje + timedelta(days=30)
-        baixo = (
-            db.query(StockLote)
-            .options(joinedload(StockLote.produto))
-            .filter(StockLote.quantidade_atual <= 5)
-            .filter(StockLote.quantidade_atual > 0)
-            .all()
-        )
+        
+        # Calcular saldo total por produto (soma de todos os lotes)
+        produtos_baixo = []
+        produtos = db.query(Product).all()
+        
+        for prod in produtos:
+            # Soma quantidade_atual de todos os lotes deste produto
+            saldo_total = db.query(func.sum(StockLote.quantidade_atual)).filter(
+                StockLote.produto_id == prod.id
+            ).scalar() or 0
+            
+            if 0 < saldo_total <= 5:
+                produtos_baixo.append(prod)
+        
+        # Lotes com validade próxima (mantém igual)
         validade = (
             db.query(StockLote)
             .options(joinedload(StockLote.produto))
@@ -50,11 +59,7 @@ def alertas():
             .filter(StockLote.data_validade <= limite)
             .all()
         )
-        # Force load produto.nome while session is open
-        for lt in baixo:
-            _ = lt.produto.nome if lt.produto else None
-        for lt in validade:
-            _ = lt.produto.nome if lt.produto else None
-        return baixo, validade
+        
+        return produtos_baixo, validade
     finally:
         db.close()
