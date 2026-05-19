@@ -3140,7 +3140,7 @@ def tela_estoque():
     header_titulo("Estoque", "Produtos, lotes e movimentações")
     db = SessionLocal()
     try:
-        aba1, aba2, aba3 = st.tabs(["Estoque", "Movimentações", "Cadastro de Produtos"])
+        aba1, aba2 = st.tabs(["Estoque", "Movimentações"])
 
         # ---------- ABA 1: Estoque ----------
         with aba1:
@@ -3368,34 +3368,7 @@ def tela_estoque():
                 else:
                     st.error("Selecione produto, lote e informe quantidade.")
 
-        # ---------- ABA 3: Cadastro de Produtos ----------
-        with aba3:
-            st.markdown("### Produtos cadastrados")
-            df_prods = pd.read_sql(db.query(Product).statement, db.bind)
-            if not df_prods.empty:
-                st.dataframe(df_prods[["id", "nome", "categoria"]], use_container_width=True, hide_index=True)
-            else:
-                st.info("Nenhum produto cadastrado ainda.")
-
-            st.markdown("### Cadastrar novo produto")
-            with st.form("form_novo_produto", clear_on_submit=True):
-                nome_prod = st.text_input("Nome do produto*")
-                cat_prod = st.selectbox("Categoria*", ["descartavel", "injetavel", "outro"])
-                salvar_prod = st.form_submit_button("Salvar produto", use_container_width=True)
-
-            if salvar_prod:
-                if not nome_prod.strip():
-                    st.error("Nome é obrigatório.")
-                else:
-                    existe_prod = db.query(Product).filter(Product.nome == nome_prod.strip()).first()
-                    if existe_prod:
-                        st.warning("Produto com este nome já cadastrado.")
-                    else:
-                        db.add(Product(nome=nome_prod.strip(), categoria=cat_prod))
-                        db.commit()
-                        st.success("Produto cadastrado!")
-                        st.rerun()
-    finally:
+        finally:
         db.close()
 
 
@@ -4174,88 +4147,109 @@ def tela_cadastros():
     header_titulo("Cadastros", "Materiais e procedimentos")
     db = SessionLocal()
     try:
-        aba_mat, aba_trat = st.tabs(["Materiais", "Procedimentos"])
+        aba_prod, aba_trat = st.tabs(["Produtos", "Procedimentos"])
 
-        # ────── ABA MATERIAIS ──────
-        with aba_mat:
-            st.markdown("### Novo Material")
-            col1, col2, col3 = st.columns([3, 2, 1])
-            with col1:
-                nome_mat = st.text_input("Nome do material", key="mat_nome")
-            with col2:
-                tipo_mat = st.selectbox("Tipo", ["Injetável", "Descartável"], key="mat_tipo")
-            with col3:
-                st.markdown("<br>", unsafe_allow_html=True)
-                if st.button("Salvar", key="mat_salvar", use_container_width=True):
-                    if not nome_mat.strip():
-                        st.error("Informe o nome do material.")
+        # ────── ABA PRODUTOS ──────
+        with aba_prod:
+            db_prod = SessionLocal()
+            try:
+                st.markdown("### Produtos cadastrados")
+                produtos_lista = db_prod.query(Product).order_by(Product.nome.asc()).all()
+                if produtos_lista:
+                    import pandas as pd
+                    rows_prod = []
+                    ids_prod = []
+                    for p in produtos_lista:
+                        ids_prod.append(p.id)
+                        rows_prod.append({
+                            "Selecionar": False,
+                            "ID": p.id,
+                            "Nome": p.nome,
+                            "Categoria": p.categoria or "—",
+                        })
+                    df_prod = pd.DataFrame(rows_prod)
+                    edited_df_prod = st.data_editor(
+                        df_prod,
+                        hide_index=True,
+                        column_config={"Selecionar": st.column_config.CheckboxColumn("Selecionar", default=False)},
+                        disabled=["ID", "Nome", "Categoria"],
+                        key="prod_editor"
+                    )
+                    
+                    # Identificar selecionado
+                    linha_sel_prod = None
+                    for i, row in edited_df_prod.iterrows():
+                        if row.get("Selecionar"):
+                            linha_sel_prod = ids_prod[i]
+                            break
+                    
+                    # Botões
+                    col_p1, col_p2, col_p3 = st.columns([1, 1, 4])
+                    with col_p1:
+                        btn_edit_prod = st.button("✏️ Editar", key="btn_edit_prod", disabled=(linha_sel_prod is None))
+                    with col_p2:
+                        btn_del_prod = st.button("🗑️ Excluir", key="btn_del_prod", disabled=(linha_sel_prod is None))
+                    
+                    if btn_del_prod and linha_sel_prod:
+                        p_del = db_prod.get(Product, linha_sel_prod)
+                        if p_del:
+                            db_prod.delete(p_del)
+                            db_prod.commit()
+                            st.success("Produto excluído!")
+                            st.rerun()
+                    
+                    if btn_edit_prod and linha_sel_prod:
+                        st.session_state["prod_editando"] = linha_sel_prod
+                        st.rerun()
+                    
+                    if st.session_state.get("prod_editando"):
+                        p_ed = db_prod.get(Product, st.session_state["prod_editando"])
+                        if p_ed:
+                            st.markdown("---")
+                            st.markdown("#### ✏️ Editar produto")
+                            new_nome_p = st.text_input("Nome", value=p_ed.nome, key="prod_ed_nome")
+                            new_cat_p = st.selectbox("Categoria", ["descartavel", "injetavel", "outro"], 
+                                index=["descartavel", "injetavel", "outro"].index(p_ed.categoria) if p_ed.categoria in ["descartavel", "injetavel", "outro"] else 2,
+                                key="prod_ed_cat")
+                            bp1, bp2 = st.columns(2)
+                            with bp1:
+                                if st.button("💾 Salvar", key="prod_save", use_container_width=True):
+                                    p_ed.nome = new_nome_p
+                                    p_ed.categoria = new_cat_p
+                                    db_prod.commit()
+                                    del st.session_state["prod_editando"]
+                                    st.success("Produto atualizado!")
+                                    st.rerun()
+                            with bp2:
+                                if st.button("❌ Cancelar", key="prod_cancel", use_container_width=True):
+                                    del st.session_state["prod_editando"]
+                                    st.rerun()
+                else:
+                    st.info("Nenhum produto cadastrado ainda.")
+
+                st.markdown("---")
+                st.markdown("### Cadastrar novo produto")
+                with st.form("form_novo_produto", clear_on_submit=True):
+                    nome_prod = st.text_input("Nome do produto*")
+                    cat_prod = st.selectbox("Categoria*", ["descartavel", "injetavel", "outro"])
+                    salvar_prod = st.form_submit_button("Salvar produto", use_container_width=True)
+
+                if salvar_prod:
+                    if not nome_prod.strip():
+                        st.error("Nome é obrigatório.")
                     else:
-                        existe = db.query(Material).filter(
-                            Material.nome == nome_mat.strip(),
-                            Material.ativo == True
-                        ).first()
-                        if existe:
-                            st.warning("Já existe um material com este nome.")
+                        existe_prod = db_prod.query(Product).filter(Product.nome == nome_prod.strip()).first()
+                        if existe_prod:
+                            st.warning("Produto com este nome já cadastrado.")
                         else:
-                            db.add(Material(nome=nome_mat.strip(), tipo=tipo_mat))
-                            db.commit()
-                            st.success("Material cadastrado!")
+                            db_prod.add(Product(nome=nome_prod.strip(), categoria=cat_prod))
+                            db_prod.commit()
+                            st.success("Produto cadastrado!")
                             st.rerun()
+            finally:
+                db_prod.close()
 
-            st.markdown("---")
-            st.markdown("### Materiais Cadastrados")
-            materiais = db.query(Material).filter(Material.ativo == True).order_by(Material.nome.asc()).all()
-            if materiais:
-                for mat in materiais:
-                    c1, c2, c3 = st.columns([4, 2, 0.4])
-                    c1.write(mat.nome)
-                    c2.write(mat.tipo)
-                    with c3:
-                        with st.popover("⋮", use_container_width=True):
-                            if st.button("✏️ Editar", key=f"mat_edit_{mat.id}"):
-                                st.session_state["mat_editando"] = mat.id
-                                st.rerun()
-                            if st.button("🗑️ Excluir", key=f"del_mat_{mat.id}", help="Excluir"):
-                                mat.ativo = False
-                                db.commit()
-                                st.rerun()
-                # Formulário de edição de material
-                if st.session_state.get("mat_editando"):
-                    _mid = st.session_state["mat_editando"]
-                    _mat_ed = db.get(Material, _mid)
-                    if _mat_ed and _mat_ed.ativo:
-                        st.markdown("---")
-                        st.markdown("##### Editar Material")
-                        with st.form("form_editar_mat", clear_on_submit=False):
-                            _ed_mat_nome = st.text_input("Nome", value=_mat_ed.nome, key="ed_mat_nome")
-                            _ed_mat_tipo = st.selectbox(
-                                "Tipo", ["Injetável", "Descartável"],
-                                index=["Injetável", "Descartável"].index(_mat_ed.tipo)
-                                if _mat_ed.tipo in ["Injetável", "Descartável"] else 0,
-                                key="ed_mat_tipo",
-                            )
-                            col_msv, col_mcn = st.columns(2)
-                            with col_msv:
-                                _salvar_mat = st.form_submit_button("💾 Salvar", use_container_width=True)
-                            with col_mcn:
-                                _cancelar_mat = st.form_submit_button("Cancelar", use_container_width=True)
-                        if _salvar_mat:
-                            if not _ed_mat_nome.strip():
-                                st.error("Informe o nome do material.")
-                            else:
-                                _mat_ed.nome = _ed_mat_nome.strip()
-                                _mat_ed.tipo = _ed_mat_tipo
-                                db.commit()
-                                st.success("Material atualizado!")
-                                st.session_state.pop("mat_editando", None)
-                                st.rerun()
-                        if _cancelar_mat:
-                            st.session_state.pop("mat_editando", None)
-                            st.rerun()
-            else:
-                st.info("Nenhum material cadastrado ainda.")
-
-        # ────── ABA PROCEDIMENTOS ──────
+# ────── ABA PROCEDIMENTOS ──────
         with aba_trat:
             st.markdown("### Novo Procedimento")
             col1, col2 = st.columns(2)
