@@ -1198,12 +1198,19 @@ def tela_agenda():
         nome_user = (user_atual.get("nome") or "").strip().lower()
         perfil_user = (user_atual.get("perfil") or "").strip().lower()
         
-        # Buscar profissional vinculado pelo nome (se não for admin)
+        # Se for perfil "profissional", forçar filtro pelo seu próprio nome
         prof_vinculado = None
-        if perfil_user != "admin" and nome_user:
+        if perfil_user == "profissional" and nome_user:
+            primeiro_nome_user = nome_user.split()[0] if nome_user else ""
             for p in profs_db:
                 p_nome = (p.nome or "").strip().lower()
-                if p_nome and (p_nome == nome_user or p_nome in nome_user or nome_user in p_nome):
+                primeiro_nome_p = p_nome.split()[0] if p_nome else ""
+                if p_nome and (
+                    p_nome == nome_user
+                    or primeiro_nome_p == primeiro_nome_user
+                    or p_nome in nome_user
+                    or nome_user in p_nome
+                ):
                     prof_vinculado = p.nome
                     break
         
