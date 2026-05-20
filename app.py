@@ -1193,12 +1193,30 @@ def tela_agenda():
             fim_cal = ultimo_dia_mes + timedelta(days=(6 - ultimo_dia_mes.weekday()))
             dias = [inicio_cal + timedelta(days=i) for i in range((fim_cal - inicio_cal).days + 1)]
 
+        # Verificar se usuário é profissional (restrição de acesso)
+        user_atual = st.session_state.get("user", {})
+        email_user = user_atual.get("email", "")
+        is_admin = user_atual.get("is_admin", False)
+        
+        # Buscar profissional vinculado ao email do usuário
+        prof_vinculado = None
+        if not is_admin:
+            for p in profs_db:
+                if p.nome.lower() in email_user.lower() or email_user.lower().startswith(p.nome.lower()):
+                    prof_vinculado = p.nome
+                    break
+        
         # Filtro por profissional
         col_filt, _ = st.columns([1, 3])
         with col_filt:
-            opcoes_filt = ["Todos"] + nomes_prof
-            filtro_prof = st.selectbox("Profissional (filtrar)", opcoes_filt,
-                                       key="ag_filtro_prof", label_visibility="visible")
+            if prof_vinculado:
+                # Profissional só vê seus próprios agendamentos
+                filtro_prof = prof_vinculado
+                st.info(f"Visualizando agenda de: {filtro_prof}")
+            else:
+                opcoes_filt = ["Todos"] + nomes_prof
+                filtro_prof = st.selectbox("Profissional (filtrar)", opcoes_filt,
+                                           key="ag_filtro_prof", label_visibility="visible")
 
         ags_periodo_raw = (
             db.query(ScheduledAppointment)
