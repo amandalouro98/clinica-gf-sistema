@@ -738,6 +738,19 @@ def tela_dashboard():
             .order_by(ScheduledAppointment.hora_inicio.asc())
             .all()
         )
+        # Filtrar por profissional se usuário for perfil "profissional"
+        _u = st.session_state.get("user", {}) or {}
+        _perfil_d = (_u.get("perfil") or "").strip().lower()
+        _nome_d = (_u.get("nome") or "").strip().lower()
+        if _perfil_d == "profissional" and _nome_d:
+            _pn_d = _nome_d.split()[0] if _nome_d else ""
+            confirmados = [
+                ag for ag in confirmados
+                if ag.profissional and (
+                    ag.profissional.strip().lower().split()[0] == _pn_d
+                    if ag.profissional.strip() else False
+                )
+            ]
         if confirmados:
             dados_conf = [
                 {
@@ -1600,6 +1613,11 @@ def tela_agenda():
         _ini_mes = _data_hoje.replace(day=1)
         st.markdown("---")
         with st.expander("📋 Histórico de agendamentos", expanded=False):
+            _u_hist = st.session_state.get("user", {}) or {}
+            _perfil_hist = (_u_hist.get("perfil") or "").strip().lower()
+            if _perfil_hist == "profissional":
+                st.info("Acesso restrito ao histórico.")
+                st.stop()
             col_hi, col_hf, col_att = st.columns([1, 1, 1])
             with col_hi:
                 _log_ini = st.date_input("De", value=_ini_mes, key="log_ini", format="DD/MM/YYYY")
