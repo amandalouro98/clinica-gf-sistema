@@ -1200,7 +1200,7 @@ def tela_agenda():
         
         # Se NÃO for admin, tentar vincular a um profissional pelo primeiro nome
         prof_vinculado = None
-        if perfil_user != "admin" and nome_user:
+        if perfil_user == "profissional" and nome_user:
             primeiro_nome_user = nome_user.split()[0] if nome_user else ""
             for p in profs_db:
                 p_nome = (p.nome or "").strip().lower()
