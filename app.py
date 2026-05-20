@@ -1194,15 +1194,16 @@ def tela_agenda():
             dias = [inicio_cal + timedelta(days=i) for i in range((fim_cal - inicio_cal).days + 1)]
 
         # Verificar se usuário é profissional (restrição de acesso)
-        user_atual = st.session_state.get("user", {})
-        email_user = user_atual.get("email", "")
-        is_admin = user_atual.get("is_admin", False)
+        user_atual = st.session_state.get("user", {}) or {}
+        nome_user = (user_atual.get("nome") or "").strip().lower()
+        perfil_user = (user_atual.get("perfil") or "").strip().lower()
         
-        # Buscar profissional vinculado ao email do usuário
+        # Buscar profissional vinculado pelo nome (se não for admin)
         prof_vinculado = None
-        if not is_admin:
+        if perfil_user != "admin" and nome_user:
             for p in profs_db:
-                if p.nome.lower() in email_user.lower() or email_user.lower().startswith(p.nome.lower()):
+                p_nome = (p.nome or "").strip().lower()
+                if p_nome and (p_nome == nome_user or p_nome in nome_user or nome_user in p_nome):
                     prof_vinculado = p.nome
                     break
         
@@ -1210,7 +1211,6 @@ def tela_agenda():
         col_filt, _ = st.columns([1, 3])
         with col_filt:
             if prof_vinculado:
-                # Profissional só vê seus próprios agendamentos
                 filtro_prof = prof_vinculado
                 st.info(f"Visualizando agenda de: {filtro_prof}")
             else:
