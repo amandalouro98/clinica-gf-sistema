@@ -1198,18 +1198,17 @@ def tela_agenda():
         nome_user = (user_atual.get("nome") or "").strip().lower()
         perfil_user = (user_atual.get("perfil") or "").strip().lower()
         
-        # Se for perfil "profissional", forçar filtro pelo seu próprio nome
+        # Se NÃO for admin, tentar vincular a um profissional pelo primeiro nome
         prof_vinculado = None
-        if perfil_user == "profissional" and nome_user:
+        if perfil_user != "admin" and nome_user:
             primeiro_nome_user = nome_user.split()[0] if nome_user else ""
             for p in profs_db:
                 p_nome = (p.nome or "").strip().lower()
                 primeiro_nome_p = p_nome.split()[0] if p_nome else ""
-                if p_nome and (
-                    p_nome == nome_user
-                    or primeiro_nome_p == primeiro_nome_user
-                    or p_nome in nome_user
-                    or nome_user in p_nome
+                if p_nome and primeiro_nome_p and (
+                    primeiro_nome_p == primeiro_nome_user
+                    or primeiro_nome_user in p_nome
+                    or primeiro_nome_p in nome_user
                 ):
                     prof_vinculado = p.nome
                     break
@@ -1237,7 +1236,7 @@ def tela_agenda():
         # Aplica filtro de profissional
         ags_periodo = (
             ags_periodo_raw if filtro_prof == "Todos"
-            else [ag for ag in ags_periodo_raw if ag.profissional == filtro_prof]
+            else [ag for ag in ags_periodo_raw if ag.profissional and filtro_prof and (ag.profissional == filtro_prof or (ag.profissional or "").split()[0].lower() == (filtro_prof or "").split()[0].lower())]
         )
 
         ags_por_dia: dict = defaultdict(list)
