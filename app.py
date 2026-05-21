@@ -1323,25 +1323,45 @@ def tela_agenda():
             cal_html = _render_calendario(dias, ags_por_dia, semana=(vista == "Semana"))
             st.markdown(cal_html, unsafe_allow_html=True)
 
-        # ── Confirmação e ações ─────────────────────────────────────────────
+        # ── Lista estilo Google Calendar ────────────────────────────────────
         if ags_periodo:
             st.markdown("---")
             st.markdown("#### Agendamentos")
             for ag in sorted(ags_periodo, key=lambda x: (x.data, x.hora_inicio)):
-                col_nome_ag, col_info, col_conf, col_menu = st.columns([2, 4, 1, 0.4])
-                with col_nome_ag:
-                    pacote_label = " 📦" if getattr(ag, "_tem_pacote", False) else ""
-                    if st.button(f"{ag.cliente_nome or 'N/A'}{pacote_label}", key=f"nome_{ag.id}", use_container_width=True):
-                        st.session_state["ag_popup_edit_id"] = ag.id
-                        st.rerun()
-                with col_info:
-                    prefixo = f"**{ag.data.strftime('%d/%m')}** — " if vista != "Dia" else ""
-                    icone_conf = " ✅" if ag.confirmado else ""
-                    st.write(
-                        f"{prefixo}**{ag.hora_inicio}–{ag.hora_fim}** | "
-                        f"{ag.procedimento or ''} | {ag.profissional}"
-                        f"{icone_conf}"
-                    )
+                cor = ag.cor_profissional or "#E3A5C7"
+                pacote_label = " 📦" if getattr(ag, "_tem_pacote", False) else ""
+                prefixo = f"{ag.data.strftime('%d/%m')} | " if vista != "Dia" else ""
+                icone_conf = " ✅" if ag.confirmado else ""
+
+                # Caixa colorida estilo Google Calendar
+                st.markdown(
+                    f"""
+                    <div style="
+                        background-color: {cor};
+                        color: #fff;
+                        border-radius: 8px;
+                        padding: 10px 14px;
+                        margin-bottom: 8px;
+                        font-family: sans-serif;
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                    ">
+                        <div style="flex: 1; min-width: 0;">
+                            <div style="font-weight: 600; font-size: 15px; margin-bottom: 2px;">
+                                {prefixo}{ag.hora_inicio}–{ag.hora_fim}
+                            </div>
+                            <div style="font-size: 14px; opacity: 0.95; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                                {ag.cliente_nome or 'N/A'}{pacote_label} — {ag.procedimento or ''} | {ag.profissional}{icone_conf}
+                            </div>
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+                # Botões de ação abaixo da caixa
+                col_conf, col_menu = st.columns([1, 0.4])
                 with col_conf:
                     if not ag.confirmado:
                         if st.button("Confirmar", key=f"conf_{ag.id}", use_container_width=True):
@@ -1351,7 +1371,6 @@ def tela_agenda():
                             try:
                                 from models.sale import Sale, SaleItem, SessionUsage
                                 if ag.cliente_id:
-                                    # Prioridade: pacote vinculado diretamente ao agendamento
                                     item_vinculado = (
                                         db.get(SaleItem, ag.sale_item_id)
                                         if getattr(ag, "sale_item_id", None)
@@ -1413,7 +1432,6 @@ def tela_agenda():
                             ag.confirmado = False
                             db.commit()
                             st.rerun()
-                # ⋮ sempre visível — independente do status de confirmação
                 with col_menu:
                     with st.popover("⋮"):
                         if st.button("✏️ Editar", key=f"edit_{ag.id}", use_container_width=True):
