@@ -1044,9 +1044,7 @@ def tela_agenda():
                             else:
                                 _data_sem = data_ag + timedelta(weeks=_rep_i)
                             
-                            # Pular sábado (5) e domingo (6)
-                            while _data_sem.weekday() >= 5:
-                                _data_sem = _data_sem + timedelta(days=1)
+                            # Permite qualquer dia da semana (incluindo sábado)
                             novo = ScheduledAppointment(
                                 data=_data_sem,
                                 hora_inicio=hora_inicio,
