@@ -1323,26 +1323,41 @@ def tela_agenda():
             cal_html = _render_calendario(dias, ags_por_dia, semana=(vista == "Semana"))
             st.markdown(cal_html, unsafe_allow_html=True)
 
-        # ── Lista de agendamentos ───────────────────────────────────────────
+        # ── Lista de agendamentos estilo Google Calendar ────────────────────
         if ags_periodo:
             st.markdown("---")
             st.markdown("#### Agendamentos")
             for ag in sorted(ags_periodo, key=lambda x: (x.data, x.hora_inicio)):
+                cor = ag.cor_profissional or "#E3A5C7"
                 pacote_label = " 📦" if getattr(ag, "_tem_pacote", False) else ""
-                prefixo = f"**{ag.data.strftime('%d/%m')}** — " if vista != "Dia" else ""
+                prefixo = f"{ag.data.strftime('%d/%m')} | " if vista != "Dia" else ""
                 icone_conf = " ✅" if ag.confirmado else ""
 
-                col_nome_ag, col_info, col_conf, col_menu = st.columns([2, 4, 1, 0.4])
-                with col_nome_ag:
-                    if st.button(f"{ag.cliente_nome or 'N/A'}{pacote_label}", key=f"nome_{ag.id}", use_container_width=True):
-                        st.session_state["ag_popup_edit_id"] = ag.id
-                        st.rerun()
-                with col_info:
-                    st.write(
-                        f"{prefixo}**{ag.hora_inicio}–{ag.hora_fim}** | "
-                        f"{ag.procedimento or ''} | {ag.profissional}"
-                        f"{icone_conf}"
+                # Layout: caixa colorida + botões na lateral
+                col_caixa, col_conf, col_menu = st.columns([6, 1, 0.4])
+
+                with col_caixa:
+                    st.markdown(
+                        f"""
+                        <div style="
+                            background-color: {cor};
+                            color: #fff;
+                            border-radius: 8px;
+                            padding: 10px 14px;
+                            margin-bottom: 8px;
+                            font-family: sans-serif;
+                        ">
+                            <div style="font-weight: 600; font-size: 15px; margin-bottom: 2px;">
+                                {prefixo}{ag.hora_inicio}–{ag.hora_fim}
+                            </div>
+                            <div style="font-size: 14px; opacity: 0.95; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                                {ag.cliente_nome or 'N/A'}{pacote_label} — {ag.procedimento or ''} | {ag.profissional}{icone_conf}
+                            </div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
                     )
+
                 with col_conf:
                     if not ag.confirmado:
                         if st.button("Confirmar", key=f"conf_{ag.id}", use_container_width=True):
