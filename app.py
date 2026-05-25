@@ -2926,7 +2926,7 @@ def tela_atendimentos():
                     db.add(am)
                     db.commit()
                     try:
-                        movimentar(lote_id, "saida", float(qtd), motivo=f"Atendimento #{ap.id}")
+                        movimentar(lote_id, "saida", float(qtd), motivo=f"Atendimento #{ap.id} - {cliente_at_nome or 'Cliente'}")
                     except Exception as e:
                         st.warning(f"Falha na baixa do lote {lote_id}: {e}")
 
