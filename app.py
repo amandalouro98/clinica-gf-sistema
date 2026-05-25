@@ -3347,7 +3347,7 @@ def tela_estoque():
                     novo_lote = StockLote(
                         produto_id=mapa_prod[prod_compra],
                         lote=lote_compra or None,
-                        quantidade_atual=qtd_compra,
+                        quantidade_atual=0,  # Inicia em 0, movimentar() vai adicionar
                         quantidade_minima=0,
                         data_validade=validade_compra,
                         fornecedor=fornecedor_compra or None,
