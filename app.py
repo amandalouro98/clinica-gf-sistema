@@ -163,7 +163,10 @@ def _coluna_html(ags_dia: list, col_w: int) -> str:
             col_ends.append(ag.hora_fim)
 
     n_sub = max(col_idx.values()) + 1 if col_idx else 1
-    card_w = max(40, (col_w - 4) // n_sub)
+    is_day_mode = col_w >= 500
+    gutter = 6 if is_day_mode else 2
+    usable_w = max(120, col_w - 12)
+    card_w = max(140 if is_day_mode else 40, (usable_w - (gutter * (n_sub - 1))) // n_sub)
 
     # Linhas de hora (grid)
     html = ""
@@ -179,12 +182,23 @@ def _coluna_html(ags_dia: list, col_w: int) -> str:
         top  = _top_px(ag.hora_inicio)
         h    = _height_px(ag.duracao_min)
         ci   = col_idx.get(ag.id, 0)
-        left = ci * (card_w + 2)
+        left = ci * (card_w + gutter)
         cor  = ag.cor_profissional or "#E3A5C7"
         icone = "✅" if ag.confirmado else "⏳"
         pacote_flag = " 📦" if getattr(ag, "_tem_pacote", False) else ""
 
-        if h >= 80:
+        if is_day_mode and h >= 55:
+            sala_txt = f" · {ag.sala}" if getattr(ag, "sala", None) else ""
+            inner = (
+                f'<div style="font-size:14px;font-weight:700;overflow:hidden;'
+                f'white-space:nowrap;text-overflow:ellipsis;">'
+                f'{ag.cliente_nome or "Sem cliente"}</div>'
+                f'<div style="font-size:12px;overflow:hidden;white-space:nowrap;'
+                f'text-overflow:ellipsis;">{ag.procedimento or ""}{sala_txt}</div>'
+                f'<div style="font-size:12px;color:rgba(0,0,0,0.65);">'
+                f'{ag.hora_inicio}–{ag.hora_fim} {icone}{pacote_flag}</div>'
+            )
+        elif h >= 80:
             sala_txt = f" · {ag.sala}" if getattr(ag, "sala", None) else ""
             inner = (
                 f'<div style="font-size:11px;font-weight:700;overflow:hidden;'
@@ -214,7 +228,7 @@ def _coluna_html(ags_dia: list, col_w: int) -> str:
         html += (
             f'<div style="position:absolute;top:{top+1}px;left:{left+1}px;'
             f'width:{card_w-3}px;height:{h-2}px;'
-            f'background:{cor};border-radius:4px;padding:3px 6px;'
+            f'background:{cor};border-radius:{("8px" if is_day_mode else "4px")};padding:{("6px 8px" if is_day_mode else "3px 6px")};'
             f'overflow:hidden;z-index:2;'
             f'border-left:3px solid rgba(0,0,0,0.18);'
             f'box-shadow:0 1px 3px rgba(0,0,0,0.12);">'
@@ -266,7 +280,8 @@ def _render_calendario(dias: list, ags_por_dia: dict, semana: bool = False) -> s
         colunas += (
             f'<div style="{col_flex}border-left:1px solid #e5e7eb;overflow:hidden;">'
             f'{cabecalho}'
-            f'<div style="position:relative;height:{CAL_H}px;">{col_html}</div>'
+            f'<div style="position:relative;height:{CAL_H}px;'
+            f'width:100%;min-width:{("100%" if n == 1 else "auto")};">{col_html}</div>'
             f'</div>'
         )
 
@@ -320,6 +335,23 @@ def _mostrar_pdf(pdf_bytes, nome_arquivo, key_suffix=""):
         📤 Compartilhar / Baixar: {nome_arquivo}
     </button>
     ''', unsafe_allow_html=True)
+
+
+def _agendamentos_mesma_recorrencia(db, ag):
+    if not ag:
+        return []
+    return (
+        db.query(ScheduledAppointment)
+        .filter(
+            ScheduledAppointment.cliente_id == ag.cliente_id,
+            ScheduledAppointment.profissional == ag.profissional,
+            ScheduledAppointment.procedimento == ag.procedimento,
+            ScheduledAppointment.hora_inicio == ag.hora_inicio,
+            ScheduledAppointment.hora_fim == ag.hora_fim,
+        )
+        .order_by(ScheduledAppointment.data.asc(), ScheduledAppointment.id.asc())
+        .all()
+    )
 
 
 # ====== LOGIN ======
@@ -1286,46 +1318,8 @@ def tela_agenda():
             )
             st.markdown(f'<div style="margin-bottom:6px;">{badges}</div>', unsafe_allow_html=True)
 
-        # Calendário proporcional
-        if vista == "Mês":
-            # Renderizar grid mensal simplificado
-            nomes_sem = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
-            hoje = _hoje()
-            mes_html = '<table style="width:100%;border-collapse:collapse;font-family:sans-serif;font-size:12px;">'
-            mes_html += '<tr>'
-            for ns in nomes_sem:
-                mes_html += f'<th style="padding:6px;text-align:center;background:#f3f4f6;border:1px solid #e5e7eb;">{ns}</th>'
-            mes_html += '</tr>'
-            for i in range(0, len(dias), 7):
-                mes_html += '<tr>'
-                for dia in dias[i:i+7]:
-                    bg = "#fef2f2" if dia == hoje else ("#f9fafb" if dia.month == data_ref.month else "#fff")
-                    ags_dia = ags_por_dia.get(dia, [])
-                    cell_content = f'<div style="font-weight:700;margin-bottom:2px;">{dia.day}</div>'
-                    for ag in ags_dia[:3]:
-                        cor = ag.cor_profissional or "#E3A5C7"
-                        cell_content += (
-                            f'<div style="font-size:10px;background:{cor};color:#fff;'
-                            f'padding:1px 4px;border-radius:3px;margin-bottom:1px;'
-                            f'overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">'
-                            f'{ag.hora_inicio} {ag.cliente_nome or ""}</div>'
-                        )
-                    if len(ags_dia) > 3:
-                        cell_content += f'<div style="font-size:9px;color:#666;">+{len(ags_dia)-3} mais</div>'
-                    mes_html += (
-                        f'<td style="padding:4px;border:1px solid #e5e7eb;vertical-align:top;'
-                        f'background:{bg};min-height:60px;width:14.28%;">{cell_content}</td>'
-                    )
-                mes_html += '</tr>'
-            mes_html += '</table>'
-            st.markdown(mes_html, unsafe_allow_html=True)
-        else:
-            cal_html = _render_calendario(dias, ags_por_dia, semana=(vista == "Semana"))
-            st.markdown(cal_html, unsafe_allow_html=True)
-
-        # ── Lista de agendamentos estilo Google Calendar ────────────────────
+        # Lista de agendamentos estilo Google Calendar
         if ags_periodo:
-            st.markdown("---")
             st.markdown("#### Agendamentos")
             for ag in sorted(ags_periodo, key=lambda x: (x.data, x.hora_inicio)):
                 cor = ag.cor_profissional or "#E3A5C7"
@@ -1333,7 +1327,6 @@ def tela_agenda():
                 prefixo = f"{ag.data.strftime('%d/%m')} | " if vista != "Dia" else ""
                 icone_conf = " ✅" if ag.confirmado else ""
 
-                # Layout: caixa colorida + botões na lateral
                 col_caixa, col_conf, col_menu = st.columns([6, 1, 0.4])
 
                 with col_caixa:
@@ -1363,7 +1356,6 @@ def tela_agenda():
                         if st.button("Confirmar", key=f"conf_{ag.id}", use_container_width=True):
                             ag.confirmado = True
                             db.commit()
-                            # ── Desconta sessão de pacote se houver ──
                             try:
                                 from models.sale import Sale, SaleItem, SessionUsage
                                 if ag.cliente_id:
@@ -1450,25 +1442,146 @@ def tela_agenda():
                             st.rerun()
                         st.markdown("---")
                         if st.button("🗑️ Excluir", key=f"del_{ag.id}", use_container_width=True):
+                            st.session_state["ag_excluir_id"] = ag.id
+                            st.rerun()
+
+        if "ag_excluir_id" in st.session_state:
+            _ag_del = db.get(ScheduledAppointment, st.session_state["ag_excluir_id"])
+            if _ag_del:
+                _serie = _agendamentos_mesma_recorrencia(db, _ag_del)
+                _tem_recorrencia = len(_serie) > 1
+
+                @st.dialog("Excluir agendamento", width="small")
+                def _dialog_excluir_ag():
+                    st.write(
+                        f"Agendamento: **{_ag_del.cliente_nome or 'N/A'}** — "
+                        f"{_ag_del.data.strftime('%d/%m/%Y')} {_ag_del.hora_inicio}–{_ag_del.hora_fim}"
+                    )
+                    if _tem_recorrencia:
+                        st.warning(f"Foram encontrados **{len(_serie)}** agendamentos da mesma recorrência.")
+                        col_unico, col_todos = st.columns(2)
+                        with col_unico:
+                            if st.button("Excluir só este", use_container_width=True, key=f"exc_um_{_ag_del.id}"):
+                                try:
+                                    _ulog = st.session_state.get("user", {})
+                                    db.add(AgendaLog(
+                                        agendamento_id=_ag_del.id,
+                                        acao="excluido",
+                                        usuario_id=_ulog.get("id"),
+                                        usuario_nome=_ulog.get("nome", ""),
+                                        dados_antes=__import__("json").dumps({
+                                            "cliente": _ag_del.cliente_nome,
+                                            "profissional": _ag_del.profissional,
+                                            "data": str(_ag_del.data),
+                                            "hora_inicio": _ag_del.hora_inicio,
+                                            "procedimento": _ag_del.procedimento,
+                                            "sala": _ag_del.sala,
+                                        }, ensure_ascii=False),
+                                    ))
+                                    db.commit()
+                                except Exception:
+                                    pass
+                                db.delete(_ag_del)
+                                db.commit()
+                                st.session_state.pop("ag_excluir_id", None)
+                                st.rerun()
+                        with col_todos:
+                            if st.button("Excluir recorrência toda", use_container_width=True, key=f"exc_todos_{_ag_del.id}"):
+                                try:
+                                    _ulog = st.session_state.get("user", {})
+                                    for _ag_item in _serie:
+                                        db.add(AgendaLog(
+                                            agendamento_id=_ag_item.id,
+                                            acao="excluido",
+                                            usuario_id=_ulog.get("id"),
+                                            usuario_nome=_ulog.get("nome", ""),
+                                            dados_antes=__import__("json").dumps({
+                                                "cliente": _ag_item.cliente_nome,
+                                                "profissional": _ag_item.profissional,
+                                                "data": str(_ag_item.data),
+                                                "hora_inicio": _ag_item.hora_inicio,
+                                                "procedimento": _ag_item.procedimento,
+                                                "sala": _ag_item.sala,
+                                            }, ensure_ascii=False),
+                                        ))
+                                    db.commit()
+                                except Exception:
+                                    pass
+                                for _ag_item in _serie:
+                                    db.delete(_ag_item)
+                                db.commit()
+                                st.session_state.pop("ag_excluir_id", None)
+                                st.rerun()
+                    else:
+                        if st.button("Confirmar exclusão", use_container_width=True, key=f"exc_ok_{_ag_del.id}"):
                             try:
                                 _ulog = st.session_state.get("user", {})
                                 db.add(AgendaLog(
-                                    agendamento_id=ag.id,
+                                    agendamento_id=_ag_del.id,
                                     acao="excluido",
                                     usuario_id=_ulog.get("id"),
                                     usuario_nome=_ulog.get("nome", ""),
                                     dados_antes=__import__("json").dumps({
-                                        "cliente": ag.cliente_nome, "profissional": ag.profissional,
-                                        "data": str(ag.data), "hora_inicio": ag.hora_inicio,
-                                        "procedimento": ag.procedimento, "sala": ag.sala,
+                                        "cliente": _ag_del.cliente_nome,
+                                        "profissional": _ag_del.profissional,
+                                        "data": str(_ag_del.data),
+                                        "hora_inicio": _ag_del.hora_inicio,
+                                        "procedimento": _ag_del.procedimento,
+                                        "sala": _ag_del.sala,
                                     }, ensure_ascii=False),
                                 ))
                                 db.commit()
                             except Exception:
                                 pass
-                            db.delete(ag)
+                            db.delete(_ag_del)
                             db.commit()
+                            st.session_state.pop("ag_excluir_id", None)
                             st.rerun()
+
+                    if st.button("Cancelar", use_container_width=True, key=f"exc_cancel_{_ag_del.id}"):
+                        st.session_state.pop("ag_excluir_id", None)
+                        st.rerun()
+
+                _dialog_excluir_ag()
+
+        st.markdown("---")
+
+        # Calendário proporcional
+        if vista == "Mês":
+            # Renderizar grid mensal simplificado
+            nomes_sem = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
+            hoje = _hoje()
+            mes_html = '<table style="width:100%;border-collapse:collapse;font-family:sans-serif;font-size:12px;">'
+            mes_html += '<tr>'
+            for ns in nomes_sem:
+                mes_html += f'<th style="padding:6px;text-align:center;background:#f3f4f6;border:1px solid #e5e7eb;">{ns}</th>'
+            mes_html += '</tr>'
+            for i in range(0, len(dias), 7):
+                mes_html += '<tr>'
+                for dia in dias[i:i+7]:
+                    bg = "#fef2f2" if dia == hoje else ("#f9fafb" if dia.month == data_ref.month else "#fff")
+                    ags_dia = ags_por_dia.get(dia, [])
+                    cell_content = f'<div style="font-weight:700;margin-bottom:2px;">{dia.day}</div>'
+                    for ag in ags_dia[:3]:
+                        cor = ag.cor_profissional or "#E3A5C7"
+                        cell_content += (
+                            f'<div style="font-size:10px;background:{cor};color:#fff;'
+                            f'padding:1px 4px;border-radius:3px;margin-bottom:1px;'
+                            f'overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">'
+                            f'{ag.hora_inicio} {ag.cliente_nome or ""}</div>'
+                        )
+                    if len(ags_dia) > 3:
+                        cell_content += f'<div style="font-size:9px;color:#666;">+{len(ags_dia)-3} mais</div>'
+                    mes_html += (
+                        f'<td style="padding:4px;border:1px solid #e5e7eb;vertical-align:top;'
+                        f'background:{bg};min-height:60px;width:14.28%;">{cell_content}</td>'
+                    )
+                mes_html += '</tr>'
+            mes_html += '</table>'
+            st.markdown(mes_html, unsafe_allow_html=True)
+        else:
+            cal_html = _render_calendario(dias, ags_por_dia, semana=(vista == "Semana"))
+            st.markdown(cal_html, unsafe_allow_html=True)
 
         # ── Pop-up de edição rápida ──────────────────────────────────────────
         if "ag_popup_edit_id" in st.session_state:
@@ -1741,6 +1854,30 @@ def _modal_cliente(titulo: str, cliente_id: int = 0):
                 queixa   = st.text_area("Queixa principal",          value=v("queixa_principal"),         key=f"{prefix}queixa")
                 termo    = st.checkbox("Aceito o termo de veracidade", value=vb("termo_aceite"),          key=f"{prefix}termo")
 
+            st.markdown("#### Campos complementares do formulário")
+            col_d, col_e = st.columns(2)
+            with col_d:
+                radio_quimio = st.text_input("Rádio/Químio", value="", key=f"{prefix}radio_quimio")
+                alergias = st.text_area("Alergias", value="", key=f"{prefix}alergias")
+                tratamentos = st.text_area("Tratamentos", value="", key=f"{prefix}tratamentos")
+                cirurgias = st.text_area("Cirurgias", value="", key=f"{prefix}cirurgias")
+                problemas_cardiacos = st.text_input("Problemas cardíacos", value="", key=f"{prefix}problemas_cardiacos")
+                marca_passo = st.text_input("Marca-passo", value="", key=f"{prefix}marca_passo")
+                diabetes = st.text_input("Diabetes", value="", key=f"{prefix}diabetes")
+                historico_familiar = st.text_area("Histórico familiar", value="", key=f"{prefix}historico_familiar")
+            with col_e:
+                gravidez = st.text_input("Gravidez", value="", key=f"{prefix}gravidez")
+                menopausa = st.text_input("Menopausa", value="", key=f"{prefix}menopausa")
+                medicamentos_uso = st.text_area("Medicamentos em uso", value="", key=f"{prefix}medicamentos_uso")
+                placa_pino = st.text_input("Possui placa ou pino (face)", value="", key=f"{prefix}placa_pino")
+                preenchimento = st.text_input("Possui preenchimento", value="", key=f"{prefix}preenchimento")
+                fuma = st.text_input("Fuma", value="", key=f"{prefix}fuma")
+                alcool = st.text_input("Consumo de álcool", value="", key=f"{prefix}alcool")
+                atividade_fisica = st.text_input("Atividade física", value="", key=f"{prefix}atividade_fisica")
+                tempo_sono = st.text_input("Tempo de sono", value="", key=f"{prefix}tempo_sono")
+                alimentacao = st.text_input("Alimentação", value="", key=f"{prefix}alimentacao")
+                agua = st.text_input("Água", value="", key=f"{prefix}agua")
+
             st.markdown("---")
             label_btn = "💾 Salvar alterações" if cliente_id else "💾 Salvar novo cliente"
             if st.button(label_btn, use_container_width=True, type="primary"):
@@ -1748,6 +1885,31 @@ def _modal_cliente(titulo: str, cliente_id: int = 0):
                     st.error("Nome é obrigatório.")
                     return
                 imc_sal = calcular_imc(peso, altura)
+                outras_linhas = []
+                for rotulo, valor in [
+                    ("RADIO/QUÍMIO", radio_quimio),
+                    ("ALERGIAS", alergias),
+                    ("TRATAMENTOS", tratamentos),
+                    ("CIRURGIAS", cirurgias),
+                    ("PROBLEMAS CARDÍACOS", problemas_cardiacos),
+                    ("MARCA PASSO", marca_passo),
+                    ("DIABETES", diabetes),
+                    ("HISTÓRICO FAMÍLIAR", historico_familiar),
+                    ("GRAVIDEZ", gravidez),
+                    ("MENOPAUSA", menopausa),
+                    ("MEDICAMENTOS EM USO", medicamentos_uso),
+                    ("POSSUI PLACA OU PINO (FACE)", placa_pino),
+                    ("POSSUI PREENCHIMENTO", preenchimento),
+                    ("FUMA", fuma),
+                    ("CONSUMO DE ÁLCOOL", alcool),
+                    ("ATITIVDADE FÍSICA", atividade_fisica),
+                    ("TEMPO DE SONO", tempo_sono),
+                    ("ALIMENTAÇÃO", alimentacao),
+                    ("ÁGUA", agua),
+                ]:
+                    if str(valor).strip():
+                        outras_linhas.append(f"{rotulo}: {str(valor).strip()}")
+                outras_condicoes_salvar = "\n".join(outras_linhas) if outras_linhas else (outras or None)
                 dados = dict(
                     nome=nome.strip(), cpf=cpf.strip() or None,
                     data_nascimento=nasc, telefone=tel or None,
@@ -1760,7 +1922,7 @@ def _modal_cliente(titulo: str, cliente_id: int = 0):
                     uso_vitaminas=uso_vit or None,
                     marcacao_corporal=marcacao or None,
                     neoplasia=neo, epilepsia=epi,
-                    outras_condicoes=outras or None,
+                    outras_condicoes=outras_condicoes_salvar,
                     queixa_principal=queixa or None,
                     termo_aceite=termo,
                 )
@@ -1782,6 +1944,21 @@ def _modal_cliente(titulo: str, cliente_id: int = 0):
 
 def tela_clientes():
     header_titulo("Clientes", "Busca, cadastro, ficha completa e histórico")
+    db = SessionLocal()
+    try:
+        total_clientes = db.query(Client).count()
+    finally:
+        db.close()
+
+    st.markdown(
+        f"""
+        <div style="background:#f4d6d6;border:1px solid #e3b3b3;border-radius:12px;padding:14px 18px;margin-bottom:14px;">
+            <div style="font-size:12px;color:#9b6b6b;margin-bottom:4px;">TOTAL DE CLIENTES</div>
+            <div style="font-size:28px;font-weight:700;color:#8a5a5a;">{total_clientes}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
     # ── Barra de ação ──
     _cli_id_top = st.session_state.get("cliente_id_edicao", 0)
@@ -2991,11 +3168,11 @@ def tela_atendimentos():
                     "Selecionar": False,
                     "Data": at.data.strftime("%d/%m/%Y") if at.data else "—",
                     "Cliente": cli.nome if cli else "—",
-                    "Protocolo": (at.protocolo_atendimento[:50] + "...") if at.protocolo_atendimento and len(at.protocolo_atendimento) > 50 else (at.protocolo_atendimento or "—"),
-                    "Queixa": (at.queixa_consulta[:50] + "...") if at.queixa_consulta and len(at.queixa_consulta) > 50 else (at.queixa_consulta or "—"),
+                    "Protocolo": at.protocolo_atendimento or "—",
+                    "Queixa": at.queixa_consulta or "—",
                     "Tipo Tratamento": at.tipo_tratamento or "—",
                     "Materiais": materiais_str,
-                    "Observações": (at.observacoes[:50] + "...") if at.observacoes and len(at.observacoes) > 50 else (at.observacoes or "—"),
+                    "Observações": at.observacoes or "—",
                 })
 
             df_hist = pd.DataFrame(dados_tabela)
@@ -3021,6 +3198,9 @@ def tela_atendimentos():
                 if excluir_at_btn:
                     at_del = db.query(Appointment).filter(Appointment.id == at_id_selecionado).first()
                     if at_del:
+                        mats_del = db.query(AppointmentMaterial).filter(AppointmentMaterial.atendimento_id == at_id_selecionado).all()
+                        for mat_del in mats_del:
+                            db.delete(mat_del)
                         db.delete(at_del)
                         db.commit()
                         st.success("Atendimento excluído com sucesso!")
@@ -3042,6 +3222,7 @@ def tela_atendimentos():
                     with st.form("form_editar_atendimento", clear_on_submit=False):
                         edit_data = st.date_input("Data", value=at_edit.data, format="DD/MM/YYYY")
                         edit_queixa = st.text_area("Queixa", value=at_edit.queixa_consulta or "")
+                        edit_protocolo = st.text_area("Protocolo", value=at_edit.protocolo_atendimento or "")
                         # Lista suspensa de tratamentos cadastrados
                         tratamentos_lista_edit = db.query(Tratamento).filter(Tratamento.ativo == True).order_by(Tratamento.nome.asc()).all()
                         opcoes_trat_edit = ["— selecione —"] + [t.nome for t in tratamentos_lista_edit]
@@ -3066,9 +3247,10 @@ def tela_atendimentos():
                                     nome_mat = mat.produto.nome
                                 elif mat.lote and mat.lote.produto:
                                     nome_mat = mat.lote.produto.nome
-                                col_mat_nome, col_mat_qtd = st.columns([4, 1])
+                                col_mat_nome, col_mat_qtd, col_mat_rem = st.columns([4, 1, 1])
                                 col_mat_nome.text_input(f"Material {i+1}", value=nome_mat, disabled=True, key=f"mat_atual_nome_{at_edit.id}_{i}")
-                                col_mat_qtd.number_input("Qtd", value=float(mat.quantidade), step=1.0, key=f"mat_atual_qtd_{at_edit.id}_{i}")
+                                col_mat_qtd.number_input("Qtd", value=float(mat.quantidade), min_value=0.0, step=1.0, key=f"mat_atual_qtd_{at_edit.id}_{i}")
+                                col_mat_rem.checkbox("Remover", key=f"mat_atual_rem_{at_edit.id}_{i}")
                             st.markdown("---")
                         
                         # Adicionar novos materiais na edição
@@ -3117,13 +3299,17 @@ def tela_atendimentos():
                     if salvar_edicao:
                         at_edit.data = edit_data
                         at_edit.queixa_consulta = edit_queixa
+                        at_edit.protocolo_atendimento = edit_protocolo
                         at_edit.tipo_tratamento = edit_tipo if edit_tipo != "— selecione —" else ""
                         at_edit.observacoes = edit_obs
                         
                         # Atualizar materiais existentes
                         for i, mat in enumerate(mats_atuais):
+                            remove_mat = st.session_state.get(f"mat_atual_rem_{at_edit.id}_{i}", False)
                             new_qtd = st.session_state.get(f"mat_atual_qtd_{at_edit.id}_{i}")
-                            if new_qtd is not None:
+                            if remove_mat:
+                                db.delete(mat)
+                            elif new_qtd is not None:
                                 mat.quantidade = new_qtd
                         
                         # Adicionar novos materiais
@@ -4078,7 +4264,7 @@ def tela_vendas():
         with col_v1:
             data_venda = st.date_input("Data da venda", value=_hoje(), key="venda_data", format="DD/MM/YYYY")
         with col_v2:
-            pagamento = st.selectbox("Forma de pagamento*", ["Cartão de Crédito", "Cartão de Débito", "Pix"], key="venda_pag")
+            pagamento = st.selectbox("Forma de pagamento*", ["Cartão de Crédito", "Cartão de Débito", "Pix", "Dinheiro"], key="venda_pag")
 
         obs_venda = st.text_input("Observações (opcional)", key="venda_obs")
 
@@ -4194,8 +4380,10 @@ def tela_vendas():
 
         vendas_rec = db.query(Sale).order_by(Sale.data_venda.desc(), Sale.id.desc()).limit(50).all()
         if vendas_rec:
+            import pandas as pd
+            dados_vendas = []
+            ids_vendas = []
             for v in vendas_rec:
-                # Determinar tipo predominante da venda
                 tipos_itens = set(it.tipo for it in v.itens)
                 if "pacote" in tipos_itens and "unitario" in tipos_itens:
                     tipo_venda = "Misto"
@@ -4204,30 +4392,58 @@ def tela_vendas():
                 else:
                     tipo_venda = "Unitário"
 
-                # Aplicar filtro
                 if filtro_tipo_venda == "Pacote" and "pacote" not in tipos_itens:
                     continue
                 if filtro_tipo_venda == "Unitário" and "unitario" not in tipos_itens:
                     continue
 
                 procs = ", ".join(f"{it.procedimento}" for it in v.itens)
-                col_info_v, col_menu_v = st.columns([6, 0.4])
-                with col_info_v:
-                    st.write(
-                        f"**{v.data_venda.strftime('%d/%m/%Y')}** — "
-                        f"{v.cliente.nome if v.cliente else '—'} | "
-                        f"{tipo_venda} | {procs} | "
-                        f"R$ {v.valor_total:.2f} | {v.forma_pagamento}"
-                    )
-                with col_menu_v:
-                    with st.popover("⋮", use_container_width=True):
-                        if st.button("✏️ Editar", key=f"venda_edit_{v.id}"):
-                            st.session_state["venda_editando"] = v.id
+                ids_vendas.append(v.id)
+                dados_vendas.append({
+                    "Selecionar": False,
+                    "Data": v.data_venda.strftime("%d/%m/%Y") if v.data_venda else "—",
+                    "Cliente": v.cliente.nome if v.cliente else "—",
+                    "Tipo": tipo_venda,
+                    "Procedimentos": procs or "—",
+                    "Valor": f"R$ {v.valor_total:.2f}",
+                    "Pagamento": v.forma_pagamento or "—",
+                    "Observação": v.observacoes or "—",
+                })
+
+            if dados_vendas:
+                df_vendas = pd.DataFrame(dados_vendas)
+                edited_df_vendas = st.data_editor(
+                    df_vendas,
+                    use_container_width=True,
+                    hide_index=True,
+                    column_config={
+                        "Selecionar": st.column_config.CheckboxColumn("Selecionar", default=False),
+                    },
+                    disabled=["Data", "Cliente", "Tipo", "Procedimentos", "Valor", "Pagamento", "Observação"],
+                    key="vendas_recentes_editor",
+                )
+
+                selecionadas_venda = edited_df_vendas[edited_df_vendas["Selecionar"] == True]
+                if len(selecionadas_venda) > 1:
+                    st.warning("Selecione apenas 1 venda por vez.")
+                elif len(selecionadas_venda) == 1:
+                    idx_venda_sel = selecionadas_venda.index[0]
+                    venda_id_sel = ids_vendas[idx_venda_sel]
+                    col_acao_v1, col_acao_v2 = st.columns(2)
+                    with col_acao_v1:
+                        if st.button("✏️ Editar venda", use_container_width=True, key="btn_editar_venda_tabela"):
+                            st.session_state["venda_editando"] = venda_id_sel
                             st.rerun()
-                        if st.button("🗑️ Excluir", key=f"venda_del_{v.id}"):
-                            db.delete(v)
-                            db.commit()
-                            st.rerun()
+                    with col_acao_v2:
+                        if st.button("🗑️ Excluir venda", use_container_width=True, key="btn_excluir_venda_tabela"):
+                            _venda_del = db.get(Sale, venda_id_sel)
+                            if _venda_del:
+                                db.delete(_venda_del)
+                                db.commit()
+                                st.success("Venda excluída com sucesso!")
+                                st.rerun()
+            else:
+                st.info("Nenhuma venda encontrada para o filtro selecionado.")
         else:
             st.info("Nenhuma venda registrada.")
 
@@ -4242,9 +4458,9 @@ def tela_vendas():
                     _ed_data_v = st.date_input("Data", value=_venda_ed.data_venda, format="DD/MM/YYYY", key="ed_venda_data")
                     _ed_pag_v = st.selectbox(
                         "Forma de pagamento",
-                        ["Cartão de Crédito", "Cartão de Débito", "Pix"],
-                        index=["Cartão de Crédito", "Cartão de Débito", "Pix"].index(_venda_ed.forma_pagamento)
-                        if _venda_ed.forma_pagamento in ["Cartão de Crédito", "Cartão de Débito", "Pix"] else 0,
+                        ["Cartão de Crédito", "Cartão de Débito", "Pix", "Dinheiro"],
+                        index=["Cartão de Crédito", "Cartão de Débito", "Pix", "Dinheiro"].index(_venda_ed.forma_pagamento)
+                        if _venda_ed.forma_pagamento in ["Cartão de Crédito", "Cartão de Débito", "Pix", "Dinheiro"] else 0,
                         key="ed_venda_pag",
                     )
                     _ed_obs_v = st.text_input("Observações", value=_venda_ed.observacoes or "", key="ed_venda_obs")
