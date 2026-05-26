@@ -627,10 +627,11 @@ def sidebar_menu():
                 ("🗂️", "Cadastros", "Cadastros"),
             ]
         elif perfil == "profissional":
-            # Profissional não vê Vendas, Relatórios, Cadastros
+            # Profissional não vê Vendas, Relatórios, Usuários
             gestao_itens = [
                 ("📦", "Estoque", "Estoque"),
                 ("📝", "Contratos", "Contratos"),
+                ("🗂️", "Cadastros", "Cadastros"),
             ]
         else:
             # Padrão (sem perfil definido) - acesso mínimo
@@ -867,6 +868,20 @@ def _init_agenda_state():
             st.session_state[k] = v
 
 
+def _buscar_cliente_widget(db, label="Cliente", key="busca_cli", default=""):
+    """Retorna selectbox padronizado de cliente com busca case-insensitive."""
+    clientes = db.query(Client).order_by(Client.nome.asc()).all()
+    opcoes = ["— selecione —"] + [c.nome for c in clientes]
+    mapa = {c.nome: c.id for c in clientes}
+
+    # Normaliza default
+    if default and default not in opcoes:
+        default = "— selecione —"
+
+    sel = st.selectbox(label, opcoes, key=key, index=opcoes.index(default) if default in opcoes else 0)
+    return sel, mapa.get(sel)
+
+
 def tela_agenda():
     from collections import defaultdict
 
@@ -914,13 +929,13 @@ def tela_agenda():
 
             col1, col2 = st.columns(2)
             with col1:
-                if st.session_state.get("ag_cliente") not in opcoes_cli:
-                    st.session_state["ag_cliente"] = "— selecione —"
-                cliente_sel = st.selectbox("Cliente", opcoes_cli, key="ag_cliente")
+                cliente_sel, _cli_id_ag = _buscar_cliente_widget(
+                    db, label="Cliente", key="ag_cliente",
+                    default=st.session_state.get("ag_cliente", "")
+                )
 
                 # ── Pacotes disponíveis (checkboxes) ──
                 if cliente_sel and cliente_sel != "— selecione —":
-                    _cli_id_ag = mapa_cli.get(cliente_sel, (0, ""))[0]
                     if _cli_id_ag:
                         try:
                             from models.sale import Sale, SaleItem
@@ -4932,7 +4947,7 @@ def main():
     elif rota == "Cadastros":
         # Verificar permissão
         perfil = st.session_state.user.get("perfil", "") if st.session_state.user else ""
-        if perfil in ["admin", "recepcao"]:
+        if perfil in ["admin", "recepcao", "profissional"]:
             tela_cadastros()
         else:
             st.error("Você não tem permissão para acessar esta página.")
