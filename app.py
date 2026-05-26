@@ -931,15 +931,18 @@ def tela_agenda():
             with col1:
                 # Busca de cliente com searchbox (igual vendas)
                 def buscar_cli_agenda(termo):
-                    if not termo or len(termo) < 2:
+                    if not termo or len(termo) < 1:
                         return []
-                    like = f"%{termo}%"
+                    termo_lower = termo.lower()
+                    like = f"%{termo_lower}%"
                     res = db.query(Client).filter(
-                        (Client.nome.like(like)) | (Client.cpf.like(like)) | (Client.telefone.like(like))
+                        (func.lower(Client.nome).like(like)) | 
+                        (func.lower(Client.cpf).like(like)) | 
+                        (func.lower(Client.telefone).like(like))
                     ).order_by(Client.nome).limit(20).all()
                     return [f"{c.nome} | {c.cpf or c.telefone or ''}" for c in res]
 
-                sel_cli_ag = st_searchbox(buscar_cli_agenda, label="Cliente", key="ag_cliente_search", placeholder="Digite o nome")
+                sel_cli_ag = st_searchbox(buscar_cli_agenda, label="Cliente", key="ag_cliente_search", placeholder="Digite o nome, CPF ou telefone")
                 cliente_sel = None
                 _cli_id_ag = None
                 if sel_cli_ag:
