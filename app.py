@@ -929,14 +929,26 @@ def tela_agenda():
 
             col1, col2 = st.columns(2)
             with col1:
-                cliente_sel, _cli_id_ag = _buscar_cliente_widget(
-                    db, label="Cliente", key="ag_cliente",
-                    default=st.session_state.get("ag_cliente", "")
-                )
+                # Busca de cliente com searchbox (igual vendas)
+                def buscar_cli_agenda(termo):
+                    if not termo or len(termo) < 2:
+                        return []
+                    like = f"%{termo}%"
+                    res = db.query(Client).filter(
+                        (Client.nome.like(like)) | (Client.cpf.like(like)) | (Client.telefone.like(like))
+                    ).order_by(Client.nome).limit(20).all()
+                    return [f"{c.nome} | {c.cpf or c.telefone or ''}" for c in res]
+
+                sel_cli_ag = st_searchbox(buscar_cli_agenda, label="Cliente", key="ag_cliente_search", placeholder="Digite o nome")
+                cliente_sel = None
+                _cli_id_ag = None
+                if sel_cli_ag:
+                    cliente_sel = sel_cli_ag.split(" | ")[0]
+                    _cli_encontrado = db.query(Client).filter(Client.nome == cliente_sel).first()
+                    _cli_id_ag = _cli_encontrado.id if _cli_encontrado else None
 
                 # ── Pacotes disponíveis (checkboxes) ──
-                if cliente_sel and cliente_sel != "— selecione —":
-                    if _cli_id_ag:
+                if cliente_sel and _cli_id_ag:
                         try:
                             from models.sale import Sale, SaleItem
                             _pacotes = (
