@@ -190,12 +190,13 @@ def _coluna_html(ags_dia: list, col_w: int) -> str:
         if is_day_mode and h >= 55:
             sala_txt = f" · {ag.sala}" if getattr(ag, "sala", None) else ""
             inner = (
-                f'<div style="font-size:14px;font-weight:700;overflow:hidden;'
-                f'white-space:nowrap;text-overflow:ellipsis;">'
+                f'<div style="font-size:15px;font-weight:700;overflow:hidden;'
+                f'white-space:nowrap;text-overflow:ellipsis;margin-bottom:3px;">'
                 f'{ag.cliente_nome or "Sem cliente"}</div>'
-                f'<div style="font-size:12px;overflow:hidden;white-space:nowrap;'
-                f'text-overflow:ellipsis;">{ag.procedimento or ""}{sala_txt}</div>'
-                f'<div style="font-size:12px;color:rgba(0,0,0,0.65);">'
+                f'<div style="font-size:13px;overflow:hidden;white-space:nowrap;'
+                f'text-overflow:ellipsis;margin-bottom:3px;">'
+                f'{ag.procedimento or ""}{sala_txt}</div>'
+                f'<div style="font-size:12px;color:rgba(0,0,0,0.55);">'
                 f'{ag.hora_inicio}–{ag.hora_fim} {icone}{pacote_flag}</div>'
             )
         elif h >= 80:
@@ -228,7 +229,7 @@ def _coluna_html(ags_dia: list, col_w: int) -> str:
         html += (
             f'<div style="position:absolute;top:{top+1}px;left:{left+1}px;'
             f'width:{card_w-3}px;height:{h-2}px;'
-            f'background:{cor};border-radius:{("8px" if is_day_mode else "4px")};padding:{("6px 8px" if is_day_mode else "3px 6px")};'
+            f'background:{cor};border-radius:{("8px" if is_day_mode else "4px")};padding:{("8px 10px" if is_day_mode else "3px 6px")};'
             f'overflow:hidden;z-index:2;'
             f'border-left:3px solid rgba(0,0,0,0.18);'
             f'box-shadow:0 1px 3px rgba(0,0,0,0.12);">'
