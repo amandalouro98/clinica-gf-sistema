@@ -2133,14 +2133,33 @@ def tela_clientes():
                 abas = st.tabs(["📋 Atendimentos", "📐 Biometria", "📝 Pré-avaliações", "💳 Compras e Pacotes", "💉 Tabela de Doses"])
 
                 with abas[0]:
-                    atend = pd.read_sql(
-                        db.query(Appointment).filter(Appointment.cliente_id == cliente_id)
-                        .order_by(Appointment.data.desc()).statement, db.bind,
+                    _atendimentos_cli = (
+                        db.query(Appointment)
+                        .filter(Appointment.cliente_id == cliente_id)
+                        .order_by(Appointment.data.desc())
+                        .all()
                     )
-                    if not atend.empty:
-                        if "data" in atend.columns:
-                            atend["data"] = pd.to_datetime(atend["data"], errors="coerce").dt.strftime("%d/%m/%Y")
-                        st.dataframe(atend, use_container_width=True, hide_index=True)
+                    if _atendimentos_cli:
+                        _rows_at_cli = []
+                        for _at in _atendimentos_cli:
+                            _mats_at = db.query(AppointmentMaterial).filter(AppointmentMaterial.atendimento_id == _at.id).all()
+                            _mats_str = []
+                            for _m in _mats_at:
+                                _nome_m = "—"
+                                if _m.produto:
+                                    _nome_m = _m.produto.nome
+                                elif _m.lote and _m.lote.produto:
+                                    _nome_m = _m.lote.produto.nome
+                                _mats_str.append(f"{_nome_m} ({_m.quantidade})")
+                            _rows_at_cli.append({
+                                "Data": _at.data.strftime("%d/%m/%Y") if _at.data else "—",
+                                "Protocolo": _at.protocolo_atendimento or "—",
+                                "Queixa": _at.queixa_consulta or "—",
+                                "Tipo Tratamento": _at.tipo_tratamento or "—",
+                                "Materiais utilizados": ", ".join(_mats_str) if _mats_str else "—",
+                                "Observações": _at.observacoes or "—",
+                            })
+                        st.dataframe(pd.DataFrame(_rows_at_cli), use_container_width=True, hide_index=True)
                     else:
                         st.info("Nenhum atendimento encontrado.")
 
@@ -3000,6 +3019,93 @@ def _modal_tabela_doses():
     _abrir()
 
 
+def _modal_medidas_biometricas():
+    @st.dialog("Medidas Biométricas", width="large")
+    def _abrir():
+        db = SessionLocal()
+        try:
+            cliente_at_id = st.session_state.get("atendimento_cliente_id")
+            cliente_at_nome = st.session_state.get("atendimento_cliente_nome", "")
+
+            if not cliente_at_id:
+                st.error("Selecione uma cliente primeiro no atendimento.")
+                if st.button("Fechar", use_container_width=True, key="med_fechar_err"):
+                    st.rerun()
+                return
+
+            st.markdown(f"**Paciente:** {cliente_at_nome}")
+            data_med = st.date_input("Data da medição", value=_hoje(), format="DD/MM/YYYY", key="med_data")
+
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                m_peso = st.number_input("Peso (kg)", min_value=0.0, step=0.1, key="med_peso")
+                m_brae = st.number_input("Braço E (cm)", min_value=0.0, step=0.1, key="med_brae")
+                m_brad = st.number_input("Braço D (cm)", min_value=0.0, step=0.1, key="med_brad")
+            with col2:
+                m_abdsup = st.number_input("Abd. Superior (cm)", min_value=0.0, step=0.1, key="med_abdsup")
+                m_cin = st.number_input("Cintura (cm)", min_value=0.0, step=0.1, key="med_cin")
+                m_abdinf = st.number_input("Abd. Inferior (cm)", min_value=0.0, step=0.1, key="med_abdinf")
+            with col3:
+                m_coxe = st.number_input("Coxa E (cm)", min_value=0.0, step=0.1, key="med_coxe")
+                m_coxd = st.number_input("Coxa D (cm)", min_value=0.0, step=0.1, key="med_coxd")
+            with col4:
+                m_qua = st.number_input("Quadril (cm)", min_value=0.0, step=0.1, key="med_qua")
+
+            col_sv, col_cn = st.columns(2)
+            with col_sv:
+                if st.button("💾 Salvar medidas", use_container_width=True, key="med_salvar"):
+                    b = Biometrics(
+                        cliente_id=cliente_at_id,
+                        data_medicao=data_med,
+                        peso=m_peso,
+                        cintura=m_cin,
+                        abdomen_superior=m_abdsup,
+                        abdomen_inferior=m_abdinf,
+                        quadril=m_qua,
+                        braco_e=m_brae,
+                        braco_d=m_brad,
+                        coxa_e=m_coxe,
+                        coxa_d=m_coxd,
+                    )
+                    db.add(b)
+                    db.commit()
+                    st.success("Medidas salvas com sucesso!")
+                    st.rerun()
+            with col_cn:
+                if st.button("Fechar", use_container_width=True, key="med_fechar"):
+                    st.rerun()
+
+            # Histórico recente
+            st.markdown("---")
+            st.markdown("#### Histórico recente")
+            historico_med = (
+                db.query(Biometrics)
+                .filter(Biometrics.cliente_id == cliente_at_id)
+                .order_by(Biometrics.data_medicao.desc())
+                .limit(10)
+                .all()
+            )
+            if historico_med:
+                for _b in historico_med:
+                    _d = _b.data_medicao.strftime("%d/%m/%Y") if _b.data_medicao else "—"
+                    partes = [f"**{_d}**"]
+                    if _b.peso: partes.append(f"Peso: {_b.peso}kg")
+                    if _b.braco_e: partes.append(f"BraE: {_b.braco_e}")
+                    if _b.braco_d: partes.append(f"BraD: {_b.braco_d}")
+                    if _b.abdomen_superior: partes.append(f"AbdS: {_b.abdomen_superior}")
+                    if _b.cintura: partes.append(f"Cint: {_b.cintura}")
+                    if _b.abdomen_inferior: partes.append(f"AbdI: {_b.abdomen_inferior}")
+                    if _b.coxa_e: partes.append(f"CoxE: {_b.coxa_e}")
+                    if _b.coxa_d: partes.append(f"CoxD: {_b.coxa_d}")
+                    if _b.quadril: partes.append(f"Qua: {_b.quadril}")
+                    st.write(" | ".join(partes))
+            else:
+                st.info("Nenhuma medida registrada para este cliente.")
+        finally:
+            db.close()
+    _abrir()
+
+
 # ====== TELA: ATENDIMENTOS ======
 def tela_atendimentos():
     header_titulo("Atendimentos", "Baixa automática no estoque")
@@ -3049,13 +3155,16 @@ def tela_atendimentos():
         obs = st.text_area("Observações", key="at_obs")
 
         # Botões de ação extras
-        col_rec, col_dose = st.columns(2)
+        col_rec, col_dose, col_med = st.columns(3)
         with col_rec:
             if st.button("📄 Gerar Receituário", use_container_width=True, key="btn_receituario"):
                 _modal_receituario_popup()
         with col_dose:
             if st.button("💉 Tabela de Doses", use_container_width=True, key="btn_doses"):
                 _modal_tabela_doses()
+        with col_med:
+            if st.button("📏 Medidas Biométricas", use_container_width=True, key="btn_medidas"):
+                _modal_medidas_biometricas()
 
         st.markdown("---")
         st.markdown("#### Materiais usados")
@@ -3413,16 +3522,20 @@ def tela_biometria():
         if cliente_sel and cliente_sel != "—":
             cid = mapa[cliente_sel]
 
-            col1, col2, col3 = st.columns(3)
+            col1, col2, col3, col4 = st.columns(4)
             with col1:
                 peso = st.number_input("Peso (kg)", min_value=0.0, step=1.0)
-                cintura = st.number_input("Cintura (cm)", min_value=0.0, step=1.0)
+                braco_e = st.number_input("Braço E (cm)", min_value=0.0, step=1.0)
+                braco_d = st.number_input("Braço D (cm)", min_value=0.0, step=1.0)
             with col2:
-                abdomen = st.number_input("Abdômen (cm)", min_value=0.0, step=1.0)
-                quadril = st.number_input("Quadril (cm)", min_value=0.0, step=1.0)
+                abdomen_superior = st.number_input("Abd. Superior (cm)", min_value=0.0, step=1.0)
+                cintura = st.number_input("Cintura (cm)", min_value=0.0, step=1.0)
+                abdomen_inferior = st.number_input("Abd. Inferior (cm)", min_value=0.0, step=1.0)
             with col3:
-                braco = st.number_input("Braço (cm)", min_value=0.0, step=1.0)
-                coxa = st.number_input("Coxa (cm)", min_value=0.0, step=1.0)
+                coxa_e = st.number_input("Coxa E (cm)", min_value=0.0, step=1.0)
+                coxa_d = st.number_input("Coxa D (cm)", min_value=0.0, step=1.0)
+            with col4:
+                quadril = st.number_input("Quadril (cm)", min_value=0.0, step=1.0)
 
             if st.button("Salvar medidas"):
                 b = Biometrics(
@@ -3430,10 +3543,13 @@ def tela_biometria():
                     data_medicao=data_m,
                     peso=peso,
                     cintura=cintura,
-                    abdomen=abdomen,
+                    abdomen_superior=abdomen_superior,
+                    abdomen_inferior=abdomen_inferior,
                     quadril=quadril,
-                    braco=braco,
-                    coxa=coxa,
+                    braco_e=braco_e,
+                    braco_d=braco_d,
+                    coxa_e=coxa_e,
+                    coxa_d=coxa_d,
                 )
                 db.add(b)
                 db.commit()
@@ -3469,12 +3585,17 @@ def tela_biometria():
                     _data_bio = _bio.data_medicao.strftime("%d/%m/%Y") if _bio.data_medicao else "—"
                     col_bio_info, col_bio_menu = st.columns([6, 0.4])
                     with col_bio_info:
-                        st.write(
-                            f"**{_data_bio}** — Peso: {_bio.peso or '—'} kg | "
-                            f"Cintura: {_bio.cintura or '—'} | Abdômen: {_bio.abdomen or '—'} | "
-                            f"Quadril: {_bio.quadril or '—'} | Braço: {_bio.braco or '—'} | "
-                            f"Coxa: {_bio.coxa or '—'}"
-                        )
+                        partes = [f"**{_data_bio}**"]
+                        if _bio.peso: partes.append(f"Peso: {_bio.peso} kg")
+                        if _bio.braco_e: partes.append(f"Braço E: {_bio.braco_e}")
+                        if _bio.braco_d: partes.append(f"Braço D: {_bio.braco_d}")
+                        if _bio.abdomen_superior: partes.append(f"Abd. Sup: {_bio.abdomen_superior}")
+                        if _bio.cintura: partes.append(f"Cintura: {_bio.cintura}")
+                        if _bio.abdomen_inferior: partes.append(f"Abd. Inf: {_bio.abdomen_inferior}")
+                        if _bio.coxa_e: partes.append(f"Coxa E: {_bio.coxa_e}")
+                        if _bio.coxa_d: partes.append(f"Coxa D: {_bio.coxa_d}")
+                        if _bio.quadril: partes.append(f"Quadril: {_bio.quadril}")
+                        st.write(" | ".join(partes))
                     with col_bio_menu:
                         with st.popover("⋮", use_container_width=True):
                             if st.button("✏️ Editar", key=f"bio_edit_{_bio.id}"):
@@ -3493,16 +3614,20 @@ def tela_biometria():
                         st.markdown("##### Editar Biometria")
                         with st.form("form_editar_bio", clear_on_submit=False):
                             _ed_bio_data = st.date_input("Data", value=_bio_ed.data_medicao, format="DD/MM/YYYY", key="ed_bio_data")
-                            col_eb1, col_eb2, col_eb3 = st.columns(3)
+                            col_eb1, col_eb2, col_eb3, col_eb4 = st.columns(4)
                             with col_eb1:
                                 _ed_bio_peso = st.number_input("Peso (kg)", value=float(_bio_ed.peso or 0), min_value=0.0, step=0.1, key="ed_bio_peso")
-                                _ed_bio_cin = st.number_input("Cintura (cm)", value=float(_bio_ed.cintura or 0), min_value=0.0, step=0.1, key="ed_bio_cin")
+                                _ed_bio_brae = st.number_input("Braço E (cm)", value=float(_bio_ed.braco_e or 0), min_value=0.0, step=0.1, key="ed_bio_brae")
+                                _ed_bio_brad = st.number_input("Braço D (cm)", value=float(_bio_ed.braco_d or 0), min_value=0.0, step=0.1, key="ed_bio_brad")
                             with col_eb2:
-                                _ed_bio_abd = st.number_input("Abdômen (cm)", value=float(_bio_ed.abdomen or 0), min_value=0.0, step=0.1, key="ed_bio_abd")
-                                _ed_bio_qua = st.number_input("Quadril (cm)", value=float(_bio_ed.quadril or 0), min_value=0.0, step=0.1, key="ed_bio_qua")
+                                _ed_bio_abdsup = st.number_input("Abd. Superior (cm)", value=float(_bio_ed.abdomen_superior or 0), min_value=0.0, step=0.1, key="ed_bio_abdsup")
+                                _ed_bio_cin = st.number_input("Cintura (cm)", value=float(_bio_ed.cintura or 0), min_value=0.0, step=0.1, key="ed_bio_cin")
+                                _ed_bio_abdinf = st.number_input("Abd. Inferior (cm)", value=float(_bio_ed.abdomen_inferior or 0), min_value=0.0, step=0.1, key="ed_bio_abdinf")
                             with col_eb3:
-                                _ed_bio_bra = st.number_input("Braço (cm)", value=float(_bio_ed.braco or 0), min_value=0.0, step=0.1, key="ed_bio_bra")
-                                _ed_bio_cox = st.number_input("Coxa (cm)", value=float(_bio_ed.coxa or 0), min_value=0.0, step=0.1, key="ed_bio_cox")
+                                _ed_bio_coxe = st.number_input("Coxa E (cm)", value=float(_bio_ed.coxa_e or 0), min_value=0.0, step=0.1, key="ed_bio_coxe")
+                                _ed_bio_coxd = st.number_input("Coxa D (cm)", value=float(_bio_ed.coxa_d or 0), min_value=0.0, step=0.1, key="ed_bio_coxd")
+                            with col_eb4:
+                                _ed_bio_qua = st.number_input("Quadril (cm)", value=float(_bio_ed.quadril or 0), min_value=0.0, step=0.1, key="ed_bio_qua")
                             col_ebsv, col_ebcn = st.columns(2)
                             with col_ebsv:
                                 _salvar_bio_ed = st.form_submit_button("💾 Salvar", use_container_width=True)
@@ -3511,11 +3636,14 @@ def tela_biometria():
                         if _salvar_bio_ed:
                             _bio_ed.data_medicao = _ed_bio_data
                             _bio_ed.peso = _ed_bio_peso
+                            _bio_ed.braco_e = _ed_bio_brae
+                            _bio_ed.braco_d = _ed_bio_brad
+                            _bio_ed.abdomen_superior = _ed_bio_abdsup
                             _bio_ed.cintura = _ed_bio_cin
-                            _bio_ed.abdomen = _ed_bio_abd
+                            _bio_ed.abdomen_inferior = _ed_bio_abdinf
+                            _bio_ed.coxa_e = _ed_bio_coxe
+                            _bio_ed.coxa_d = _ed_bio_coxd
                             _bio_ed.quadril = _ed_bio_qua
-                            _bio_ed.braco = _ed_bio_bra
-                            _bio_ed.coxa = _ed_bio_cox
                             db.commit()
                             st.success("Biometria atualizada!")
                             st.session_state.pop("bio_editando", None)
