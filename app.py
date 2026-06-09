@@ -2738,14 +2738,40 @@ def _modal_tabela_doses():
     def _abrir():
         db = SessionLocal()
         try:
-            # Busca cliente
-            clientes = db.query(Client).order_by(Client.nome.asc()).all()
-            mapa_cli = {f"{c.nome} ({c.cpf or ''})": c.id for c in clientes}
-            opcoes_cli = ["— selecione —"] + list(mapa_cli.keys())
-            
-            cliente_sel = st.selectbox("Cliente", opcoes_cli, key="dose_cliente")
-            cliente_id = mapa_cli.get(cliente_sel) if cliente_sel != "— selecione —" else None
-            
+            # Busca de cliente com searchbox (case-insensitive)
+            def buscar_cli_dose(termo):
+                if not termo or len(termo) < 1:
+                    return []
+                termo_lower = termo.lower()
+                like = f"%{termo_lower}%"
+                res = db.query(Client).filter(
+                    (func.lower(Client.nome).like(like)) |
+                    (func.lower(Client.cpf).like(like)) |
+                    (func.lower(Client.telefone).like(like))
+                ).order_by(Client.nome).limit(20).all()
+                return [f"{c.nome} | {c.cpf or c.telefone or ''}" for c in res]
+
+            sel_cli_dose = st_searchbox(
+                buscar_cli_dose,
+                label="Cliente",
+                key="dose_cliente_search",
+                placeholder="Digite o nome, CPF ou telefone",
+            )
+
+            cliente_id = None
+            cliente_nome_dose = ""
+            if sel_cli_dose:
+                cliente_nome_dose = sel_cli_dose.split(" | ")[0]
+                _cli = db.query(Client).filter(Client.nome == cliente_nome_dose).first()
+                cliente_id = _cli.id if _cli else None
+
+            # Fallback: usa cliente selecionado no atendimento se houver
+            if not cliente_id:
+                cliente_id = st.session_state.get("atendimento_cliente_id")
+                cliente_nome_dose = st.session_state.get("atendimento_cliente_nome", "")
+                if cliente_id and cliente_nome_dose:
+                    st.caption(f"📋 Usando cliente do atendimento: **{cliente_nome_dose}**")
+
             col1, col2, col3 = st.columns(3)
             with col1:
                 medicacao = st.text_input("Medicação", key="dose_medicacao")
