@@ -3024,16 +3024,45 @@ def _modal_medidas_biometricas():
     def _abrir():
         db = SessionLocal()
         try:
-            cliente_at_id = st.session_state.get("atendimento_cliente_id")
-            cliente_at_nome = st.session_state.get("atendimento_cliente_nome", "")
+            # Busca de cliente com searchbox (igual tabela de doses)
+            def buscar_cli_med(termo):
+                if not termo or len(termo) < 1:
+                    return []
+                termo_lower = termo.lower()
+                like = f"%{termo_lower}%"
+                res = db.query(Client).filter(
+                    (func.lower(Client.nome).like(like)) |
+                    (func.lower(Client.cpf).like(like)) |
+                    (func.lower(Client.telefone).like(like))
+                ).order_by(Client.nome).limit(20).all()
+                return [f"{c.nome} | {c.cpf or c.telefone or ''}" for c in res]
 
-            if not cliente_at_id:
-                st.error("Selecione uma cliente primeiro no atendimento.")
-                if st.button("Fechar", use_container_width=True, key="med_fechar_err"):
+            sel_cli_med = st_searchbox(
+                buscar_cli_med,
+                label="Cliente",
+                key="med_cliente_search",
+                placeholder="Digite o nome, CPF ou telefone",
+            )
+
+            cliente_med_id = None
+            cliente_med_nome = ""
+            if sel_cli_med:
+                cliente_med_nome = sel_cli_med.split(" | ")[0]
+                _cli = db.query(Client).filter(Client.nome == cliente_med_nome).first()
+                cliente_med_id = _cli.id if _cli else None
+
+            # Fallback: usa cliente selecionado no atendimento se houver
+            if not cliente_med_id:
+                cliente_med_id = st.session_state.get("atendimento_cliente_id")
+                cliente_med_nome = st.session_state.get("atendimento_cliente_nome", "")
+
+            if not cliente_med_id:
+                st.info("Selecione uma cliente acima ou no atendimento.")
+                if st.button("Fechar", use_container_width=True, key="med_fechar_vazio"):
                     st.rerun()
                 return
 
-            st.markdown(f"**Paciente:** {cliente_at_nome}")
+            st.markdown(f"**Paciente:** {cliente_med_nome}")
             data_med = st.date_input("Data da medição", value=_hoje(), format="DD/MM/YYYY", key="med_data")
 
             col1, col2, col3, col4 = st.columns(4)
@@ -3055,7 +3084,7 @@ def _modal_medidas_biometricas():
             with col_sv:
                 if st.button("💾 Salvar medidas", use_container_width=True, key="med_salvar"):
                     b = Biometrics(
-                        cliente_id=cliente_at_id,
+                        cliente_id=cliente_med_id,
                         data_medicao=data_med,
                         peso=m_peso,
                         cintura=m_cin,
@@ -3080,7 +3109,7 @@ def _modal_medidas_biometricas():
             st.markdown("#### Histórico recente")
             historico_med = (
                 db.query(Biometrics)
-                .filter(Biometrics.cliente_id == cliente_at_id)
+                .filter(Biometrics.cliente_id == cliente_med_id)
                 .order_by(Biometrics.data_medicao.desc())
                 .limit(10)
                 .all()
