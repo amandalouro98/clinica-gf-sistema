@@ -341,6 +341,9 @@ def _mostrar_pdf(pdf_bytes, nome_arquivo, key_suffix=""):
 def _agendamentos_mesma_recorrencia(db, ag):
     if not ag:
         return []
+    # Sem cliente vinculado, não trata como série recorrente
+    if not ag.cliente_id or not ag.procedimento:
+        return [ag]
     return (
         db.query(ScheduledAppointment)
         .filter(
@@ -1041,9 +1044,9 @@ def tela_agenda():
                 if prof_sel == "— selecione —":
                     st.error("Selecione um profissional.")
                 else:
-                    cli_id, cli_nome = None, None
-                    if cliente_sel != "— selecione —" and cliente_sel in mapa_cli:
-                        cli_id, cli_nome = mapa_cli[cliente_sel]
+                    # Usa cliente do searchbox (cliente_sel = nome, _cli_id_ag = id)
+                    cli_id = _cli_id_ag
+                    cli_nome = cliente_sel if (cliente_sel and _cli_id_ag) else None
                     sala_val = sala_sel if sala_sel != "— selecione —" else None
 
                     if modo_edicao and ag_edit:
@@ -1482,15 +1485,16 @@ def tela_agenda():
                 _serie = _agendamentos_mesma_recorrencia(db, _ag_del)
                 _tem_recorrencia = len(_serie) > 1
 
-                @st.dialog("Excluir agendamento", width="small")
-                def _dialog_excluir_ag():
+                with st.container(border=True):
+                    st.markdown("### 🗑️ Excluir agendamento")
                     st.write(
-                        f"Agendamento: **{_ag_del.cliente_nome or 'N/A'}** — "
+                        f"Agendamento: **{_ag_del.cliente_nome or 'Sem cliente'}** — "
                         f"{_ag_del.data.strftime('%d/%m/%Y')} {_ag_del.hora_inicio}–{_ag_del.hora_fim}"
                     )
+
                     if _tem_recorrencia:
                         st.warning(f"Foram encontrados **{len(_serie)}** agendamentos da mesma recorrência.")
-                        col_unico, col_todos = st.columns(2)
+                        col_unico, col_todos, col_canc = st.columns(3)
                         with col_unico:
                             if st.button("Excluir só este", use_container_width=True, key=f"exc_um_{_ag_del.id}"):
                                 try:
@@ -1543,37 +1547,43 @@ def tela_agenda():
                                 db.commit()
                                 st.session_state.pop("ag_excluir_id", None)
                                 st.rerun()
+                        with col_canc:
+                            if st.button("Cancelar", use_container_width=True, key=f"exc_cancel_{_ag_del.id}"):
+                                st.session_state.pop("ag_excluir_id", None)
+                                st.rerun()
                     else:
-                        if st.button("Confirmar exclusão", use_container_width=True, key=f"exc_ok_{_ag_del.id}"):
-                            try:
-                                _ulog = st.session_state.get("user", {})
-                                db.add(AgendaLog(
-                                    agendamento_id=_ag_del.id,
-                                    acao="excluido",
-                                    usuario_id=_ulog.get("id"),
-                                    usuario_nome=_ulog.get("nome", ""),
-                                    dados_antes=__import__("json").dumps({
-                                        "cliente": _ag_del.cliente_nome,
-                                        "profissional": _ag_del.profissional,
-                                        "data": str(_ag_del.data),
-                                        "hora_inicio": _ag_del.hora_inicio,
-                                        "procedimento": _ag_del.procedimento,
-                                        "sala": _ag_del.sala,
-                                    }, ensure_ascii=False),
-                                ))
+                        col_ok, col_canc2 = st.columns(2)
+                        with col_ok:
+                            if st.button("Confirmar exclusão", use_container_width=True, key=f"exc_ok_{_ag_del.id}"):
+                                try:
+                                    _ulog = st.session_state.get("user", {})
+                                    db.add(AgendaLog(
+                                        agendamento_id=_ag_del.id,
+                                        acao="excluido",
+                                        usuario_id=_ulog.get("id"),
+                                        usuario_nome=_ulog.get("nome", ""),
+                                        dados_antes=__import__("json").dumps({
+                                            "cliente": _ag_del.cliente_nome,
+                                            "profissional": _ag_del.profissional,
+                                            "data": str(_ag_del.data),
+                                            "hora_inicio": _ag_del.hora_inicio,
+                                            "procedimento": _ag_del.procedimento,
+                                            "sala": _ag_del.sala,
+                                        }, ensure_ascii=False),
+                                    ))
+                                    db.commit()
+                                except Exception:
+                                    pass
+                                db.delete(_ag_del)
                                 db.commit()
-                            except Exception:
-                                pass
-                            db.delete(_ag_del)
-                            db.commit()
-                            st.session_state.pop("ag_excluir_id", None)
-                            st.rerun()
-
-                    if st.button("Cancelar", use_container_width=True, key=f"exc_cancel_{_ag_del.id}"):
-                        st.session_state.pop("ag_excluir_id", None)
-                        st.rerun()
-
-                _dialog_excluir_ag()
+                                st.session_state.pop("ag_excluir_id", None)
+                                st.rerun()
+                        with col_canc2:
+                            if st.button("Cancelar", use_container_width=True, key=f"exc_cancel2_{_ag_del.id}"):
+                                st.session_state.pop("ag_excluir_id", None)
+                                st.rerun()
+            else:
+                st.session_state.pop("ag_excluir_id", None)
 
         st.markdown("---")
 
