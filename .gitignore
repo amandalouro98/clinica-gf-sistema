@@ -55,6 +55,9 @@ service-account.json
 client_secret.json
 credentials.json
 gcp-credentials.json
+clinica-gf-*.json
+google-credentials.json
+secrets/
 *.pem
 *.key
 *.crt
