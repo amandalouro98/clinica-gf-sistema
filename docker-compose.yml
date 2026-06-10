@@ -8,11 +8,11 @@ services:
       - "8501:8501"
     environment:
       - DB_URL=${DB_URL:-postgresql://postgres:ClinicaGF2024!@db:5432/clinica}
-      - GOOGLE_CREDENTIALS_PATH=/app/service_account.json
+      - GOOGLE_CREDENTIALS_PATH=/app/secrets/google-credentials.json
       - GOOGLE_FORM_LINK=${GOOGLE_FORM_LINK:-https://forms.gle/mBuxyP37Ysk5KtMHA}
       - PYTHONUNBUFFERED=1
     volumes:
-      - ./service_account.json:/app/service_account.json:ro
+      - ./secrets:/app/secrets:ro
       - ./.env:/app/.env:ro
     depends_on:
       - db
