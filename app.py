@@ -297,6 +297,80 @@ def _render_calendario(dias: list, ags_por_dia: dict, semana: bool = False) -> s
     )
 
 
+def _render_calendario_dia_por_profissional(dia, ags_dia: list) -> str:
+    """Calendário do modo Dia com uma coluna por profissional, ordenadas pelo número de agendamentos."""
+    TIME_W = 52
+
+    # Agrupa por profissional
+    por_prof = {}
+    for ag in ags_dia:
+        nome = ag.profissional or "Sem profissional"
+        por_prof.setdefault(nome, []).append(ag)
+
+    # Ordena pelo número de agendamentos (decrescente)
+    profs_ordenados = sorted(por_prof.items(), key=lambda x: -len(x[1]))
+
+    # Eixo de horas
+    eixo = ""
+    for h in range(7, 21):
+        top = _top_px(f"{h:02d}:00")
+        eixo += (
+            f'<div style="position:absolute;top:{top - 7}px;right:4px;'
+            f'font-size:10px;color:#9ca3af;">{h:02d}:00</div>'
+        )
+
+    if not profs_ordenados:
+        return (
+            f'<div style="display:flex;width:100%;border:1px solid #e5e7eb;'
+            f'border-radius:8px;background:#fff;font-family:sans-serif;">'
+            f'<div style="width:{TIME_W}px;flex-shrink:0;position:relative;'
+            f'height:{CAL_H}px;border-right:1px solid #e5e7eb;background:#f9fafb;">'
+            f'{eixo}</div>'
+            f'<div style="flex:1;display:flex;align-items:center;justify-content:center;'
+            f'color:#9ca3af;height:{CAL_H}px;">Nenhum agendamento neste dia</div>'
+            f'</div>'
+        )
+
+    # Cada coluna ocupa fração igual do espaço
+    n_cols = len(profs_ordenados)
+    col_flex = f"flex:1 1 0;min-width:160px;"
+    col_w_est = max(180, 1100 // n_cols)
+
+    colunas = ""
+    for nome_prof, ags_prof in profs_ordenados:
+        # cor do profissional (pega do primeiro agendamento)
+        cor = ags_prof[0].cor_profissional or "#E3A5C7"
+
+        cabecalho = (
+            f'<div style="text-align:center;padding:6px 4px;'
+            f'background:{cor};border-radius:6px 6px 0 0;'
+            f'border-bottom:1px solid #e5e7eb;">'
+            f'<span style="font-size:13px;font-weight:700;color:#fff;'
+            f'text-shadow:0 1px 1px rgba(0,0,0,0.2);">'
+            f'{nome_prof} ({len(ags_prof)})'
+            f'</span></div>'
+        )
+
+        col_html = _coluna_html(ags_prof, col_w_est)
+
+        colunas += (
+            f'<div style="{col_flex}border-left:1px solid #e5e7eb;overflow:hidden;">'
+            f'{cabecalho}'
+            f'<div style="position:relative;height:{CAL_H}px;width:100%;">{col_html}</div>'
+            f'</div>'
+        )
+
+    return (
+        f'<div style="display:flex;width:100%;overflow-x:auto;border:1px solid #e5e7eb;'
+        f'border-radius:8px;background:#fff;font-family:sans-serif;">'
+        f'<div style="width:{TIME_W}px;flex-shrink:0;position:relative;'
+        f'height:{CAL_H}px;border-right:1px solid #e5e7eb;background:#f9fafb;">'
+        f'{eixo}</div>'
+        f'{colunas}'
+        f'</div>'
+    )
+
+
 def _mostrar_pdf(pdf_bytes, nome_arquivo, key_suffix=""):
     """PDF com botão de compartilhar nativo (iOS/Android) + download fallback"""
     import base64
@@ -1621,7 +1695,11 @@ def tela_agenda():
             mes_html += '</table>'
             st.markdown(mes_html, unsafe_allow_html=True)
         else:
-            cal_html = _render_calendario(dias, ags_por_dia, semana=(vista == "Semana"))
+            if vista == "Dia" and len(dias) == 1:
+                _ags_dia_unico = ags_por_dia.get(dias[0], [])
+                cal_html = _render_calendario_dia_por_profissional(dias[0], _ags_dia_unico)
+            else:
+                cal_html = _render_calendario(dias, ags_por_dia, semana=(vista == "Semana"))
             st.markdown(cal_html, unsafe_allow_html=True)
 
         # ── Pop-up de edição rápida ──────────────────────────────────────────
