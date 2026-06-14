@@ -143,6 +143,103 @@ def _height_px(duracao_min: int) -> int:
     return max(22, int(duracao_min * PX_PER_MIN))
 
 
+def _coluna_html_full(ags_dia: list, col_w: int) -> str:
+    """Coluna do modo Dia por profissional: cards ocupam 100% da largura.
+    Quando há conflito de horário, empilha verticalmente dentro do bloco."""
+    ags = sorted(ags_dia, key=lambda a: a.hora_inicio)
+
+    # Agrupa agendamentos que se sobrepõem
+    grupos = []  # cada grupo é uma lista de agendamentos sobrepostos
+    for ag in ags:
+        encaixou = False
+        for grupo in grupos:
+            # Se sobrepõe com qualquer item do grupo
+            for item in grupo:
+                if not (ag.hora_fim <= item.hora_inicio or ag.hora_inicio >= item.hora_fim):
+                    grupo.append(ag)
+                    encaixou = True
+                    break
+            if encaixou:
+                break
+        if not encaixou:
+            grupos.append([ag])
+
+    # Linhas de hora (grid)
+    html = ""
+    for h in range(7, 21):
+        top = _top_px(f"{h:02d}:00")
+        html += (
+            f'<div style="position:absolute;top:{top}px;left:0;right:0;'
+            f'border-top:1px solid #e9ecef;pointer-events:none;"></div>'
+        )
+
+    usable_w = max(120, col_w - 12)
+
+    # Renderiza cada grupo
+    for grupo in grupos:
+        n_no_grupo = len(grupo)
+        # Calcula bloco do grupo (do menor inicio ao maior fim)
+        bloco_inicio = min(g.hora_inicio for g in grupo)
+        bloco_fim = max(g.hora_fim for g in grupo)
+        bloco_top = _top_px(bloco_inicio)
+        bloco_bottom = _top_px(bloco_fim)
+        bloco_h = max(40, bloco_bottom - bloco_top)
+        # altura de cada card no bloco
+        card_h = max(28, (bloco_h - (n_no_grupo - 1) * 3) // n_no_grupo)
+
+        for idx, ag in enumerate(grupo):
+            cor = ag.cor_profissional or "#E3A5C7"
+            icone = "✅" if ag.confirmado else "⏳"
+            pacote_flag = " 📦" if getattr(ag, "_tem_pacote", False) else ""
+            sala_txt = f" · {ag.sala}" if getattr(ag, "sala", None) else ""
+
+            top_card = bloco_top + idx * (card_h + 3)
+
+            if card_h >= 55:
+                inner = (
+                    f'<div style="font-size:14px;font-weight:700;overflow:hidden;'
+                    f'white-space:nowrap;text-overflow:ellipsis;margin-bottom:2px;">'
+                    f'{ag.cliente_nome or "Sem cliente"}</div>'
+                    f'<div style="font-size:12px;overflow:hidden;white-space:nowrap;'
+                    f'text-overflow:ellipsis;margin-bottom:2px;">'
+                    f'{ag.procedimento or ""}{sala_txt}</div>'
+                    f'<div style="font-size:11px;color:rgba(0,0,0,0.6);">'
+                    f'{ag.hora_inicio}–{ag.hora_fim} {icone}{pacote_flag}</div>'
+                )
+                pad = "6px 10px"
+            elif card_h >= 35:
+                inner = (
+                    f'<div style="font-size:13px;font-weight:700;overflow:hidden;'
+                    f'white-space:nowrap;text-overflow:ellipsis;">'
+                    f'{ag.cliente_nome or "Sem cliente"}</div>'
+                    f'<div style="font-size:11px;overflow:hidden;white-space:nowrap;'
+                    f'text-overflow:ellipsis;color:rgba(0,0,0,0.65);">'
+                    f'{ag.hora_inicio}–{ag.hora_fim} · {ag.procedimento or ""}{sala_txt} {icone}{pacote_flag}</div>'
+                )
+                pad = "4px 10px"
+            else:
+                inner = (
+                    f'<div style="font-size:12px;font-weight:600;overflow:hidden;'
+                    f'white-space:nowrap;text-overflow:ellipsis;">'
+                    f'{ag.hora_inicio} {ag.cliente_nome or "Sem cliente"}{sala_txt} {icone}{pacote_flag}</div>'
+                )
+                pad = "3px 8px"
+
+            html += (
+                f'<div style="position:absolute;top:{top_card+1}px;left:6px;'
+                f'width:{usable_w}px;height:{card_h-2}px;'
+                f'background:{cor};color:#fff;border-radius:8px;padding:{pad};'
+                f'overflow:hidden;z-index:2;'
+                f'border-left:3px solid rgba(0,0,0,0.18);'
+                f'box-shadow:0 1px 3px rgba(0,0,0,0.12);'
+                f'box-sizing:border-box;">'
+                f'{inner}'
+                f'</div>'
+            )
+
+    return html
+
+
 def _coluna_html(ags_dia: list, col_w: int) -> str:
     """Gera HTML de uma coluna de dia com cards proporcionais e sem duplicação."""
     ags = sorted(ags_dia, key=lambda a: a.hora_inicio)
@@ -351,7 +448,7 @@ def _render_calendario_dia_por_profissional(dia, ags_dia: list) -> str:
             f'</span></div>'
         )
 
-        col_html = _coluna_html(ags_prof, col_w_est)
+        col_html = _coluna_html_full(ags_prof, col_w_est)
 
         colunas += (
             f'<div style="{col_flex}border-left:1px solid #e5e7eb;overflow:hidden;">'
