@@ -5,8 +5,24 @@ Uso: docker exec clinica-gf-app python delete_agendamentos_do_dia.py 2026-06-15
 """
 import sys
 from datetime import date
+
+# Importa todos os modelos para que o SQLAlchemy resolva os relacionamentos
 from utils.db import SessionLocal
+from models.base import Base
+from models.client import Client
+from models.user import User
+from models.appointment import Appointment, AppointmentMaterial
 from models.schedule import ScheduledAppointment
+from models.schedule_log import AgendaLog
+from models.assessment import Assessment
+from models.biometrics import Biometrics
+from models.contract import Contract
+from models.dose_table import DoseTable
+from models.material import Material
+from models.professional import Professional
+from models.sale import Sale, SaleItem, SessionUsage
+from models.stock import Product, StockLote, StockMovement
+from models.tratamento import Tratamento
 
 
 def main(data_corte_str: str):
