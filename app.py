@@ -1103,26 +1103,42 @@ def tela_agenda():
 
             col1, col2 = st.columns(2)
             with col1:
-                # Busca de cliente com searchbox (igual vendas)
-                def buscar_cli_agenda(termo):
-                    if not termo or len(termo) < 1:
-                        return []
-                    termo_lower = termo.lower()
-                    like = f"%{termo_lower}%"
-                    res = db.query(Client).filter(
-                        (func.lower(Client.nome).like(like)) | 
-                        (func.lower(Client.cpf).like(like)) | 
-                        (func.lower(Client.telefone).like(like))
-                    ).order_by(Client.nome).limit(20).all()
-                    return [f"{c.nome} | {c.cpf or c.telefone or ''}" for c in res]
+                # Campo de texto livre para nome do cliente (permite não cadastrado)
+                _ag_cli_default = ""
+                if modo_edicao and ag_edit:
+                    _ag_cli_default = ag_edit.cliente_nome or ""
+                nome_ag_digitado = st.text_input("Cliente", value=st.session_state.get("ag_cliente_nome_livre", _ag_cli_default), key="ag_nome_livre_input", placeholder="Digite o nome, CPF ou telefone")
 
-                sel_cli_ag = st_searchbox(buscar_cli_agenda, label="Cliente", key="ag_cliente_search", placeholder="Digite o nome, CPF ou telefone")
                 cliente_sel = None
                 _cli_id_ag = None
-                if sel_cli_ag:
-                    cliente_sel = sel_cli_ag.split(" | ")[0]
-                    _cli_encontrado = db.query(Client).filter(Client.nome == cliente_sel).first()
-                    _cli_id_ag = _cli_encontrado.id if _cli_encontrado else None
+                if nome_ag_digitado and len(nome_ag_digitado) >= 2:
+                    _sugestoes_ag = db.query(Client).filter(
+                        (func.lower(Client.nome).like(f"%{nome_ag_digitado.lower()}%")) |
+                        (func.lower(Client.cpf).like(f"%{nome_ag_digitado.lower()}%")) |
+                        (func.lower(Client.telefone).like(f"%{nome_ag_digitado.lower()}%"))
+                    ).order_by(Client.nome).limit(10).all()
+                    if _sugestoes_ag:
+                        _opcoes_sug = ["— usar o nome digitado —"] + [f"{c.nome} | {c.cpf or c.telefone or ''}" for c in _sugestoes_ag]
+                        _sel_sug = st.selectbox("Selecionar cliente cadastrado (opcional):", _opcoes_sug, key="ag_sug_cli")
+                        if _sel_sug and _sel_sug != "— usar o nome digitado —":
+                            _cli_nome_sug = _sel_sug.split(" | ")[0]
+                            _cli_encontrado = db.query(Client).filter(Client.nome == _cli_nome_sug).first()
+                            cliente_sel = _cli_nome_sug
+                            _cli_id_ag = _cli_encontrado.id if _cli_encontrado else None
+                        else:
+                            cliente_sel = nome_ag_digitado
+                            _cli_id_ag = None
+                    else:
+                        cliente_sel = nome_ag_digitado
+                        _cli_id_ag = None
+                else:
+                    cliente_sel = nome_ag_digitado if nome_ag_digitado else None
+                    _cli_id_ag = None
+
+                # Fallback em modo edição: preservar cliente original se não alterado
+                if modo_edicao and ag_edit and not cliente_sel:
+                    cliente_sel = ag_edit.cliente_nome
+                    _cli_id_ag = ag_edit.cliente_id
 
                 # ── Pacotes disponíveis (checkboxes) ──
                 if cliente_sel and _cli_id_ag:
@@ -1215,9 +1231,13 @@ def tela_agenda():
                 if prof_sel == "— selecione —":
                     st.error("Selecione um profissional.")
                 else:
-                    # Usa cliente do searchbox (cliente_sel = nome, _cli_id_ag = id)
+                    # Usa cliente do campo de texto (cliente_sel = nome, _cli_id_ag = id ou None)
                     cli_id = _cli_id_ag
-                    cli_nome = cliente_sel if (cliente_sel and _cli_id_ag) else None
+                    cli_nome = cliente_sel if cliente_sel else None
+                    # Fallback em modo edição: preservar cliente original se não informado
+                    if modo_edicao and ag_edit and not cli_nome:
+                        cli_nome = ag_edit.cliente_nome
+                        cli_id = ag_edit.cliente_id
                     sala_val = sala_sel if sala_sel != "— selecione —" else None
 
                     if modo_edicao and ag_edit:
@@ -3489,6 +3509,21 @@ def tela_atendimentos():
 
                 st.session_state.pop("atendimento_cliente_id", None)
                 st.session_state.pop("atendimento_cliente_nome", None)
+                # Descontar sessão de pacote ativo do cliente (se houver)
+                if tipo and cliente_at_id:
+                    try:
+                        from models.sale import Sale, SaleItem
+                        _pacote_item = db.query(SaleItem).join(Sale).filter(
+                            Sale.cliente_id == cliente_at_id,
+                            SaleItem.procedimento == tipo,
+                            SaleItem.tipo == "pacote",
+                            SaleItem.sessoes_usadas < SaleItem.sessoes_total,
+                        ).first()
+                        if _pacote_item:
+                            _pacote_item.sessoes_usadas += 1
+                            db.commit()
+                    except Exception:
+                        pass
                 # Limpar campos do formulário
                 for key in ["atendimento_selectbox", "at_data", "at_queixa", "at_tipo", "at_protocolo", "at_obs"]:
                     if key in st.session_state:
@@ -4021,6 +4056,10 @@ def tela_estoque():
                 if btn_excluir_est and linha_sel_est:
                     lt_del = db.get(StockLote, linha_sel_est)
                     if lt_del:
+                        from models.appointment import AppointmentMaterial
+                        from models.stock import StockMovement
+                        db.query(StockMovement).filter(StockMovement.lote_id == lt_del.id).delete()
+                        db.query(AppointmentMaterial).filter(AppointmentMaterial.lote_id == lt_del.id).delete()
                         db.delete(lt_del)
                         db.commit()
                         st.success("Lote excluído!")
@@ -4046,10 +4085,24 @@ def tela_estoque():
                         bc1, bc2 = st.columns(2)
                         with bc1:
                             if st.button("💾 Salvar", key="est_save", use_container_width=True):
+                                qtd_anterior = float(lt_ed.quantidade_atual or 0)
                                 lt_ed.quantidade_atual = new_qtd
                                 lt_ed.data_validade = new_val
                                 lt_ed.fornecedor = new_forn if new_forn else None
                                 lt_ed.lote = new_lote if new_lote else None
+                                # Criar movimentação de ajuste se quantidade mudou
+                                diferenca = new_qtd - qtd_anterior
+                                if diferenca != 0:
+                                    from models.stock import StockMovement
+                                    tipo_ajuste = "entrada" if diferenca > 0 else "saida"
+                                    mov_ajuste = StockMovement(
+                                        lote_id=lt_ed.id,
+                                        produto_id=lt_ed.produto_id,
+                                        tipo=tipo_ajuste,
+                                        quantidade=abs(diferenca),
+                                        motivo="ajuste manual",
+                                    )
+                                    db.add(mov_ajuste)
                                 db.commit()
                                 del st.session_state["est_editando"]
                                 st.success("Lote atualizado!")
@@ -4064,11 +4117,35 @@ def tela_estoque():
             st.markdown("### Alertas")
             baixo, validadep = alertas()
             if baixo:
-                nomes = [f"{prod.nome} (saldo: {sum([l.quantidade_atual or 0 for l in db.query(StockLote).filter(StockLote.produto_id == prod.id).all()])} unidades)" for prod in baixo]
-                st.warning(f"Estoque baixo (≤5 unidades): {', '.join(nomes)}")
+                st.warning("⚠️ Produtos com estoque baixo (≤5 unidades):")
+                import pandas as pd
+                _dados_baixo = []
+                for prod in baixo:
+                    _lotes_prod = db.query(StockLote).filter(StockLote.produto_id == prod.id).all()
+                    _saldo = sum(l.quantidade_atual or 0 for l in _lotes_prod)
+                    _lt_ref = _lotes_prod[0] if _lotes_prod else None
+                    _dados_baixo.append({
+                        "Produto": prod.nome,
+                        "Quantidade": _saldo,
+                        "Validade": _lt_ref.data_validade.strftime("%d/%m/%Y") if _lt_ref and _lt_ref.data_validade else "—",
+                        "Fornecedor": _lt_ref.fornecedor if _lt_ref and _lt_ref.fornecedor else "—",
+                        "Categoria": prod.categoria or "—",
+                    })
+                st.dataframe(pd.DataFrame(_dados_baixo), use_container_width=True, hide_index=True)
             if validadep:
-                nomes_v = [f"{lt.produto.nome} (lote: {lt.lote or 'S/N'})" for lt in validadep]
-                st.warning(f"Validade próxima (30 dias): {', '.join(nomes_v)}")
+                st.warning("⚠️ Produtos com validade próxima (30 dias):")
+                import pandas as pd
+                _dados_val = []
+                for lt in validadep:
+                    _dados_val.append({
+                        "Produto": lt.produto.nome if lt.produto else "—",
+                        "Lote": lt.lote or "S/N",
+                        "Quantidade": lt.quantidade_atual or 0,
+                        "Validade": lt.data_validade.strftime("%d/%m/%Y") if lt.data_validade else "—",
+                        "Fornecedor": lt.fornecedor or "—",
+                        "Categoria": lt.produto.categoria if lt.produto else "—",
+                    })
+                st.dataframe(pd.DataFrame(_dados_val), use_container_width=True, hide_index=True)
 
         # ---------- ABA 2: Movimentações ----------
         with aba2:
@@ -4983,6 +5060,11 @@ def tela_cadastros():
                         key="prod_editor"
                     )
                     
+                    # Exportar CSV
+                    import io as _io
+                    _csv_prod = df_prod[["ID", "Nome", "Categoria"]].to_csv(index=False).encode("utf-8")
+                    st.download_button("⬇ Exportar Produtos (CSV)", _csv_prod, "produtos.csv", "text/csv", key="export_produtos_csv")
+                    
                     # Identificar selecionado
                     linha_sel_prod = None
                     for i, row in edited_df_prod.iterrows():
@@ -5000,6 +5082,13 @@ def tela_cadastros():
                     if btn_del_prod and linha_sel_prod:
                         p_del = db_prod.get(Product, linha_sel_prod)
                         if p_del:
+                            from models.appointment import AppointmentMaterial
+                            from models.stock import StockMovement, StockLote
+                            lotes_do_prod = db_prod.query(StockLote).filter(StockLote.produto_id == p_del.id).all()
+                            for _lt in lotes_do_prod:
+                                db_prod.query(StockMovement).filter(StockMovement.lote_id == _lt.id).delete()
+                                db_prod.query(AppointmentMaterial).filter(AppointmentMaterial.lote_id == _lt.id).delete()
+                                db_prod.delete(_lt)
                             db_prod.delete(p_del)
                             db_prod.commit()
                             st.success("Produto excluído!")
@@ -5116,6 +5205,10 @@ def tela_cadastros():
                     disabled=["Nome", "Descrição", "Valor Unit. (R$)", "Valor Pacote (R$)", "Sessões Pacote"],
                     key="proc_editor"
                 )
+                
+                # Exportar CSV
+                _csv_proc = df_proc[["Nome", "Descrição", "Valor Unit. (R$)", "Valor Pacote (R$)", "Sessões Pacote"]].to_csv(index=False).encode("utf-8")
+                st.download_button("⬇ Exportar Procedimentos (CSV)", _csv_proc, "procedimentos.csv", "text/csv", key="export_proc_csv")
                 
                 # Identificar linha selecionada
                 linha_sel_proc = None
