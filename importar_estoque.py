@@ -18,10 +18,10 @@ import sys
 
 # ── garante que os models são importados na ordem certa ──────────────────────
 import models.base  # noqa: F401
-import models.cliente  # noqa: F401 (se existir)
-import models.tratamento  # noqa: F401 (se existir)
-import models.schedule  # noqa: F401 (se existir)
-import models.sale  # noqa: F401 (se existir)
+import models.client  # noqa: F401
+import models.tratamento  # noqa: F401
+import models.schedule  # noqa: F401
+import models.sale  # noqa: F401
 import models.stock  # noqa: F401
 
 from models.stock import Product, StockLote, StockMovement
