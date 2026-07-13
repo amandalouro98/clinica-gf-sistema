@@ -966,19 +966,30 @@ def tela_dashboard():
                 )
                 if _ats_sem:
                     from collections import Counter
+                    from sqlalchemy import or_
                     _contagem = Counter()
                     for _a in _ats_sem:
                         _prof = (_a.cadastrado_por or "").strip()
                         if not _prof:
-                            # busca profissional na agenda pelo mesmo cliente+data
+                            # 1ª tentativa: cruza por cliente_id + data
                             _ag = (
                                 db.query(ScheduledAppointment)
                                 .filter(
-                                    ScheduledAppointment.cliente_id == _a.cliente_id,
                                     ScheduledAppointment.data == _a.data,
+                                    ScheduledAppointment.cliente_id == _a.cliente_id,
                                 )
                                 .first()
                             )
+                            # 2ª tentativa: cruza por nome do cliente + data (agenda com nome livre)
+                            if not _ag and _a.cliente:
+                                _ag = (
+                                    db.query(ScheduledAppointment)
+                                    .filter(
+                                        ScheduledAppointment.data == _a.data,
+                                        ScheduledAppointment.cliente_nome == _a.cliente.nome,
+                                    )
+                                    .first()
+                                )
                             _prof = (_ag.profissional if _ag else "") or "Sem profissional"
                         _contagem[_prof] += 1
                     _df_graf = pd.DataFrame(
