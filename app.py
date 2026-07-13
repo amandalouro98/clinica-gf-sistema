@@ -3371,6 +3371,10 @@ def tela_atendimentos():
     header_titulo("Atendimentos", "Baixa automática no estoque")
     db = SessionLocal()
     try:
+        # Mensagem de sucesso persistente após salvar
+        if st.session_state.pop("at_salvo_ok", False):
+            st.success("✅ Atendimento salvo com sucesso!")
+
         st.markdown("### Cliente")
 
         # Buscar todos os clientes para o selectbox
@@ -3551,7 +3555,7 @@ def tela_atendimentos():
                     for key in ["atendimento_selectbox", "at_data", "at_queixa", "at_tipo", "at_protocolo", "at_obs", "at_linhas"]:
                         if key in st.session_state:
                             st.session_state.pop(key, None)
-                    st.success("Atendimento salvo e estoque atualizado.")
+                    st.session_state["at_salvo_ok"] = True
                     st.rerun()
                 except Exception as _save_err:
                     db.rollback()
