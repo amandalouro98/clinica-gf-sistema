@@ -952,24 +952,41 @@ def tela_dashboard():
                 st.warning(f"Erro ao carregar aniversariantes: {_e_aniv}")
 
         with _col_graf:
-            st.markdown("#### 📊 Atendimentos de hoje por profissional")
+            st.markdown("#### 📊 Atendimentos da semana por profissional")
             try:
-                _ats_hoje = (
+                _semana_ini = _data_hoje - timedelta(days=_data_hoje.weekday())  # segunda-feira
+                _semana_fim = _semana_ini + timedelta(days=6)
+                _ats_sem = (
                     db.query(Appointment)
-                    .filter(Appointment.data == _data_hoje)
+                    .filter(
+                        Appointment.data >= _semana_ini,
+                        Appointment.data <= _semana_fim,
+                    )
                     .all()
                 )
-                if _ats_hoje:
+                if _ats_sem:
                     from collections import Counter
-                    _contagem = Counter(
-                        (a.cadastrado_por or "Sem profissional") for a in _ats_hoje
-                    )
+                    _contagem = Counter()
+                    for _a in _ats_sem:
+                        _prof = (_a.cadastrado_por or "").strip()
+                        if not _prof:
+                            # busca profissional na agenda pelo mesmo cliente+data
+                            _ag = (
+                                db.query(ScheduledAppointment)
+                                .filter(
+                                    ScheduledAppointment.cliente_id == _a.cliente_id,
+                                    ScheduledAppointment.data == _a.data,
+                                )
+                                .first()
+                            )
+                            _prof = (_ag.profissional if _ag else "") or "Sem profissional"
+                        _contagem[_prof] += 1
                     _df_graf = pd.DataFrame(
                         _contagem.items(), columns=["Profissional", "Qtd"]
                     ).sort_values("Qtd", ascending=False)
                     st.bar_chart(_df_graf.set_index("Profissional"), use_container_width=True)
                 else:
-                    st.info("Nenhum atendimento registrado hoje.")
+                    st.info("Nenhum atendimento registrado esta semana.")
             except Exception as _e_graf:
                 st.warning(f"Erro ao carregar gráfico: {_e_graf}")
 
