@@ -903,7 +903,6 @@ def tela_dashboard():
         try:
             _mes_atual = _data_hoje.month
             _dia_atual = _data_hoje.day
-            # Filtra em Python para evitar incompatibilidade de tipo com func.extract
             _todos_com_nasc = (
                 db.query(Client)
                 .filter(Client.data_nascimento.isnot(None))
@@ -914,28 +913,32 @@ def tela_dashboard():
                 key=lambda c: c.data_nascimento.day
             )
             aniv_hoje = [c for c in aniversariantes if c.data_nascimento.day == _dia_atual]
-            aniv_mes  = [c for c in aniversariantes if c.data_nascimento.day != _dia_atual]
 
-            if aniv_hoje:
-                for c in aniv_hoje:
-                    st.success(
-                        f"🎂 **ANIVERSÁRIO HOJE — {c.nome}** | "
-                        f"{c.data_nascimento.strftime('%d/%m')} | "
-                        f"Tel: {c.telefone or '—'}"
-                    )
+            # Alerta destacado para aniversariantes de hoje
+            for c in aniv_hoje:
+                st.markdown(
+                    f"<div style='background:#fff3cd;border-left:5px solid #f0ad4e;"
+                    f"padding:10px 16px;border-radius:6px;margin-bottom:8px;font-size:1rem;'>"
+                    f"🎂 <strong>{c.nome} faz aniversário hoje!</strong> &nbsp;|&nbsp; "
+                    f"{c.data_nascimento.strftime('%d/%m')} &nbsp;|&nbsp; "
+                    f"Tel: {c.telefone or '—'}"
+                    f"</div>",
+                    unsafe_allow_html=True,
+                )
 
-            if aniv_mes:
-                dados_aniv = [
-                    {
-                        "Dia": c.data_nascimento.strftime("%d/%m"),
-                        "Nome": c.nome,
-                        "Telefone": c.telefone or "—",
-                    }
-                    for c in aniv_mes
-                ]
-                st.dataframe(pd.DataFrame(dados_aniv), use_container_width=True, hide_index=True)
-
-            if not aniversariantes:
+            # Tabela unificada com destaque em negrito para quem faz hoje
+            if aniversariantes:
+                linhas_md = ["| Dia | Nome | Telefone |", "|:---:|------|----------|"]
+                for c in aniversariantes:
+                    dia  = c.data_nascimento.strftime("%d/%m")
+                    nome = c.nome
+                    tel  = c.telefone or "—"
+                    if c.data_nascimento.day == _dia_atual:
+                        linhas_md.append(f"| **{dia}** | **{nome}** | **{tel}** |")
+                    else:
+                        linhas_md.append(f"| {dia} | {nome} | {tel} |")
+                st.markdown("\n".join(linhas_md))
+            else:
                 st.info("Nenhum aniversariante este mês.")
         except Exception as _e_aniv:
             st.warning(f"Erro ao carregar aniversariantes: {_e_aniv}")
