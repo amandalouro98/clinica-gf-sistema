@@ -20,7 +20,7 @@ load_dotenv()
 
 # ====== IMPORTS DO PROJETO ======
 from utils.db import SessionLocal, engine
-from sqlalchemy import func
+from sqlalchemy import func, case
 from models.base import Base
 from models.user import User
 from models.client import Client
@@ -3552,7 +3552,7 @@ def tela_atendimentos():
                         saldo_mov = db.query(
                             func.coalesce(
                                 func.sum(
-                                    func.case(
+                                    case(
                                         (StockMovement.tipo == "entrada", StockMovement.quantidade),
                                         else_=-StockMovement.quantidade,
                                     )
