@@ -900,40 +900,43 @@ def tela_dashboard():
 
         # --- Aniversariantes do mês ---
         st.markdown("### 🎂 Aniversariantes do mês")
-        _mes_atual = _data_hoje.month
-        _dia_atual = _data_hoje.day
-        aniversariantes = (
-            db.query(Client)
-            .filter(
-                Client.data_nascimento != None,
-                func.extract("month", Client.data_nascimento) == _mes_atual,
-            )
-            .order_by(func.extract("day", Client.data_nascimento).asc())
-            .all()
-        )
-        aniv_hoje = [c for c in aniversariantes if c.data_nascimento.day == _dia_atual]
-        aniv_mes  = [c for c in aniversariantes if c.data_nascimento.day != _dia_atual]
-
-        if aniv_hoje:
-            st.markdown("#### 🎉 Aniversário HOJE")
-            for c in aniv_hoje:
-                st.success(
-                    f"🎂 **{c.nome}** — {c.data_nascimento.strftime('%d/%m')} "
-                    f"| Tel: {c.telefone or '—'}"
+        try:
+            _mes_atual = _data_hoje.month
+            _dia_atual = _data_hoje.day
+            aniversariantes = (
+                db.query(Client)
+                .filter(
+                    Client.data_nascimento.isnot(None),
+                    func.extract("month", Client.data_nascimento) == _mes_atual,
                 )
+                .order_by(func.extract("day", Client.data_nascimento).asc())
+                .all()
+            )
+            aniv_hoje = [c for c in aniversariantes if c.data_nascimento.day == _dia_atual]
+            aniv_mes  = [c for c in aniversariantes if c.data_nascimento.day != _dia_atual]
 
-        if aniv_mes:
-            dados_aniv = [
-                {
-                    "Dia": c.data_nascimento.strftime("%d/%m"),
-                    "Nome": c.nome,
-                    "Telefone": c.telefone or "—",
-                }
-                for c in aniv_mes
-            ]
-            st.dataframe(pd.DataFrame(dados_aniv), use_container_width=True, hide_index=True)
-        elif not aniv_hoje:
-            st.info("Nenhum aniversariante este mês.")
+            if aniv_hoje:
+                st.markdown("#### 🎉 Aniversário HOJE")
+                for c in aniv_hoje:
+                    st.success(
+                        f"🎂 **{c.nome}** — {c.data_nascimento.strftime('%d/%m')} "
+                        f"| Tel: {c.telefone or '—'}"
+                    )
+
+            if aniv_mes:
+                dados_aniv = [
+                    {
+                        "Dia": c.data_nascimento.strftime("%d/%m"),
+                        "Nome": c.nome,
+                        "Telefone": c.telefone or "—",
+                    }
+                    for c in aniv_mes
+                ]
+                st.dataframe(pd.DataFrame(dados_aniv), use_container_width=True, hide_index=True)
+            elif not aniv_hoje:
+                st.info("Nenhum aniversariante este mês.")
+        except Exception as _e_aniv:
+            st.warning(f"Erro ao carregar aniversariantes: {_e_aniv}")
 
         st.markdown("---")
         _amanha = _data_hoje + timedelta(days=1)
