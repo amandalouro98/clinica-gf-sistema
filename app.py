@@ -952,24 +952,24 @@ def tela_dashboard():
                 st.warning(f"Erro ao carregar aniversariantes: {_e_aniv}")
 
         with _col_graf:
-            st.markdown("#### 📊 Atendimentos de hoje por profissional")
+            st.markdown("#### 📊 Agendamentos de hoje por profissional")
             try:
-                _ats_hoje = (
-                    db.query(Appointment)
-                    .filter(Appointment.data == _data_hoje)
+                _ags_hoje = (
+                    db.query(ScheduledAppointment)
+                    .filter(ScheduledAppointment.data == _data_hoje)
                     .all()
                 )
-                if _ats_hoje:
+                if _ags_hoje:
                     from collections import Counter
                     _contagem = Counter(
-                        (a.profissional or "Sem profissional") for a in _ats_hoje
+                        (a.profissional or "Sem profissional") for a in _ags_hoje
                     )
                     _df_graf = pd.DataFrame(
-                        _contagem.items(), columns=["Profissional", "Atendimentos"]
-                    ).sort_values("Atendimentos", ascending=False)
+                        _contagem.items(), columns=["Profissional", "Qtd"]
+                    ).sort_values("Qtd", ascending=False)
                     st.bar_chart(_df_graf.set_index("Profissional"), use_container_width=True)
                 else:
-                    st.info("Nenhum atendimento registrado hoje.")
+                    st.info("Nenhum agendamento para hoje.")
             except Exception as _e_graf:
                 st.warning(f"Erro ao carregar gráfico: {_e_graf}")
 
