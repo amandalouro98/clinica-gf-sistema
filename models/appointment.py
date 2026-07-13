@@ -16,10 +16,12 @@ class Appointment(Base):
     retorno_indicado = Column(String, nullable=True)
     receituario = Column(Text, nullable=True)
     observacoes = Column(Text, nullable=True)
-    cadastrado_por = Column(String, nullable=True)
+    cadastrado_por = Column(String, nullable=True)   # nome legado
+    usuario_id = Column(Integer, ForeignKey("usuarios.id"), nullable=True)
     criado_em = Column(DateTime(timezone=True), server_default=func.now())
 
     cliente = relationship("Client")
+    usuario = relationship("User", foreign_keys=[usuario_id])
 
 
 class AppointmentMaterial(Base):

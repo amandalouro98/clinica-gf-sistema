@@ -966,31 +966,15 @@ def tela_dashboard():
                 )
                 if _ats_sem:
                     from collections import Counter
-                    from sqlalchemy import or_
                     _contagem = Counter()
                     for _a in _ats_sem:
-                        _prof = (_a.cadastrado_por or "").strip()
-                        if not _prof:
-                            # 1ª tentativa: cruza por cliente_id + data
-                            _ag = (
-                                db.query(ScheduledAppointment)
-                                .filter(
-                                    ScheduledAppointment.data == _a.data,
-                                    ScheduledAppointment.cliente_id == _a.cliente_id,
-                                )
-                                .first()
-                            )
-                            # 2ª tentativa: cruza por nome do cliente + data (agenda com nome livre)
-                            if not _ag and _a.cliente:
-                                _ag = (
-                                    db.query(ScheduledAppointment)
-                                    .filter(
-                                        ScheduledAppointment.data == _a.data,
-                                        ScheduledAppointment.cliente_nome == _a.cliente.nome,
-                                    )
-                                    .first()
-                                )
-                            _prof = (_ag.profissional if _ag else "") or "Sem profissional"
+                        # Usa usuario vinculado ao login; fallback para campo legado cadastrado_por
+                        if _a.usuario:
+                            _prof = _a.usuario.nome
+                        elif (_a.cadastrado_por or "").strip():
+                            _prof = _a.cadastrado_por.strip()
+                        else:
+                            _prof = "Sem profissional"
                         _contagem[_prof] += 1
                     _df_graf = pd.DataFrame(
                         _contagem.items(), columns=["Profissional", "Qtd"]
@@ -3600,6 +3584,7 @@ def tela_atendimentos():
                 st.error("Selecione uma cliente.")
             else:
                 try:
+                    _user_logado = st.session_state.get("user") or {}
                     ap = Appointment(
                         data=data_at,
                         mes=month_from_date(data_at),
@@ -3610,7 +3595,8 @@ def tela_atendimentos():
                         retorno_indicado=None,
                         receituario=None,
                         observacoes=obs,
-                        cadastrado_por=(st.session_state.get("user") or {}).get("nome", ""),
+                        cadastrado_por=_user_logado.get("nome", ""),
+                        usuario_id=_user_logado.get("id"),
                     )
                     db.add(ap)
                     db.commit()
