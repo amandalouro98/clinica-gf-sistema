@@ -898,50 +898,80 @@ def tela_dashboard():
 
         st.markdown("---")
 
-        # --- Aniversariantes do mês ---
-        st.markdown("### 🎂 Aniversariantes do mês")
-        try:
-            _mes_atual = _data_hoje.month
-            _dia_atual = _data_hoje.day
-            _todos_com_nasc = (
-                db.query(Client)
-                .filter(Client.data_nascimento.isnot(None))
-                .all()
-            )
-            aniversariantes = sorted(
-                [c for c in _todos_com_nasc if c.data_nascimento.month == _mes_atual],
-                key=lambda c: c.data_nascimento.day
-            )
-            aniv_hoje = [c for c in aniversariantes if c.data_nascimento.day == _dia_atual]
+        # --- Aniversariantes + Gráfico do dia ---
+        _col_aniv, _col_graf = st.columns([1, 1], gap="large")
 
-            # Alerta destacado para aniversariantes de hoje
-            for c in aniv_hoje:
-                st.markdown(
-                    f"<div style='background:#fff3cd;border-left:5px solid #f0ad4e;"
-                    f"padding:10px 16px;border-radius:6px;margin-bottom:8px;font-size:1rem;'>"
-                    f"🎂 <strong>{c.nome} faz aniversário hoje!</strong> &nbsp;|&nbsp; "
-                    f"{c.data_nascimento.strftime('%d/%m')} &nbsp;|&nbsp; "
-                    f"Tel: {c.telefone or '—'}"
-                    f"</div>",
-                    unsafe_allow_html=True,
+        with _col_aniv:
+            st.markdown("#### 🎂 Aniversariantes do mês")
+            try:
+                _mes_atual = _data_hoje.month
+                _dia_atual = _data_hoje.day
+                _todos_com_nasc = (
+                    db.query(Client)
+                    .filter(Client.data_nascimento.isnot(None))
+                    .all()
                 )
+                # Ordena: a partir de hoje primeiro, depois início do mês
+                def _sort_aniv(c):
+                    d = c.data_nascimento.day - _dia_atual
+                    return d if d >= 0 else d + 31
+                aniversariantes = sorted(
+                    [c for c in _todos_com_nasc if c.data_nascimento.month == _mes_atual],
+                    key=_sort_aniv
+                )
+                aniv_hoje = [c for c in aniversariantes if c.data_nascimento.day == _dia_atual]
 
-            # Tabela unificada com destaque em negrito para quem faz hoje
-            if aniversariantes:
-                linhas_md = ["| Dia | Nome | Telefone |", "|:---:|------|----------|"]
-                for c in aniversariantes:
-                    dia  = c.data_nascimento.strftime("%d/%m")
-                    nome = c.nome
-                    tel  = c.telefone or "—"
-                    if c.data_nascimento.day == _dia_atual:
-                        linhas_md.append(f"| **{dia}** | **{nome}** | **{tel}** |")
-                    else:
-                        linhas_md.append(f"| {dia} | {nome} | {tel} |")
-                st.markdown("\n".join(linhas_md))
-            else:
-                st.info("Nenhum aniversariante este mês.")
-        except Exception as _e_aniv:
-            st.warning(f"Erro ao carregar aniversariantes: {_e_aniv}")
+                for c in aniv_hoje:
+                    st.markdown(
+                        f"<div style='background:#fff3cd;border-left:5px solid #f0ad4e;"
+                        f"padding:8px 14px;border-radius:6px;margin-bottom:6px;font-size:0.95rem;'>"
+                        f"🎂 <strong>{c.nome} faz aniversário hoje!</strong> | "
+                        f"Tel: {c.telefone or '—'}"
+                        f"</div>",
+                        unsafe_allow_html=True,
+                    )
+
+                if aniversariantes:
+                    _df_aniv = pd.DataFrame([
+                        {
+                            "Dia": c.data_nascimento.strftime("%d/%m"),
+                            "Nome": c.nome,
+                            "Telefone": c.telefone or "—",
+                        }
+                        for c in aniversariantes
+                    ])
+                    st.dataframe(
+                        _df_aniv,
+                        use_container_width=True,
+                        hide_index=True,
+                        height=210,  # ~5 linhas com rolagem
+                    )
+                else:
+                    st.info("Nenhum aniversariante este mês.")
+            except Exception as _e_aniv:
+                st.warning(f"Erro ao carregar aniversariantes: {_e_aniv}")
+
+        with _col_graf:
+            st.markdown("#### 📊 Atendimentos de hoje por profissional")
+            try:
+                _ats_hoje = (
+                    db.query(Appointment)
+                    .filter(Appointment.data == _data_hoje)
+                    .all()
+                )
+                if _ats_hoje:
+                    from collections import Counter
+                    _contagem = Counter(
+                        (a.profissional or "Sem profissional") for a in _ats_hoje
+                    )
+                    _df_graf = pd.DataFrame(
+                        _contagem.items(), columns=["Profissional", "Atendimentos"]
+                    ).sort_values("Atendimentos", ascending=False)
+                    st.bar_chart(_df_graf.set_index("Profissional"), use_container_width=True)
+                else:
+                    st.info("Nenhum atendimento registrado hoje.")
+            except Exception as _e_graf:
+                st.warning(f"Erro ao carregar gráfico: {_e_graf}")
 
         st.markdown("---")
         _amanha = _data_hoje + timedelta(days=1)
