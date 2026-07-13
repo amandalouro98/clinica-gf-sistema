@@ -3436,7 +3436,7 @@ def tela_atendimentos():
         # Lista de nomes para seleção: materiais cadastrados + produtos do estoque
         nomes_materiais = sorted(set([m.nome for m in mats_cadastrados] + list(mapa_prod.keys())))
 
-        linhas = st.number_input("Quantos produtos diferentes foram usados?", min_value=0, step=1, value=0)
+        linhas = st.number_input("Quantos produtos diferentes foram usados?", min_value=0, step=1, value=0, key="at_linhas")
         materiais = []
 
         for i in range(int(linhas)):
@@ -3479,57 +3479,61 @@ def tela_atendimentos():
             if not cliente_at_id:
                 st.error("Selecione uma cliente.")
             else:
-                ap = Appointment(
-                    data=data_at,
-                    mes=month_from_date(data_at),
-                    cliente_id=cliente_at_id,
-                    queixa_consulta=queixa,
-                    protocolo_atendimento=protocolo,
-                    tipo_tratamento=tipo,
-                    retorno_indicado=None,
-                    receituario=None,
-                    observacoes=obs,
-                )
-                db.add(ap)
-                db.commit()
-
-                for (lote_id, prod_id, qtd) in materiais:
-                    am = AppointmentMaterial(
-                        atendimento_id=ap.id,
-                        lote_id=lote_id,
-                        produto_id=prod_id,
-                        quantidade=float(qtd),
+                try:
+                    ap = Appointment(
+                        data=data_at,
+                        mes=month_from_date(data_at),
+                        cliente_id=cliente_at_id,
+                        queixa_consulta=queixa,
+                        protocolo_atendimento=protocolo,
+                        tipo_tratamento=tipo,
+                        retorno_indicado=None,
+                        receituario=None,
+                        observacoes=obs,
                     )
-                    db.add(am)
+                    db.add(ap)
                     db.commit()
-                    try:
-                        movimentar(lote_id, "saida", float(qtd), motivo=f"Atendimento #{ap.id} - {cliente_at_nome or 'Cliente'}")
-                    except Exception as e:
-                        st.warning(f"Falha na baixa do lote {lote_id}: {e}")
 
-                st.session_state.pop("atendimento_cliente_id", None)
-                st.session_state.pop("atendimento_cliente_nome", None)
-                # Descontar sessão de pacote ativo do cliente (se houver)
-                if tipo and cliente_at_id:
-                    try:
-                        from models.sale import Sale, SaleItem
-                        _pacote_item = db.query(SaleItem).join(Sale).filter(
-                            Sale.cliente_id == cliente_at_id,
-                            SaleItem.procedimento == tipo,
-                            SaleItem.tipo == "pacote",
-                            SaleItem.sessoes_usadas < SaleItem.sessoes_total,
-                        ).first()
-                        if _pacote_item:
-                            _pacote_item.sessoes_usadas += 1
-                            db.commit()
-                    except Exception:
-                        pass
-                # Limpar campos do formulário
-                for key in ["atendimento_selectbox", "at_data", "at_queixa", "at_tipo", "at_protocolo", "at_obs"]:
-                    if key in st.session_state:
-                        st.session_state.pop(key, None)
-                st.success("Atendimento salvo e estoque atualizado.")
-                st.rerun()
+                    for (lote_id, prod_id, qtd) in materiais:
+                        am = AppointmentMaterial(
+                            atendimento_id=ap.id,
+                            lote_id=lote_id,
+                            produto_id=prod_id,
+                            quantidade=float(qtd),
+                        )
+                        db.add(am)
+                        db.commit()
+                        try:
+                            movimentar(lote_id, "saida", float(qtd), motivo=f"Atendimento #{ap.id} - {cliente_at_nome or 'Cliente'}")
+                        except Exception as e:
+                            st.warning(f"Falha na baixa do lote {lote_id}: {e}")
+
+                    st.session_state.pop("atendimento_cliente_id", None)
+                    st.session_state.pop("atendimento_cliente_nome", None)
+                    # Descontar sessão de pacote ativo do cliente (se houver)
+                    if tipo and cliente_at_id:
+                        try:
+                            from models.sale import Sale, SaleItem
+                            _pacote_item = db.query(SaleItem).join(Sale).filter(
+                                Sale.cliente_id == cliente_at_id,
+                                SaleItem.procedimento == tipo,
+                                SaleItem.tipo == "pacote",
+                                SaleItem.sessoes_usadas < SaleItem.sessoes_total,
+                            ).first()
+                            if _pacote_item:
+                                _pacote_item.sessoes_usadas += 1
+                                db.commit()
+                        except Exception:
+                            pass
+                    # Limpar campos do formulário
+                    for key in ["atendimento_selectbox", "at_data", "at_queixa", "at_tipo", "at_protocolo", "at_obs", "at_linhas"]:
+                        if key in st.session_state:
+                            st.session_state.pop(key, None)
+                    st.success("Atendimento salvo e estoque atualizado.")
+                    st.rerun()
+                except Exception as _save_err:
+                    db.rollback()
+                    st.error(f"Erro ao salvar atendimento: {_save_err}")
 
         st.markdown("---")
         st.markdown("### Histórico de Atendimentos")
