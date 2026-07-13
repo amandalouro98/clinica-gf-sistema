@@ -903,24 +903,25 @@ def tela_dashboard():
         try:
             _mes_atual = _data_hoje.month
             _dia_atual = _data_hoje.day
-            aniversariantes = (
+            # Filtra em Python para evitar incompatibilidade de tipo com func.extract
+            _todos_com_nasc = (
                 db.query(Client)
-                .filter(
-                    Client.data_nascimento.isnot(None),
-                    func.extract("month", Client.data_nascimento) == _mes_atual,
-                )
-                .order_by(func.extract("day", Client.data_nascimento).asc())
+                .filter(Client.data_nascimento.isnot(None))
                 .all()
+            )
+            aniversariantes = sorted(
+                [c for c in _todos_com_nasc if c.data_nascimento.month == _mes_atual],
+                key=lambda c: c.data_nascimento.day
             )
             aniv_hoje = [c for c in aniversariantes if c.data_nascimento.day == _dia_atual]
             aniv_mes  = [c for c in aniversariantes if c.data_nascimento.day != _dia_atual]
 
             if aniv_hoje:
-                st.markdown("#### 🎉 Aniversário HOJE")
                 for c in aniv_hoje:
                     st.success(
-                        f"🎂 **{c.nome}** — {c.data_nascimento.strftime('%d/%m')} "
-                        f"| Tel: {c.telefone or '—'}"
+                        f"🎂 **ANIVERSÁRIO HOJE — {c.nome}** | "
+                        f"{c.data_nascimento.strftime('%d/%m')} | "
+                        f"Tel: {c.telefone or '—'}"
                     )
 
             if aniv_mes:
@@ -933,7 +934,8 @@ def tela_dashboard():
                     for c in aniv_mes
                 ]
                 st.dataframe(pd.DataFrame(dados_aniv), use_container_width=True, hide_index=True)
-            elif not aniv_hoje:
+
+            if not aniversariantes:
                 st.info("Nenhum aniversariante este mês.")
         except Exception as _e_aniv:
             st.warning(f"Erro ao carregar aniversariantes: {_e_aniv}")
