@@ -3453,16 +3453,28 @@ def tela_atendimentos():
                 if prod_nome and prod_nome != "— selecione —" and prod_nome in mapa_prod:
                     lotes_disp = (
                         db.query(StockLote)
-                        .filter(
-                            StockLote.produto_id == mapa_prod[prod_nome],
-                            StockLote.quantidade_atual > 0,
-                        )
+                        .filter(StockLote.produto_id == mapa_prod[prod_nome])
                         .all()
                     )
                     for lt in lotes_disp:
-                        label = f"Lote: {lt.lote or 'S/N'} | Qtd: {lt.quantidade_atual}"
+                        # saldo real = soma entradas - soma saídas via StockMovement
+                        saldo_mov = db.query(
+                            func.coalesce(
+                                func.sum(
+                                    func.case(
+                                        (StockMovement.tipo == "entrada", StockMovement.quantidade),
+                                        else_=-StockMovement.quantidade,
+                                    )
+                                ),
+                                0,
+                            )
+                        ).filter(StockMovement.lote_id == lt.id).scalar() or 0
+                        saldo_real = saldo_mov if saldo_mov > 0 else (lt.quantidade_atual or 0)
+                        if saldo_real <= 0:
+                            continue
+                        label = f"Lote: {lt.lote or 'S/N'} | Qtd: {saldo_real}"
                         lote_opcoes.append(label)
-                        lote_map[label] = lt.id
+                        lote_map[label] = (lt.id, saldo_real)
                 lote_sel = st.selectbox(f"Lote {i + 1}", lote_opcoes, key=f"at_lote_{i}")
             with c3:
                 qtd = st.number_input("Qtd", min_value=0, step=1, key=f"at_qtd_{i}")
@@ -3473,7 +3485,8 @@ def tela_atendimentos():
                 and lote_sel in lote_map
                 and qtd > 0
             ):
-                materiais.append((lote_map[lote_sel], mapa_prod[prod_nome], qtd))
+                lote_id_sel, saldo_disponivel = lote_map[lote_sel]
+                materiais.append((lote_id_sel, mapa_prod[prod_nome], qtd, saldo_disponivel))
 
         if st.button("Salvar atendimento", use_container_width=True):
             if not cliente_at_id:
@@ -3494,7 +3507,7 @@ def tela_atendimentos():
                     db.add(ap)
                     db.commit()
 
-                    for (lote_id, prod_id, qtd) in materiais:
+                    for (lote_id, prod_id, qtd, saldo_disp) in materiais:
                         am = AppointmentMaterial(
                             atendimento_id=ap.id,
                             lote_id=lote_id,
@@ -3503,10 +3516,19 @@ def tela_atendimentos():
                         )
                         db.add(am)
                         db.commit()
-                        try:
-                            movimentar(lote_id, "saida", float(qtd), motivo=f"Atendimento #{ap.id} - {cliente_at_nome or 'Cliente'}")
-                        except Exception as e:
-                            st.warning(f"Falha na baixa do lote {lote_id}: {e}")
+                        # Atualiza quantidade_atual diretamente para manter consistência
+                        lote_obj = db.get(StockLote, lote_id)
+                        if lote_obj:
+                            lote_obj.quantidade_atual = max(0, saldo_disp - float(qtd))
+                        mov = StockMovement(
+                            lote_id=lote_id,
+                            produto_id=prod_id,
+                            tipo="saida",
+                            quantidade=float(qtd),
+                            motivo=f"Atendimento #{ap.id} - {cliente_at_nome or 'Cliente'}",
+                        )
+                        db.add(mov)
+                        db.commit()
 
                     st.session_state.pop("atendimento_cliente_id", None)
                     st.session_state.pop("atendimento_cliente_nome", None)
