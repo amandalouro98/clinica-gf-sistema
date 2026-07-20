@@ -1014,7 +1014,7 @@ def tela_dashboard():
                         _styled,
                         use_container_width=True,
                         hide_index=True,
-                        height=210,
+                        height=400,
                     )
                 else:
                     st.success("Nenhum alerta de estoque no momento.")
