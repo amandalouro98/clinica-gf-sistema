@@ -3724,7 +3724,6 @@ def tela_atendimentos():
         )
 
         if atendimentos:
-            import pandas as pd
             dados_tabela = []
             ids_atendimentos = []
             for at, cli in atendimentos:
@@ -4300,7 +4299,6 @@ def tela_estoque():
             baixo, validadep = alertas()
             if baixo:
                 st.warning("⚠️ Produtos com estoque baixo (≤5 unidades):")
-                import pandas as pd
                 _dados_baixo = []
                 for prod in baixo:
                     _lotes_prod = db.query(StockLote).filter(StockLote.produto_id == prod.id).all()
@@ -4316,7 +4314,6 @@ def tela_estoque():
                 st.dataframe(pd.DataFrame(_dados_baixo), use_container_width=True, hide_index=True)
             if validadep:
                 st.warning("⚠️ Produtos com validade próxima (30 dias):")
-                import pandas as pd
                 _dados_val = []
                 for lt in validadep:
                     _dados_val.append({
@@ -5038,7 +5035,6 @@ def tela_vendas():
 
         vendas_rec = db.query(Sale).order_by(Sale.data_venda.desc(), Sale.id.desc()).limit(50).all()
         if vendas_rec:
-            import pandas as pd
             dados_vendas = []
             ids_vendas = []
             for v in vendas_rec:
@@ -5222,7 +5218,6 @@ def tela_cadastros():
                 st.markdown("### Produtos cadastrados")
                 produtos_lista = db_prod.query(Product).order_by(Product.nome.asc()).all()
                 if produtos_lista:
-                    import pandas as pd
                     rows_prod = []
                     ids_prod = []
                     for p in produtos_lista:
@@ -5365,7 +5360,6 @@ def tela_cadastros():
             st.markdown("### Procedimentos Cadastrados")
             tratamentos = db.query(Tratamento).filter(Tratamento.ativo == True).order_by(Tratamento.nome.asc()).all()
             if tratamentos:
-                import pandas as pd
                 rows_proc = []
                 ids_trat = []
                 for trat in tratamentos:
