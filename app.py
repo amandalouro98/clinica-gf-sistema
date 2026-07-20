@@ -968,24 +968,36 @@ def tela_dashboard():
                     _rows_alerta = []
                     for _lt, _prod in _lotes_alerta:
                         _dias = (_lt.validade - _data_hoje).days if _lt.validade else 999
+                        _qtd_min = _prod.estoque_minimo or 0
+                        _qtd_baixa = _lt.quantidade_atual <= _qtd_min
+
                         if _lt.validade and _dias < 0:
                             _crit = "🔴 Vencido"
+                            _ordem = (0, _dias, _lt.quantidade_atual)
                         elif _lt.validade and _dias <= 7:
                             _crit = "🟠 Crítico (≤7d)"
-                        elif _lt.validade and _dias <= 30:
-                            _crit = "🟡 Atenção (≤30d)"
-                        elif _lt.quantidade_atual <= (_prod.estoque_minimo or 0):
+                            _ordem = (1, _dias, _lt.quantidade_atual)
+                        elif _qtd_baixa and _lt.quantidade_atual == 0:
+                            _crit = "🔴 Sem estoque"
+                            _ordem = (0, 999, 0)
+                        elif _qtd_baixa:
                             _crit = "🟠 Estoque baixo"
+                            _ordem = (1, 999, _lt.quantidade_atual)
                         else:
-                            _crit = "🟡 Atenção"
+                            _crit = "🟡 Atenção (≤30d)"
+                            _ordem = (2, _dias, _lt.quantidade_atual)
+
                         _rows_alerta.append({
                             "Criticidade": _crit,
                             "Produto": _prod.nome,
                             "Qtd": _lt.quantidade_atual,
                             "Validade": _lt.validade.strftime("%d/%m/%Y") if _lt.validade else "—",
+                            "_ordem": _ordem,
                         })
 
-                    _df_alerta = pd.DataFrame(_rows_alerta)
+                    # Ordena: vencidos/sem estoque primeiro, depois por dias restantes, depois por qtd
+                    _rows_alerta.sort(key=lambda r: r["_ordem"])
+                    _df_alerta = pd.DataFrame(_rows_alerta).drop(columns=["_ordem"])
 
                     def _cor_linha(row):
                         c = row["Criticidade"]
