@@ -958,28 +958,28 @@ def tela_dashboard():
                     db.query(StockLote, Product)
                     .join(Product, StockLote.produto_id == Product.id)
                     .filter(
-                        (StockLote.quantidade_atual <= Product.estoque_minimo) |
-                        (StockLote.validade <= _data_hoje + timedelta(days=30))
+                        (StockLote.quantidade_atual <= StockLote.quantidade_minima) |
+                        (StockLote.data_validade <= _data_hoje + timedelta(days=30))
                     )
-                    .order_by(StockLote.validade.asc())
+                    .order_by(StockLote.data_validade.asc())
                     .all()
                 )
                 if _lotes_alerta:
                     _rows_alerta = []
                     for _lt, _prod in _lotes_alerta:
-                        _dias = (_lt.validade - _data_hoje).days if _lt.validade else 999
-                        _qtd_min = _prod.estoque_minimo or 0
+                        _dias = (_lt.data_validade - _data_hoje).days if _lt.data_validade else 999
+                        _qtd_min = _lt.quantidade_minima or 0
                         _qtd_baixa = _lt.quantidade_atual <= _qtd_min
 
-                        if _lt.validade and _dias < 0:
+                        if _lt.data_validade and _dias < 0:
                             _crit = "🔴 Vencido"
                             _ordem = (0, _dias, _lt.quantidade_atual)
-                        elif _lt.validade and _dias <= 7:
-                            _crit = "🟠 Crítico (≤7d)"
-                            _ordem = (1, _dias, _lt.quantidade_atual)
-                        elif _qtd_baixa and _lt.quantidade_atual == 0:
+                        elif _lt.quantidade_atual == 0:
                             _crit = "🔴 Sem estoque"
                             _ordem = (0, 999, 0)
+                        elif _lt.data_validade and _dias <= 7:
+                            _crit = "🟠 Crítico (≤7d)"
+                            _ordem = (1, _dias, _lt.quantidade_atual)
                         elif _qtd_baixa:
                             _crit = "🟠 Estoque baixo"
                             _ordem = (1, 999, _lt.quantidade_atual)
@@ -991,7 +991,7 @@ def tela_dashboard():
                             "Criticidade": _crit,
                             "Produto": _prod.nome,
                             "Qtd": _lt.quantidade_atual,
-                            "Validade": _lt.validade.strftime("%d/%m/%Y") if _lt.validade else "—",
+                            "Validade": _lt.data_validade.strftime("%d/%m/%Y") if _lt.data_validade else "—",
                             "_ordem": _ordem,
                         })
 
