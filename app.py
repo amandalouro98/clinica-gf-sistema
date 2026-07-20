@@ -953,6 +953,9 @@ def tela_dashboard():
 
         with _col_graf:
             st.markdown("#### ⚠️ Alertas de estoque crítico")
+            # Altura proporcional ao lado esquerdo: tabela (210) + avisos de hoje (~78px cada)
+            _n_aniv_hoje = len(aniv_hoje) if "aniv_hoje" in dir() else 0
+            _altura_alerta = 210 + _n_aniv_hoje * 78
             try:
                 _lotes_alerta = (
                     db.query(StockLote, Product)
@@ -1014,7 +1017,7 @@ def tela_dashboard():
                         _styled,
                         use_container_width=True,
                         hide_index=True,
-                        height=210,
+                        height=_altura_alerta,
                     )
                 else:
                     st.success("Nenhum alerta de estoque no momento.")
