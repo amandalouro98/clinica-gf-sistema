@@ -3933,29 +3933,34 @@ def tela_biometria():
                 quadril = st.number_input("Quadril (cm)", min_value=0.0, step=1.0)
 
             if st.button("Salvar medidas"):
-                b = Biometrics(
-                    cliente_id=cid,
-                    data_medicao=data_m,
-                    peso=peso,
-                    cintura=cintura,
-                    abdomen_superior=abdomen_superior,
-                    abdomen_inferior=abdomen_inferior,
-                    quadril=quadril,
-                    braco_e=braco_e,
-                    braco_d=braco_d,
-                    coxa_e=coxa_e,
-                    coxa_d=coxa_d,
-                )
-                db.add(b)
-                db.commit()
-                st.success("Medidas salvas.")
+                try:
+                    b = Biometrics(
+                        cliente_id=cid,
+                        data_medicao=data_m,
+                        peso=peso or None,
+                        cintura=cintura or None,
+                        abdomen_superior=abdomen_superior or None,
+                        abdomen_inferior=abdomen_inferior or None,
+                        quadril=quadril or None,
+                        braco_e=braco_e or None,
+                        braco_d=braco_d or None,
+                        coxa_e=coxa_e or None,
+                        coxa_d=coxa_d or None,
+                    )
+                    db.add(b)
+                    db.commit()
+                    st.success("Medidas salvas.")
+                    st.rerun()
+                except Exception as _e_bio:
+                    db.rollback()
+                    st.error(f"Erro ao salvar: {_e_bio}")
 
             historico = pd.read_sql(
                 db.query(Biometrics)
                 .filter(Biometrics.cliente_id == cid)
                 .order_by(Biometrics.data_medicao.asc())
                 .statement,
-                db.bind,
+                engine,
             )
 
             if not historico.empty:
@@ -4177,7 +4182,6 @@ def tela_estoque():
                     lt_del = db.get(StockLote, linha_sel_est)
                     if lt_del:
                         from models.appointment import AppointmentMaterial
-                        from models.stock import StockMovement
                         db.query(StockMovement).filter(StockMovement.lote_id == lt_del.id).delete()
                         db.query(AppointmentMaterial).filter(AppointmentMaterial.lote_id == lt_del.id).delete()
                         db.delete(lt_del)
@@ -4213,7 +4217,6 @@ def tela_estoque():
                                 # Criar movimentação de ajuste se quantidade mudou
                                 diferenca = new_qtd - qtd_anterior
                                 if diferenca != 0:
-                                    from models.stock import StockMovement
                                     tipo_ajuste = "entrada" if diferenca > 0 else "saida"
                                     mov_ajuste = StockMovement(
                                         lote_id=lt_ed.id,
