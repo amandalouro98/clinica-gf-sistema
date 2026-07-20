@@ -3981,29 +3981,49 @@ def tela_biometria():
                     .order_by(Biometrics.data_medicao.desc())
                     .all()
                 )
-                for _bio in bio_records:
-                    _data_bio = _bio.data_medicao.strftime("%d/%m/%Y") if _bio.data_medicao else "—"
-                    col_bio_info, col_bio_menu = st.columns([6, 0.4])
-                    with col_bio_info:
-                        partes = [f"**{_data_bio}**"]
-                        if _bio.peso: partes.append(f"Peso: {_bio.peso} kg")
-                        if _bio.braco_e: partes.append(f"Braço E: {_bio.braco_e}")
-                        if _bio.braco_d: partes.append(f"Braço D: {_bio.braco_d}")
-                        if _bio.abdomen_superior: partes.append(f"Abd. Sup: {_bio.abdomen_superior}")
-                        if _bio.cintura: partes.append(f"Cintura: {_bio.cintura}")
-                        if _bio.abdomen_inferior: partes.append(f"Abd. Inf: {_bio.abdomen_inferior}")
-                        if _bio.coxa_e: partes.append(f"Coxa E: {_bio.coxa_e}")
-                        if _bio.coxa_d: partes.append(f"Coxa D: {_bio.coxa_d}")
-                        if _bio.quadril: partes.append(f"Quadril: {_bio.quadril}")
-                        st.write(" | ".join(partes))
-                    with col_bio_menu:
-                        with st.popover("⋮", use_container_width=True):
-                            if st.button("✏️ Editar", key=f"bio_edit_{_bio.id}"):
-                                st.session_state["bio_editando"] = _bio.id
-                                st.rerun()
-                            if st.button("🗑️ Excluir", key=f"bio_del_{_bio.id}"):
-                                db.delete(_bio)
+
+                # Monta tabela
+                _df_bio = pd.DataFrame([
+                    {
+                        "Data": _b.data_medicao.strftime("%d/%m/%Y") if _b.data_medicao else "—",
+                        "Peso (kg)": _b.peso,
+                        "Braço E": _b.braco_e,
+                        "Braço D": _b.braco_d,
+                        "Abd. Sup.": _b.abdomen_superior,
+                        "Cintura": _b.cintura,
+                        "Abd. Inf.": _b.abdomen_inferior,
+                        "Coxa E": _b.coxa_e,
+                        "Coxa D": _b.coxa_d,
+                        "Quadril": _b.quadril,
+                        "_id": _b.id,
+                    }
+                    for _b in bio_records
+                ])
+
+                _sel_bio = st.dataframe(
+                    _df_bio.drop(columns=["_id"]),
+                    use_container_width=True,
+                    hide_index=True,
+                    on_select="rerun",
+                    selection_mode="single-row",
+                    key="bio_table_sel",
+                )
+
+                _bio_sel_rows = _sel_bio.selection.rows if _sel_bio else []
+                if _bio_sel_rows:
+                    _bio_id_sel = int(_df_bio.iloc[_bio_sel_rows[0]]["_id"])
+                    col_btn_bio1, col_btn_bio2, _ = st.columns([1, 1, 6])
+                    with col_btn_bio1:
+                        if st.button("✏️ Editar selecionado", key="bio_btn_edit"):
+                            st.session_state["bio_editando"] = _bio_id_sel
+                            st.rerun()
+                    with col_btn_bio2:
+                        if st.button("🗑️ Excluir selecionado", key="bio_btn_del"):
+                            _bio_del = db.get(Biometrics, _bio_id_sel)
+                            if _bio_del:
+                                db.delete(_bio_del)
                                 db.commit()
+                                st.success("Registro excluído.")
                                 st.rerun()
                 # Formulário de edição de biometria
                 if st.session_state.get("bio_editando"):
