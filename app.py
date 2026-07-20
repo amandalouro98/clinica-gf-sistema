@@ -952,38 +952,62 @@ def tela_dashboard():
                 st.warning(f"Erro ao carregar aniversariantes: {_e_aniv}")
 
         with _col_graf:
-            st.markdown("#### 📊 Atendimentos da semana por profissional")
+            st.markdown("#### ⚠️ Alertas de estoque crítico")
             try:
-                _semana_ini = _data_hoje - timedelta(days=_data_hoje.weekday())  # segunda-feira
-                _semana_fim = _semana_ini + timedelta(days=6)
-                _ats_sem = (
-                    db.query(Appointment)
+                _lotes_alerta = (
+                    db.query(StockLote, Product)
+                    .join(Product, StockLote.produto_id == Product.id)
                     .filter(
-                        Appointment.data >= _semana_ini,
-                        Appointment.data <= _semana_fim,
+                        (StockLote.quantidade_atual <= Product.estoque_minimo) |
+                        (StockLote.validade <= _data_hoje + timedelta(days=30))
                     )
+                    .order_by(StockLote.validade.asc())
                     .all()
                 )
-                if _ats_sem:
-                    from collections import Counter
-                    _contagem = Counter()
-                    for _a in _ats_sem:
-                        # Usa usuario vinculado ao login; fallback para campo legado cadastrado_por
-                        if _a.usuario:
-                            _prof = _a.usuario.nome
-                        elif (_a.cadastrado_por or "").strip():
-                            _prof = _a.cadastrado_por.strip()
+                if _lotes_alerta:
+                    _rows_alerta = []
+                    for _lt, _prod in _lotes_alerta:
+                        _dias = (_lt.validade - _data_hoje).days if _lt.validade else 999
+                        if _lt.validade and _dias < 0:
+                            _crit = "🔴 Vencido"
+                        elif _lt.validade and _dias <= 7:
+                            _crit = "🟠 Crítico (≤7d)"
+                        elif _lt.validade and _dias <= 30:
+                            _crit = "🟡 Atenção (≤30d)"
+                        elif _lt.quantidade_atual <= (_prod.estoque_minimo or 0):
+                            _crit = "🟠 Estoque baixo"
                         else:
-                            _prof = "Sem profissional"
-                        _contagem[_prof] += 1
-                    _df_graf = pd.DataFrame(
-                        _contagem.items(), columns=["Profissional", "Qtd"]
-                    ).sort_values("Qtd", ascending=False)
-                    st.bar_chart(_df_graf.set_index("Profissional"), use_container_width=True)
+                            _crit = "🟡 Atenção"
+                        _rows_alerta.append({
+                            "Criticidade": _crit,
+                            "Produto": _prod.nome,
+                            "Qtd": _lt.quantidade_atual,
+                            "Validade": _lt.validade.strftime("%d/%m/%Y") if _lt.validade else "—",
+                        })
+
+                    _df_alerta = pd.DataFrame(_rows_alerta)
+
+                    def _cor_linha(row):
+                        c = row["Criticidade"]
+                        if "Vencido" in c:
+                            bg = "background-color:#ffd6d6"
+                        elif "Crítico" in c or "baixo" in c:
+                            bg = "background-color:#ffe4c4"
+                        else:
+                            bg = "background-color:#fffbcc"
+                        return [bg] * len(row)
+
+                    _styled = _df_alerta.style.apply(_cor_linha, axis=1)
+                    st.dataframe(
+                        _styled,
+                        use_container_width=True,
+                        hide_index=True,
+                        height=210,
+                    )
                 else:
-                    st.info("Nenhum atendimento registrado esta semana.")
-            except Exception as _e_graf:
-                st.warning(f"Erro ao carregar gráfico: {_e_graf}")
+                    st.success("Nenhum alerta de estoque no momento.")
+            except Exception as _e_alerta:
+                st.warning(f"Erro ao carregar alertas: {_e_alerta}")
 
         st.markdown("---")
         _amanha = _data_hoje + timedelta(days=1)
