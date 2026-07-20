@@ -4333,6 +4333,36 @@ def tela_estoque():
                 .order_by(StockMovement.criado_em.desc())
                 .all()
             )
+            # Dialog para editar movimentação
+            if "mov_edit_id" not in st.session_state:
+                st.session_state["mov_edit_id"] = None
+
+            if st.session_state["mov_edit_id"] is not None:
+                _mov_ed = db.get(StockMovement, st.session_state["mov_edit_id"])
+                if _mov_ed:
+                    @st.dialog("Editar Movimentação", width="small")
+                    def _dialog_editar_mov():
+                        _tipo_ed = st.selectbox("Tipo", ["entrada", "saida"],
+                            index=0 if (_mov_ed.tipo or "entrada") == "entrada" else 1,
+                            key="mov_ed_tipo")
+                        _qtd_ed = st.number_input("Quantidade", min_value=0.0, step=1.0,
+                            value=float(_mov_ed.quantidade or 0), key="mov_ed_qtd")
+                        _mot_ed = st.text_input("Motivo", value=_mov_ed.motivo or "", key="mov_ed_mot")
+                        c1, c2 = st.columns(2)
+                        with c1:
+                            if st.button("Salvar", use_container_width=True, key="mov_ed_salvar"):
+                                _mov_ed.tipo = _tipo_ed
+                                _mov_ed.quantidade = _qtd_ed
+                                _mov_ed.motivo = _mot_ed
+                                db.commit()
+                                st.session_state["mov_edit_id"] = None
+                                st.rerun()
+                        with c2:
+                            if st.button("Cancelar", use_container_width=True, key="mov_ed_cancel"):
+                                st.session_state["mov_edit_id"] = None
+                                st.rerun()
+                    _dialog_editar_mov()
+
             if movs_lista:
                 for _mov in movs_lista:
                     # Tenta resolver nome do produto pelo lote
@@ -4352,7 +4382,10 @@ def tela_estoque():
                         )
                     with col_mov_del:
                         with st.popover("⋮", use_container_width=True):
-                            if st.button("🗑️ Excluir", key=f"mov_del_{_mov.id}"):
+                            if st.button("✏️ Editar", key=f"mov_edit_{_mov.id}", use_container_width=True):
+                                st.session_state["mov_edit_id"] = _mov.id
+                                st.rerun()
+                            if st.button("🗑️ Excluir", key=f"mov_del_{_mov.id}", use_container_width=True):
                                 db.delete(_mov)
                                 db.commit()
                                 st.rerun()
