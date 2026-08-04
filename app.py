@@ -3648,20 +3648,14 @@ def tela_atendimentos():
                             quantidade=float(qtd),
                         )
                         db.add(am)
-                        db.commit()
-                        # Atualiza quantidade_atual diretamente para manter consistência
-                        lote_obj = db.get(StockLote, lote_id)
-                        if lote_obj:
-                            lote_obj.quantidade_atual = max(0, saldo_disp - float(qtd))
-                        mov = StockMovement(
-                            lote_id=lote_id,
-                            produto_id=prod_id,
-                            tipo="saida",
-                            quantidade=float(qtd),
+                        movimentar(
+                            lote_id,
+                            "saida",
+                            float(qtd),
                             motivo=f"Atendimento #{ap.id} - {cliente_at_nome or 'Cliente'}",
+                            db=db,
                         )
-                        db.add(mov)
-                        db.commit()
+                    db.commit()
 
                     st.session_state.pop("atendimento_cliente_id", None)
                     st.session_state.pop("atendimento_cliente_nome", None)
@@ -3772,7 +3766,13 @@ def tela_atendimentos():
                     at_del = db.query(Appointment).filter(Appointment.id == at_id_selecionado).first()
                     if at_del:
                         mats_del = db.query(AppointmentMaterial).filter(AppointmentMaterial.atendimento_id == at_id_selecionado).all()
+                        _nome_del = at_del.cliente.nome if at_del.cliente else "Cliente"
                         for mat_del in mats_del:
+                            if mat_del.lote_id and (mat_del.quantidade or 0) > 0:
+                                try:
+                                    movimentar(mat_del.lote_id, "entrada", float(mat_del.quantidade), motivo=f"Devolução por exclusão do atendimento #{at_del.id} - {_nome_del}", db=db)
+                                except Exception as _e_del:
+                                    st.warning(f"Não foi possível devolver estoque de {mat_del.produto.nome if mat_del.produto else 'material'}: {_e_del}")
                             db.delete(mat_del)
                         db.delete(at_del)
                         db.commit()
@@ -3875,16 +3875,41 @@ def tela_atendimentos():
                         at_edit.protocolo_atendimento = edit_protocolo
                         at_edit.tipo_tratamento = edit_tipo if edit_tipo != "— selecione —" else ""
                         at_edit.observacoes = edit_obs
-                        
-                        # Atualizar materiais existentes
+
+                        _nome_cliente = at_edit.cliente.nome if at_edit.cliente else "Cliente"
+                        _erros_estoque = []
+
+                        # Atualizar materiais existentes: compensar/remover/baixar diferença
                         for i, mat in enumerate(mats_atuais):
                             remove_mat = st.session_state.get(f"mat_atual_rem_{at_edit.id}_{i}", False)
                             new_qtd = st.session_state.get(f"mat_atual_qtd_{at_edit.id}_{i}")
+                            if new_qtd is not None:
+                                new_qtd = float(new_qtd)
+                            else:
+                                new_qtd = float(mat.quantidade or 0)
+                            qtd_atual = float(mat.quantidade or 0)
+
                             if remove_mat:
+                                # Devolver estoque e remover vínculo
+                                if mat.lote_id and qtd_atual > 0:
+                                    try:
+                                        movimentar(mat.lote_id, "entrada", qtd_atual, motivo=f"Devolução por remoção no atendimento #{at_edit.id} - {_nome_cliente}", db=db)
+                                    except Exception as _e:
+                                        _erros_estoque.append(f"{mat.produto.nome if mat.produto else 'Material'}: {_e}")
                                 db.delete(mat)
-                            elif new_qtd is not None:
+                            elif new_qtd != qtd_atual and mat.lote_id:
+                                dif = new_qtd - qtd_atual
+                                try:
+                                    if dif > 0:
+                                        # Aumentou quantidade: baixar diferença
+                                        movimentar(mat.lote_id, "saida", dif, motivo=f"Ajuste de quantidade no atendimento #{at_edit.id} - {_nome_cliente}", db=db)
+                                    else:
+                                        # Diminuiu quantidade: devolver diferença
+                                        movimentar(mat.lote_id, "entrada", abs(dif), motivo=f"Ajuste de quantidade no atendimento #{at_edit.id} - {_nome_cliente}", db=db)
+                                except Exception as _e:
+                                    _erros_estoque.append(f"{mat.produto.nome if mat.produto else 'Material'}: {_e}")
                                 mat.quantidade = new_qtd
-                        
+
                         # Adicionar novos materiais
                         num_novos = int(st.session_state.get("edit_num_mats", 0))
                         for i in range(num_novos):
@@ -3892,14 +3917,12 @@ def tela_atendimentos():
                             lote_sel_novo = st.session_state.get(f"edit_at_lote_{at_edit.id}_{i}")
                             qtd_novo = st.session_state.get(f"edit_at_qtd_{at_edit.id}_{i}")
                             if prod_nome_novo and prod_nome_novo != "— selecione —" and prod_nome_novo in mapa_prod_edit:
-                                # Resolver lote
                                 if lote_sel_novo and lote_sel_novo != "— selecione —":
                                     lote_map_novo = {}
                                     lotes_disp_novo = (
                                         db.query(StockLote)
                                         .filter(
                                             StockLote.produto_id == mapa_prod_edit[prod_nome_novo],
-                                            StockLote.quantidade_atual > 0,
                                         )
                                         .all()
                                     )
@@ -3909,7 +3932,7 @@ def tela_atendimentos():
                                     lote_id_novo = lote_map_novo.get(lote_sel_novo)
                                 else:
                                     lote_id_novo = None
-                                
+
                                 if lote_id_novo and qtd_novo and qtd_novo > 0:
                                     am_novo = AppointmentMaterial(
                                         atendimento_id=at_edit.id,
@@ -3918,14 +3941,16 @@ def tela_atendimentos():
                                         quantidade=float(qtd_novo),
                                     )
                                     db.add(am_novo)
-                                    # Baixa no estoque
                                     try:
-                                        movimentar(lote_id_novo, "saida", float(qtd_novo), motivo=f"Atendimento #{at_edit.id} - {at_edit.cliente.nome if at_edit.cliente else 'Cliente'} (edição)")
-                                    except Exception as e:
-                                        st.warning(f"Falha na baixa do lote {lote_id_novo}: {e}")
-                        
+                                        movimentar(lote_id_novo, "saida", float(qtd_novo), motivo=f"Atendimento #{at_edit.id} - {_nome_cliente} (edição)", db=db)
+                                    except Exception as _e:
+                                        _erros_estoque.append(f"{prod_nome_novo}: {_e}")
+
                         db.commit()
-                        st.success("Atendimento atualizado!")
+                        if _erros_estoque:
+                            st.warning("Atendimento salvo, mas com alertas no estoque:\n" + "\n".join(_erros_estoque))
+                        else:
+                            st.success("Atendimento atualizado!")
                         st.session_state.pop("editar_atendimento_id", None)
                         st.rerun()
                     if cancelar_edicao:
@@ -4150,7 +4175,7 @@ def tela_estoque():
                     novo_lote = StockLote(
                         produto_id=mapa_prod[prod_compra],
                         lote=lote_compra or None,
-                        quantidade_atual=0,  # Inicia em 0, movimentar() vai adicionar
+                        quantidade_atual=0,
                         quantidade_minima=0,
                         data_validade=validade_compra,
                         fornecedor=fornecedor_compra or None,
@@ -4158,7 +4183,8 @@ def tela_estoque():
                     )
                     db.add(novo_lote)
                     db.commit()
-                    movimentar(novo_lote.id, "entrada", qtd_compra, motivo="Compra registrada")
+                    movimentar(novo_lote.id, "entrada", qtd_compra, motivo="Compra registrada", db=db)
+                    db.commit()
                     st.success("Lote registrado!")
                     st.rerun()
 
@@ -4166,12 +4192,20 @@ def tela_estoque():
             st.markdown("### Estoque atual")
 
             # Filtro por categoria
-            _categorias_est = ["Todas"] + sorted(list(set(p.categoria for p in db.query(Product).all() if p.categoria)))
+            _produtos_cache = db.query(Product).order_by(Product.nome.asc()).all()
+            _categorias_est = ["Todas"] + sorted({p.categoria for p in _produtos_cache if p.categoria})
             _cat_filtro = st.selectbox("Filtrar por categoria", _categorias_est, key="est_filtro_cat")
 
             # Filtro por produto
-            _produtos_est = ["Todos"] + sorted(list(set(p.nome for p in db.query(Product).all() if p.nome)))
+            _produtos_est = ["Todos"] + sorted({p.nome for p in _produtos_cache if p.nome})
             _prod_filtro = st.selectbox("Filtrar por produto", _produtos_est, key="est_filtro_prod")
+
+            # Saldos por produto em uma única query
+            _saldos_por_produto = dict(
+                db.query(StockLote.produto_id, func.sum(StockLote.quantidade_atual))
+                .group_by(StockLote.produto_id)
+                .all()
+            )
 
             lotes = (
                 db.query(StockLote)
@@ -4179,36 +4213,28 @@ def tela_estoque():
                 .order_by(Product.nome.asc(), StockLote.data_validade.asc())
                 .all()
             )
-            
+
             # Aplicar filtros
             if _cat_filtro != "Todas":
                 lotes = [lt for lt in lotes if lt.produto and lt.produto.categoria == _cat_filtro]
             if _prod_filtro != "Todos":
                 lotes = [lt for lt in lotes if lt.produto and lt.produto.nome == _prod_filtro]
-            
+
             if lotes:
                 dados_est = []
                 ids_lotes = []
                 for lt in lotes:
                     ids_lotes.append(lt.id)
-                    # Calcular saldo do produto (entradas - saídas de todas as movimentações)
-                    entradas = db.query(func.sum(StockMovement.quantidade)).filter(
-                        StockMovement.produto_id == lt.produto_id,
-                        StockMovement.tipo == "entrada"
-                    ).scalar() or 0
-                    saidas = db.query(func.sum(StockMovement.quantidade)).filter(
-                        StockMovement.produto_id == lt.produto_id,
-                        StockMovement.tipo == "saida"
-                    ).scalar() or 0
-                    saldo_produto = float(entradas) - float(saidas)
-                    
+                    # Saldo real do produto considerando quantidade_atual de todos os lotes
+                    saldo_produto = float(_saldos_por_produto.get(lt.produto_id, 0) or 0)
+
                     dados_est.append({
                         "Selecionar": False,
                         "Produto": lt.produto.nome if lt.produto else "—",
                         "Categoria": lt.produto.categoria if lt.produto else "—",
                         "Lote": lt.lote or "S/N",
-                        "Qtd Comprada": lt.quantidade_atual,
-                        "Saldo": round(saldo_produto, 2),
+                        "Qtd Lote": lt.quantidade_atual,
+                        "Saldo Total": round(saldo_produto, 2),
                         "Validade": formatar_data_br(lt.data_validade),
                         "Fornecedor": lt.fornecedor or "",
                     })
@@ -4239,7 +4265,6 @@ def tela_estoque():
                 if btn_excluir_est and linha_sel_est:
                     lt_del = db.get(StockLote, linha_sel_est)
                     if lt_del:
-                        from models.appointment import AppointmentMaterial
                         db.query(StockMovement).filter(StockMovement.lote_id == lt_del.id).delete()
                         db.query(AppointmentMaterial).filter(AppointmentMaterial.lote_id == lt_del.id).delete()
                         db.delete(lt_del)
@@ -4426,10 +4451,12 @@ def tela_estoque():
                     and qtd_mov > 0
                 ):
                     try:
-                        movimentar(lote_mov_map[lote_mov_sel], tipo_mov, qtd_mov, mot_mov)
+                        movimentar(lote_mov_map[lote_mov_sel], tipo_mov, qtd_mov, mot_mov, db=db)
+                        db.commit()
                         st.success("Movimentação registrada.")
                         st.rerun()
                     except Exception as e:
+                        db.rollback()
                         st.error(str(e))
                 else:
                     st.error("Selecione produto, lote e informe quantidade.")
@@ -5292,13 +5319,12 @@ def tela_cadastros():
                     if btn_del_prod and linha_sel_prod:
                         p_del = db_prod.get(Product, linha_sel_prod)
                         if p_del:
-                            from models.appointment import AppointmentMaterial
-                            from models.stock import StockMovement, StockLote
                             lotes_do_prod = db_prod.query(StockLote).filter(StockLote.produto_id == p_del.id).all()
-                            for _lt in lotes_do_prod:
-                                db_prod.query(StockMovement).filter(StockMovement.lote_id == _lt.id).delete()
-                                db_prod.query(AppointmentMaterial).filter(AppointmentMaterial.lote_id == _lt.id).delete()
-                                db_prod.delete(_lt)
+                            _lote_ids_prod = [_lt.id for _lt in lotes_do_prod]
+                            if _lote_ids_prod:
+                                db_prod.query(StockMovement).filter(StockMovement.lote_id.in_(_lote_ids_prod)).delete(synchronize_session=False)
+                                db_prod.query(AppointmentMaterial).filter(AppointmentMaterial.lote_id.in_(_lote_ids_prod)).delete(synchronize_session=False)
+                                db_prod.query(StockLote).filter(StockLote.id.in_(_lote_ids_prod)).delete(synchronize_session=False)
                             db_prod.delete(p_del)
                             db_prod.commit()
                             st.success("Produto excluído!")

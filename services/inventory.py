@@ -5,9 +5,15 @@ from utils.db import SessionLocal
 from models.stock import StockLote, StockMovement, Product
 
 
-def movimentar(lote_id: int, tipo: str, quantidade: float, motivo: str = ""):
-    """Registra entrada ou saída de estoque pelo ID do lote."""
-    db = SessionLocal()
+def movimentar(lote_id: int, tipo: str, quantidade: float, motivo: str = "", db=None):
+    """Registra entrada ou saída de estoque pelo ID do lote.
+
+    Pode receber uma sessão aberta via `db` para executar dentro de uma transação
+    já existente. Se não receber, cria uma sessão própria e fecha ao final.
+    """
+    own_session = db is None
+    if own_session:
+        db = SessionLocal()
     try:
         lote = db.get(StockLote, lote_id)
         if not lote:
@@ -26,9 +32,15 @@ def movimentar(lote_id: int, tipo: str, quantidade: float, motivo: str = ""):
             motivo=motivo,
         )
         db.add(mov)
-        db.commit()
+        if own_session:
+            db.commit()
+    except Exception:
+        if own_session:
+            db.rollback()
+        raise
     finally:
-        db.close()
+        if own_session:
+            db.close()
 
 
 def alertas():
