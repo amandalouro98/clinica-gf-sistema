@@ -3793,82 +3793,83 @@ def tela_atendimentos():
                 if at_edit:
                     st.markdown("---")
                     st.markdown("#### Editar Atendimento")
-                    with st.form("form_editar_atendimento", clear_on_submit=False):
-                        edit_data = st.date_input("Data", value=at_edit.data, format="DD/MM/YYYY")
-                        edit_queixa = st.text_area("Queixa", value=at_edit.queixa_consulta or "")
-                        edit_protocolo = st.text_area("Protocolo", value=at_edit.protocolo_atendimento or "")
-                        # Lista suspensa de tratamentos cadastrados
-                        tratamentos_lista_edit = db.query(Tratamento).filter(Tratamento.ativo == True).order_by(Tratamento.nome.asc()).all()
-                        opcoes_trat_edit = ["— selecione —"] + [t.nome for t in tratamentos_lista_edit]
-                        idx_trat = 0
-                        if at_edit.tipo_tratamento:
-                            try:
-                                idx_trat = opcoes_trat_edit.index(at_edit.tipo_tratamento)
-                            except ValueError:
-                                idx_trat = 0
-                        edit_tipo = st.selectbox("Tipo Tratamento", opcoes_trat_edit, index=idx_trat)
-                        if edit_tipo == "— selecione —":
-                            edit_tipo = ""
-                        edit_obs = st.text_area("Observações", value=at_edit.observacoes or "")
+                    # NÃO usar st.form aqui: os campos dependentes (produto -> lote)
+                    # precisam atualizar dinamicamente a cada interação.
+                    edit_data = st.date_input("Data", value=at_edit.data, format="DD/MM/YYYY", key=f"edit_data_{at_edit.id}")
+                    edit_queixa = st.text_area("Queixa", value=at_edit.queixa_consulta or "", key=f"edit_queixa_{at_edit.id}")
+                    edit_protocolo = st.text_area("Protocolo", value=at_edit.protocolo_atendimento or "", key=f"edit_protocolo_{at_edit.id}")
+                    # Lista suspensa de tratamentos cadastrados
+                    tratamentos_lista_edit = db.query(Tratamento).filter(Tratamento.ativo == True).order_by(Tratamento.nome.asc()).all()
+                    opcoes_trat_edit = ["— selecione —"] + [t.nome for t in tratamentos_lista_edit]
+                    idx_trat = 0
+                    if at_edit.tipo_tratamento:
+                        try:
+                            idx_trat = opcoes_trat_edit.index(at_edit.tipo_tratamento)
+                        except ValueError:
+                            idx_trat = 0
+                    edit_tipo = st.selectbox("Tipo Tratamento", opcoes_trat_edit, index=idx_trat, key=f"edit_tipo_{at_edit.id}")
+                    if edit_tipo == "— selecione —":
+                        edit_tipo = ""
+                    edit_obs = st.text_area("Observações", value=at_edit.observacoes or "", key=f"edit_obs_{at_edit.id}")
 
-                        # Materiais usados - listar atuais e permitir adicionar novos
-                        st.markdown("##### Materiais usados")
-                        mats_atuais = db.query(AppointmentMaterial).filter(AppointmentMaterial.atendimento_id == at_edit.id).all()
-                        if mats_atuais:
-                            for i, mat in enumerate(mats_atuais):
-                                nome_mat = "—"
-                                if mat.produto:
-                                    nome_mat = mat.produto.nome
-                                elif mat.lote and mat.lote.produto:
-                                    nome_mat = mat.lote.produto.nome
-                                col_mat_nome, col_mat_qtd, col_mat_rem = st.columns([4, 1, 1])
-                                col_mat_nome.text_input(f"Material {i+1}", value=nome_mat, disabled=True, key=f"mat_atual_nome_{at_edit.id}_{i}")
-                                col_mat_qtd.number_input("Qtd", value=float(mat.quantidade), min_value=0.0, step=1.0, key=f"mat_atual_qtd_{at_edit.id}_{i}")
-                                col_mat_rem.checkbox("Remover", key=f"mat_atual_rem_{at_edit.id}_{i}")
-                            st.markdown("---")
-                        
-                        # Adicionar novos materiais na edição
-                        st.markdown("**Adicionar materiais:**")
-                        # Buscar materiais cadastrados + produtos do estoque
-                        mats_cadastrados_edit = db.query(Material).filter(Material.ativo == True).order_by(Material.nome.asc()).all()
-                        produtos_edit = db.query(Product).order_by(Product.nome.asc()).all()
-                        mapa_prod_edit = {p.nome: p.id for p in produtos_edit}
-                        nomes_materiais_edit = sorted(set([m.nome for m in mats_cadastrados_edit] + list(mapa_prod_edit.keys())))
+                    # Materiais usados - listar atuais e permitir adicionar novos
+                    st.markdown("##### Materiais usados")
+                    mats_atuais = db.query(AppointmentMaterial).filter(AppointmentMaterial.atendimento_id == at_edit.id).all()
+                    if mats_atuais:
+                        for i, mat in enumerate(mats_atuais):
+                            nome_mat = "—"
+                            if mat.produto:
+                                nome_mat = mat.produto.nome
+                            elif mat.lote and mat.lote.produto:
+                                nome_mat = mat.lote.produto.nome
+                            col_mat_nome, col_mat_qtd, col_mat_rem = st.columns([4, 1, 1])
+                            col_mat_nome.text_input(f"Material {i+1}", value=nome_mat, disabled=True, key=f"mat_atual_nome_{at_edit.id}_{i}")
+                            col_mat_qtd.number_input("Qtd", value=float(mat.quantidade), min_value=0.0, step=1.0, key=f"mat_atual_qtd_{at_edit.id}_{i}")
+                            col_mat_rem.checkbox("Remover", key=f"mat_atual_rem_{at_edit.id}_{i}")
+                        st.markdown("---")
 
-                        num_mats_edit = st.number_input("Quantos produtos adicionar?", min_value=0, step=1, value=0, key="edit_num_mats")
-                        for i in range(int(num_mats_edit)):
-                            c1, c2, c3 = st.columns([3, 2, 1])
-                            with c1:
-                                prod_nome_edit = st.selectbox(
-                                    f"Material novo {i + 1}",
-                                    ["— selecione —"] + nomes_materiais_edit,
-                                    key=f"edit_at_prod_{at_edit.id}_{i}",
-                                )
-                            with c2:
-                                lote_opcoes_edit = ["— selecione —"]
-                                lote_map_edit = {}
-                                if prod_nome_edit and prod_nome_edit != "— selecione —" and prod_nome_edit in mapa_prod_edit:
-                                    lotes_disp_edit = (
-                                        db.query(StockLote)
-                                        .filter(
-                                            StockLote.produto_id == mapa_prod_edit[prod_nome_edit],
-                                            StockLote.quantidade_atual > 0,
-                                        )
-                                        .all()
+                    # Adicionar novos materiais na edição
+                    st.markdown("**Adicionar materiais:**")
+                    # Buscar materiais cadastrados + produtos do estoque
+                    mats_cadastrados_edit = db.query(Material).filter(Material.ativo == True).order_by(Material.nome.asc()).all()
+                    produtos_edit = db.query(Product).order_by(Product.nome.asc()).all()
+                    mapa_prod_edit = {p.nome: p.id for p in produtos_edit}
+                    nomes_materiais_edit = sorted(set([m.nome for m in mats_cadastrados_edit] + list(mapa_prod_edit.keys())))
+
+                    num_mats_edit = st.number_input("Quantos produtos adicionar?", min_value=0, step=1, value=0, key="edit_num_mats")
+                    for i in range(int(num_mats_edit)):
+                        c1, c2, c3 = st.columns([3, 2, 1])
+                        with c1:
+                            prod_nome_edit = st.selectbox(
+                                f"Material novo {i + 1}",
+                                ["— selecione —"] + nomes_materiais_edit,
+                                key=f"edit_at_prod_{at_edit.id}_{i}",
+                            )
+                        with c2:
+                            lote_opcoes_edit = ["— selecione —"]
+                            lote_map_edit = {}
+                            if prod_nome_edit and prod_nome_edit != "— selecione —" and prod_nome_edit in mapa_prod_edit:
+                                lotes_disp_edit = (
+                                    db.query(StockLote)
+                                    .filter(
+                                        StockLote.produto_id == mapa_prod_edit[prod_nome_edit],
+                                        StockLote.quantidade_atual > 0,
                                     )
-                                    for lt in lotes_disp_edit:
-                                        label = f"Lote: {lt.lote or 'S/N'} | Qtd: {lt.quantidade_atual}"
-                                        lote_opcoes_edit.append(label)
-                                        lote_map_edit[label] = lt.id
-                                st.selectbox(f"Lote {i + 1}", lote_opcoes_edit, key=f"edit_at_lote_{at_edit.id}_{i}")
-                            with c3:
-                                st.number_input("Qtd", min_value=0, step=1, key=f"edit_at_qtd_{at_edit.id}_{i}")
+                                    .all()
+                                )
+                                for lt in lotes_disp_edit:
+                                    label = f"Lote: {lt.lote or 'S/N'} | Qtd: {lt.quantidade_atual}"
+                                    lote_opcoes_edit.append(label)
+                                    lote_map_edit[label] = lt.id
+                            st.selectbox(f"Lote {i + 1}", lote_opcoes_edit, key=f"edit_at_lote_{at_edit.id}_{i}")
+                        with c3:
+                            st.number_input("Qtd", min_value=0, step=1, key=f"edit_at_qtd_{at_edit.id}_{i}")
 
-                        col_salvar, col_cancelar = st.columns(2)
-                        with col_salvar:
-                            salvar_edicao = st.form_submit_button("Salvar", use_container_width=True)
-                        with col_cancelar:
-                            cancelar_edicao = st.form_submit_button("Cancelar", use_container_width=True)
+                    col_salvar, col_cancelar = st.columns(2)
+                    with col_salvar:
+                        salvar_edicao = st.button("Salvar", use_container_width=True, key=f"btn_salvar_edicao_{at_edit.id}")
+                    with col_cancelar:
+                        cancelar_edicao = st.button("Cancelar", use_container_width=True, key=f"btn_cancelar_edicao_{at_edit.id}")
 
                     if salvar_edicao:
                         at_edit.data = edit_data
