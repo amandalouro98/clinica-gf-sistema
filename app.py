@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import altair as alt
+import json
 from datetime import date, datetime, timedelta, timezone
 
 # Fuso horário de Brasília (GMT-3)
@@ -11,6 +12,23 @@ def _hoje():
 
 def _agora():
     return datetime.now(BR_TZ)
+
+
+def registrar_exclusao(db, tipo, referencia_id, descricao, dados: dict):
+    """Salva um snapshot do que foi excluído na lixeira (registros_exclusao)."""
+    try:
+        _user = st.session_state.get("user", {}) or {}
+        reg = RegistroExclusao(
+            tipo=tipo,
+            referencia_id=referencia_id,
+            descricao=descricao,
+            dados_json=json.dumps(dados, ensure_ascii=False, default=str),
+            excluido_por=_user.get("nome") or _user.get("email") or "—",
+        )
+        db.add(reg)
+    except Exception:
+        # Não impede a exclusão caso o log falhe
+        pass
 from dotenv import load_dotenv
 from streamlit_searchbox import st_searchbox
 
@@ -37,6 +55,7 @@ from models.schedule_log import AgendaLog
 from models.dose_table import DoseTable
 from models.material import Material
 from models.tratamento import Tratamento
+from models.deletion_log import RegistroExclusao
 from utils.security import hash_password
 from utils.helpers import calcular_imc
 from services.auth import authenticate, seed_admin
@@ -792,6 +811,7 @@ def sidebar_menu():
                 ("📝", "Contratos", "Contratos"),
                 ("🗂️", "Cadastros", "Cadastros"),
                 ("⚙️", "Usuários", "Usuários"),
+                ("🗑️", "Lixeira", "Lixeira"),
             ]
         elif perfil == "recepcao":
             # Recepção não vê Relatórios
@@ -3790,6 +3810,34 @@ def tela_atendimentos():
                             if at_del:
                                 mats_del = db.query(AppointmentMaterial).filter(AppointmentMaterial.atendimento_id == at_del.id).all()
                                 _nome_del = at_del.cliente.nome if at_del.cliente else "Cliente"
+                                # Snapshot para a lixeira antes de apagar
+                                _snap = {
+                                    "id": at_del.id,
+                                    "cliente": _nome_del,
+                                    "cliente_id": at_del.cliente_id,
+                                    "data": str(at_del.data) if at_del.data else None,
+                                    "queixa_consulta": at_del.queixa_consulta,
+                                    "protocolo_atendimento": at_del.protocolo_atendimento,
+                                    "tipo_tratamento": at_del.tipo_tratamento,
+                                    "receituario": at_del.receituario,
+                                    "observacoes": at_del.observacoes,
+                                    "cadastrado_por": at_del.cadastrado_por,
+                                    "materiais": [
+                                        {
+                                            "produto": (m.produto.nome if m.produto else None),
+                                            "lote_id": m.lote_id,
+                                            "quantidade": m.quantidade,
+                                        }
+                                        for m in mats_del
+                                    ],
+                                }
+                                registrar_exclusao(
+                                    db,
+                                    tipo="atendimento",
+                                    referencia_id=at_del.id,
+                                    descricao=f"{_nome_del} — {formatar_data_br(at_del.data) if at_del.data else ''}",
+                                    dados=_snap,
+                                )
                                 for mat_del in mats_del:
                                     if mat_del.lote_id and (mat_del.quantidade or 0) > 0:
                                         try:
@@ -5556,6 +5604,59 @@ def tela_cadastros():
         db.close()
 
 
+def tela_lixeira():
+    header_titulo("Lixeira", "Registros excluídos do sistema")
+    db = SessionLocal()
+    try:
+        regs = (
+            db.query(RegistroExclusao)
+            .order_by(RegistroExclusao.excluido_em.desc())
+            .all()
+        )
+        if not regs:
+            st.info("Nenhum registro excluído até o momento.")
+            return
+
+        # Filtro por tipo
+        tipos = ["Todos"] + sorted({r.tipo for r in regs if r.tipo})
+        tipo_sel = st.selectbox("Filtrar por tipo", tipos, key="lixeira_tipo")
+        if tipo_sel != "Todos":
+            regs = [r for r in regs if r.tipo == tipo_sel]
+
+        # Tabela resumo
+        dados = []
+        for r in regs:
+            _quando = "—"
+            if r.excluido_em:
+                try:
+                    _quando = r.excluido_em.strftime("%d/%m/%Y %H:%M")
+                except Exception:
+                    _quando = str(r.excluido_em)[:16]
+            dados.append({
+                "ID": r.id,
+                "Tipo": r.tipo,
+                "Descrição": r.descricao or "—",
+                "Excluído por": r.excluido_por or "—",
+                "Quando": _quando,
+            })
+        st.dataframe(pd.DataFrame(dados), use_container_width=True, hide_index=True)
+
+        st.markdown("---")
+        st.markdown("### Ver detalhes de um registro")
+        opcoes = {f"#{r.id} — {r.tipo} — {r.descricao or ''}": r.id for r in regs}
+        sel = st.selectbox("Selecione o registro", ["— selecione —"] + list(opcoes.keys()), key="lixeira_detalhe")
+        if sel and sel != "— selecione —":
+            reg = db.get(RegistroExclusao, opcoes[sel])
+            if reg:
+                try:
+                    conteudo = json.loads(reg.dados_json) if reg.dados_json else {}
+                except Exception:
+                    conteudo = {"raw": reg.dados_json}
+                st.json(conteudo)
+    finally:
+        db.close()
+
+
 def tela_usuarios():
     header_titulo("Usuários", "Perfis e acesso ao sistema")
     perfil_atual = st.session_state.user.get("perfil", "")
@@ -5708,6 +5809,14 @@ def main():
         perfil = st.session_state.user.get("perfil", "") if st.session_state.user else ""
         if perfil in ["admin", "recepcao", "profissional"]:
             tela_cadastros()
+        else:
+            st.error("Você não tem permissão para acessar esta página.")
+            st.info("Contate o administrador do sistema.")
+    elif rota == "Lixeira":
+        # Verificar permissão - apenas admin
+        perfil = st.session_state.user.get("perfil", "") if st.session_state.user else ""
+        if perfil == "admin":
+            tela_lixeira()
         else:
             st.error("Você não tem permissão para acessar esta página.")
             st.info("Contate o administrador do sistema.")
