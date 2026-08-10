@@ -811,7 +811,6 @@ def sidebar_menu():
                 ("📝", "Contratos", "Contratos"),
                 ("🗂️", "Cadastros", "Cadastros"),
                 ("⚙️", "Usuários", "Usuários"),
-                ("🗑️", "Lixeira", "Lixeira"),
             ]
         elif perfil == "recepcao":
             # Recepção não vê Relatórios
@@ -4336,14 +4335,44 @@ def tela_estoque():
                     btn_excluir_est = st.button("🗑️ Excluir", key="btn_excluir_est", disabled=(linha_sel_est is None))
                 
                 if btn_excluir_est and linha_sel_est:
-                    lt_del = db.get(StockLote, linha_sel_est)
-                    if lt_del:
-                        db.query(StockMovement).filter(StockMovement.lote_id == lt_del.id).delete(synchronize_session=False)
-                        db.query(AppointmentMaterial).filter(AppointmentMaterial.lote_id == lt_del.id).delete(synchronize_session=False)
-                        db.delete(lt_del)
-                        db.commit()
-                        st.success("Lote excluído!")
-                        st.rerun()
+                    st.session_state["confirmar_exclusao_lote_id"] = linha_sel_est
+                    st.rerun()
+
+                # Confirmação de exclusão de lote
+                if st.session_state.get("confirmar_exclusao_lote_id"):
+                    _lt_conf = db.get(StockLote, st.session_state["confirmar_exclusao_lote_id"])
+                    if _lt_conf:
+                        _prod_conf = _lt_conf.produto.nome if _lt_conf.produto else "—"
+                        st.error(f"⚠️ Tem certeza que deseja excluir o lote **{_lt_conf.lote or 'S/N'}** de **{_prod_conf}** (Qtd: {_lt_conf.quantidade_atual})? Esta ação não pode ser desfeita.")
+                        _cl_sim, _cl_nao = st.columns(2)
+                        with _cl_sim:
+                            if st.button("✅ Sim, excluir", use_container_width=True, key="btn_conf_lote_sim"):
+                                lt_del = db.get(StockLote, st.session_state["confirmar_exclusao_lote_id"])
+                                if lt_del:
+                                    registrar_exclusao(
+                                        db, tipo="lote", referencia_id=lt_del.id,
+                                        descricao=f"{_prod_conf} — Lote {lt_del.lote or 'S/N'}",
+                                        dados={
+                                            "id": lt_del.id, "produto": _prod_conf,
+                                            "produto_id": lt_del.produto_id, "lote": lt_del.lote,
+                                            "quantidade_atual": lt_del.quantidade_atual,
+                                            "data_validade": str(lt_del.data_validade) if lt_del.data_validade else None,
+                                            "fornecedor": lt_del.fornecedor,
+                                        },
+                                    )
+                                    db.query(StockMovement).filter(StockMovement.lote_id == lt_del.id).delete(synchronize_session=False)
+                                    db.query(AppointmentMaterial).filter(AppointmentMaterial.lote_id == lt_del.id).delete(synchronize_session=False)
+                                    db.delete(lt_del)
+                                    db.commit()
+                                st.session_state.pop("confirmar_exclusao_lote_id", None)
+                                st.success("Lote excluído!")
+                                st.rerun()
+                        with _cl_nao:
+                            if st.button("❌ Não, cancelar", use_container_width=True, key="btn_conf_lote_nao"):
+                                st.session_state.pop("confirmar_exclusao_lote_id", None)
+                                st.rerun()
+                    else:
+                        st.session_state.pop("confirmar_exclusao_lote_id", None)
                 
                 if btn_editar_est and linha_sel_est:
                     st.session_state["est_editando"] = linha_sel_est
@@ -4488,6 +4517,37 @@ def tela_estoque():
                                 st.rerun()
                     _dialog_editar_mov()
 
+            # Dialog de confirmação de exclusão de movimentação
+            if st.session_state.get("mov_del_id") is not None:
+                _mov_dc = db.get(StockMovement, st.session_state["mov_del_id"])
+                if _mov_dc:
+                    @st.dialog("Confirmar exclusão", width="small")
+                    def _dialog_excluir_mov():
+                        _lt_dc = _mov_dc.lote
+                        _prod_dc = _lt_dc.produto.nome if _lt_dc and _lt_dc.produto else "—"
+                        st.warning(f"⚠️ Excluir a movimentação de **{_prod_dc}** ({_mov_dc.tipo} - Qtd: {_mov_dc.quantidade})? Esta ação não pode ser desfeita.")
+                        c1, c2 = st.columns(2)
+                        with c1:
+                            if st.button("✅ Sim, excluir", use_container_width=True, key="mov_dc_sim"):
+                                registrar_exclusao(
+                                    db, tipo="movimentacao", referencia_id=_mov_dc.id,
+                                    descricao=f"{_prod_dc} — {_mov_dc.tipo} Qtd {_mov_dc.quantidade}",
+                                    dados={
+                                        "id": _mov_dc.id, "produto": _prod_dc,
+                                        "lote_id": _mov_dc.lote_id, "tipo": _mov_dc.tipo,
+                                        "quantidade": _mov_dc.quantidade, "motivo": _mov_dc.motivo,
+                                    },
+                                )
+                                db.delete(_mov_dc)
+                                db.commit()
+                                st.session_state["mov_del_id"] = None
+                                st.rerun()
+                        with c2:
+                            if st.button("❌ Não, cancelar", use_container_width=True, key="mov_dc_nao"):
+                                st.session_state["mov_del_id"] = None
+                                st.rerun()
+                    _dialog_excluir_mov()
+
             if movs_lista:
                 for _mov in movs_lista:
                     # Dados já vêm via joinedload (sem query por linha)
@@ -4507,8 +4567,7 @@ def tela_estoque():
                                 st.session_state["mov_edit_id"] = _mov.id
                                 st.rerun()
                             if st.button("🗑️ Excluir", key=f"mov_del_{_mov.id}", use_container_width=True):
-                                db.delete(_mov)
-                                db.commit()
+                                st.session_state["mov_del_id"] = _mov.id
                                 st.rerun()
             else:
                 st.info("Nenhuma movimentação registrada.")
@@ -5413,18 +5472,45 @@ def tela_cadastros():
                         btn_del_prod = st.button("🗑️ Excluir", key="btn_del_prod", disabled=(linha_sel_prod is None))
                     
                     if btn_del_prod and linha_sel_prod:
-                        p_del = db_prod.get(Product, linha_sel_prod)
-                        if p_del:
-                            lotes_do_prod = db_prod.query(StockLote).filter(StockLote.produto_id == p_del.id).all()
-                            _lote_ids_prod = [_lt.id for _lt in lotes_do_prod]
-                            if _lote_ids_prod:
-                                db_prod.query(StockMovement).filter(StockMovement.lote_id.in_(_lote_ids_prod)).delete(synchronize_session=False)
-                                db_prod.query(AppointmentMaterial).filter(AppointmentMaterial.lote_id.in_(_lote_ids_prod)).delete(synchronize_session=False)
-                                db_prod.query(StockLote).filter(StockLote.id.in_(_lote_ids_prod)).delete(synchronize_session=False)
-                            db_prod.delete(p_del)
-                            db_prod.commit()
-                            st.success("Produto excluído!")
-                            st.rerun()
+                        st.session_state["confirmar_exclusao_prod_id"] = linha_sel_prod
+                        st.rerun()
+
+                    # Confirmação de exclusão de produto
+                    if st.session_state.get("confirmar_exclusao_prod_id"):
+                        _p_conf = db_prod.get(Product, st.session_state["confirmar_exclusao_prod_id"])
+                        if _p_conf:
+                            st.error(f"⚠️ Tem certeza que deseja excluir o produto **{_p_conf.nome}**? Todos os lotes e movimentações dele também serão removidos. Esta ação não pode ser desfeita.")
+                            _cp_sim, _cp_nao = st.columns(2)
+                            with _cp_sim:
+                                if st.button("✅ Sim, excluir", use_container_width=True, key="btn_conf_prod_sim"):
+                                    p_del = db_prod.get(Product, st.session_state["confirmar_exclusao_prod_id"])
+                                    if p_del:
+                                        registrar_exclusao(
+                                            db_prod, tipo="produto", referencia_id=p_del.id,
+                                            descricao=p_del.nome,
+                                            dados={
+                                                "id": p_del.id, "nome": p_del.nome,
+                                                "categoria": p_del.categoria,
+                                                "unidade": getattr(p_del, "unidade", None),
+                                            },
+                                        )
+                                        lotes_do_prod = db_prod.query(StockLote).filter(StockLote.produto_id == p_del.id).all()
+                                        _lote_ids_prod = [_lt.id for _lt in lotes_do_prod]
+                                        if _lote_ids_prod:
+                                            db_prod.query(StockMovement).filter(StockMovement.lote_id.in_(_lote_ids_prod)).delete(synchronize_session=False)
+                                            db_prod.query(AppointmentMaterial).filter(AppointmentMaterial.lote_id.in_(_lote_ids_prod)).delete(synchronize_session=False)
+                                            db_prod.query(StockLote).filter(StockLote.id.in_(_lote_ids_prod)).delete(synchronize_session=False)
+                                        db_prod.delete(p_del)
+                                        db_prod.commit()
+                                    st.session_state.pop("confirmar_exclusao_prod_id", None)
+                                    st.success("Produto excluído!")
+                                    st.rerun()
+                            with _cp_nao:
+                                if st.button("❌ Não, cancelar", use_container_width=True, key="btn_conf_prod_nao"):
+                                    st.session_state.pop("confirmar_exclusao_prod_id", None)
+                                    st.rerun()
+                        else:
+                            st.session_state.pop("confirmar_exclusao_prod_id", None)
                     
                     if btn_edit_prod and linha_sel_prod:
                         st.session_state["prod_editando"] = linha_sel_prod
@@ -5604,59 +5690,6 @@ def tela_cadastros():
         db.close()
 
 
-def tela_lixeira():
-    header_titulo("Lixeira", "Registros excluídos do sistema")
-    db = SessionLocal()
-    try:
-        regs = (
-            db.query(RegistroExclusao)
-            .order_by(RegistroExclusao.excluido_em.desc())
-            .all()
-        )
-        if not regs:
-            st.info("Nenhum registro excluído até o momento.")
-            return
-
-        # Filtro por tipo
-        tipos = ["Todos"] + sorted({r.tipo for r in regs if r.tipo})
-        tipo_sel = st.selectbox("Filtrar por tipo", tipos, key="lixeira_tipo")
-        if tipo_sel != "Todos":
-            regs = [r for r in regs if r.tipo == tipo_sel]
-
-        # Tabela resumo
-        dados = []
-        for r in regs:
-            _quando = "—"
-            if r.excluido_em:
-                try:
-                    _quando = r.excluido_em.strftime("%d/%m/%Y %H:%M")
-                except Exception:
-                    _quando = str(r.excluido_em)[:16]
-            dados.append({
-                "ID": r.id,
-                "Tipo": r.tipo,
-                "Descrição": r.descricao or "—",
-                "Excluído por": r.excluido_por or "—",
-                "Quando": _quando,
-            })
-        st.dataframe(pd.DataFrame(dados), use_container_width=True, hide_index=True)
-
-        st.markdown("---")
-        st.markdown("### Ver detalhes de um registro")
-        opcoes = {f"#{r.id} — {r.tipo} — {r.descricao or ''}": r.id for r in regs}
-        sel = st.selectbox("Selecione o registro", ["— selecione —"] + list(opcoes.keys()), key="lixeira_detalhe")
-        if sel and sel != "— selecione —":
-            reg = db.get(RegistroExclusao, opcoes[sel])
-            if reg:
-                try:
-                    conteudo = json.loads(reg.dados_json) if reg.dados_json else {}
-                except Exception:
-                    conteudo = {"raw": reg.dados_json}
-                st.json(conteudo)
-    finally:
-        db.close()
-
-
 def tela_usuarios():
     header_titulo("Usuários", "Perfis e acesso ao sistema")
     perfil_atual = st.session_state.user.get("perfil", "")
@@ -5809,14 +5842,6 @@ def main():
         perfil = st.session_state.user.get("perfil", "") if st.session_state.user else ""
         if perfil in ["admin", "recepcao", "profissional"]:
             tela_cadastros()
-        else:
-            st.error("Você não tem permissão para acessar esta página.")
-            st.info("Contate o administrador do sistema.")
-    elif rota == "Lixeira":
-        # Verificar permissão - apenas admin
-        perfil = st.session_state.user.get("perfil", "") if st.session_state.user else ""
-        if perfil == "admin":
-            tela_lixeira()
         else:
             st.error("Você não tem permissão para acessar esta página.")
             st.info("Contate o administrador do sistema.")
