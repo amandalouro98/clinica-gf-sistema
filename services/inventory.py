@@ -50,18 +50,20 @@ def alertas():
         hoje = date.today()
         limite = hoje + timedelta(days=30)
         
-        # Calcular saldo total por produto (soma de todos os lotes)
+        # Saldo total por produto em uma única query agregada
+        saldos = dict(
+            db.query(StockLote.produto_id, func.sum(StockLote.quantidade_atual))
+            .group_by(StockLote.produto_id)
+            .all()
+        )
+        # Buscar todos os produtos de uma vez
+        produtos = {p.id: p for p in db.query(Product).all()}
+
         produtos_baixo = []
-        produtos = db.query(Product).all()
-        
-        for prod in produtos:
-            # Soma quantidade_atual de todos os lotes deste produto
-            saldo_total = db.query(func.sum(StockLote.quantidade_atual)).filter(
-                StockLote.produto_id == prod.id
-            ).scalar() or 0
-            
-            if 0 < saldo_total <= 5:
-                produtos_baixo.append(prod)
+        for prod_id, saldo_total in saldos.items():
+            saldo_total = float(saldo_total or 0)
+            if 0 < saldo_total <= 5 and prod_id in produtos:
+                produtos_baixo.append(produtos[prod_id])
         
         # Lotes com validade próxima (mantém igual)
         validade = (

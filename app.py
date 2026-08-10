@@ -21,6 +21,7 @@ load_dotenv()
 # ====== IMPORTS DO PROJETO ======
 from utils.db import SessionLocal, engine
 from sqlalchemy import func, case
+from sqlalchemy.orm import joinedload
 from models.base import Base
 from models.user import User
 from models.client import Client
@@ -4209,6 +4210,7 @@ def tela_estoque():
 
             lotes = (
                 db.query(StockLote)
+                .options(joinedload(StockLote.produto))
                 .join(Product)
                 .order_by(Product.nome.asc(), StockLote.data_validade.asc())
                 .all()
@@ -4244,7 +4246,7 @@ def tela_estoque():
                     df_est,
                     hide_index=True,
                     column_config={"Selecionar": st.column_config.CheckboxColumn("Selecionar", default=False)},
-                    disabled=["Produto", "Categoria", "Lote", "Quantidade", "Validade", "Fornecedor"],
+                    disabled=["Produto", "Categoria", "Lote", "Qtd Lote", "Saldo Total", "Validade", "Fornecedor"],
                     key="est_editor"
                 )
                 
@@ -4265,8 +4267,8 @@ def tela_estoque():
                 if btn_excluir_est and linha_sel_est:
                     lt_del = db.get(StockLote, linha_sel_est)
                     if lt_del:
-                        db.query(StockMovement).filter(StockMovement.lote_id == lt_del.id).delete()
-                        db.query(AppointmentMaterial).filter(AppointmentMaterial.lote_id == lt_del.id).delete()
+                        db.query(StockMovement).filter(StockMovement.lote_id == lt_del.id).delete(synchronize_session=False)
+                        db.query(AppointmentMaterial).filter(AppointmentMaterial.lote_id == lt_del.id).delete(synchronize_session=False)
                         db.delete(lt_del)
                         db.commit()
                         st.success("Lote excluído!")
@@ -4324,11 +4326,17 @@ def tela_estoque():
             baixo, validadep = alertas()
             if baixo:
                 st.warning("⚠️ Produtos com estoque baixo (≤5 unidades):")
+                # Lotes de referência dos produtos baixos em uma única query
+                _ids_baixo = [p.id for p in baixo]
+                _lotes_ref = {}
+                if _ids_baixo:
+                    for _l in db.query(StockLote).filter(StockLote.produto_id.in_(_ids_baixo)).all():
+                        # guarda o primeiro lote encontrado por produto
+                        _lotes_ref.setdefault(_l.produto_id, _l)
                 _dados_baixo = []
                 for prod in baixo:
-                    _lotes_prod = db.query(StockLote).filter(StockLote.produto_id == prod.id).all()
-                    _saldo = sum(l.quantidade_atual or 0 for l in _lotes_prod)
-                    _lt_ref = _lotes_prod[0] if _lotes_prod else None
+                    _saldo = float(_saldos_por_produto.get(prod.id, 0) or 0)
+                    _lt_ref = _lotes_ref.get(prod.id)
                     _dados_baixo.append({
                         "Produto": prod.nome,
                         "Quantidade": _saldo,
@@ -4353,9 +4361,30 @@ def tela_estoque():
 
         # ---------- ABA 2: Movimentações ----------
         with aba2:
-            movs_lista = (
+            # Filtros para evitar carregar tudo de uma vez (performance)
+            _prods_mov = db.query(Product).order_by(Product.nome.asc()).all()
+            _mapa_prod_mov_filtro = {p.nome: p.id for p in _prods_mov}
+            colf1, colf2 = st.columns([3, 1])
+            with colf1:
+                _mov_prod_filtro = st.selectbox(
+                    "Filtrar por produto",
+                    ["Todos"] + list(_mapa_prod_mov_filtro.keys()),
+                    key="mov_prod_filtro",
+                )
+            with colf2:
+                _mov_limite = st.selectbox("Mostrar", [50, 100, 200, 500], index=1, key="mov_limite")
+
+            _q_movs = (
                 db.query(StockMovement)
-                .order_by(StockMovement.criado_em.desc())
+                .options(
+                    joinedload(StockMovement.lote).joinedload(StockLote.produto)
+                )
+            )
+            if _mov_prod_filtro != "Todos":
+                _q_movs = _q_movs.filter(StockMovement.produto_id == _mapa_prod_mov_filtro[_mov_prod_filtro])
+            movs_lista = (
+                _q_movs.order_by(StockMovement.criado_em.desc())
+                .limit(int(_mov_limite))
                 .all()
             )
             # Dialog para editar movimentação
@@ -4390,14 +4419,10 @@ def tela_estoque():
 
             if movs_lista:
                 for _mov in movs_lista:
-                    # Tenta resolver nome do produto pelo lote
-                    try:
-                        _lt_mov = db.get(StockLote, _mov.lote_id)
-                        _prod_nome_mov = _lt_mov.produto.nome if _lt_mov and _lt_mov.produto else "—"
-                        _lote_str_mov = _lt_mov.lote or "S/N" if _lt_mov else "—"
-                    except Exception:
-                        _prod_nome_mov = "—"
-                        _lote_str_mov = "—"
+                    # Dados já vêm via joinedload (sem query por linha)
+                    _lt_mov = _mov.lote
+                    _prod_nome_mov = _lt_mov.produto.nome if _lt_mov and _lt_mov.produto else "—"
+                    _lote_str_mov = (_lt_mov.lote or "S/N") if _lt_mov else "—"
                     _data_mov = str(_mov.criado_em)[:10] if _mov.criado_em else "—"
                     col_mov_info, col_mov_del = st.columns([6, 0.4])
                     with col_mov_info:
