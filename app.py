@@ -3764,21 +3764,9 @@ def tela_atendimentos():
                 at_id_selecionado = ids_atendimentos[idx_selecionado]
 
                 if excluir_at_btn:
-                    at_del = db.query(Appointment).filter(Appointment.id == at_id_selecionado).first()
-                    if at_del:
-                        mats_del = db.query(AppointmentMaterial).filter(AppointmentMaterial.atendimento_id == at_id_selecionado).all()
-                        _nome_del = at_del.cliente.nome if at_del.cliente else "Cliente"
-                        for mat_del in mats_del:
-                            if mat_del.lote_id and (mat_del.quantidade or 0) > 0:
-                                try:
-                                    movimentar(mat_del.lote_id, "entrada", float(mat_del.quantidade), motivo=f"Devolução por exclusão do atendimento #{at_del.id} - {_nome_del}", db=db)
-                                except Exception as _e_del:
-                                    st.warning(f"Não foi possível devolver estoque de {mat_del.produto.nome if mat_del.produto else 'material'}: {_e_del}")
-                            db.delete(mat_del)
-                        db.delete(at_del)
-                        db.commit()
-                        st.success("Atendimento excluído com sucesso!")
-                        st.rerun()
+                    # Não exclui direto: marca para pedir confirmação
+                    st.session_state["confirmar_exclusao_at_id"] = at_id_selecionado
+                    st.rerun()
 
                 if editar_at_btn:
                     st.session_state["editar_atendimento_id"] = at_id_selecionado
@@ -3786,6 +3774,40 @@ def tela_atendimentos():
             else:
                 if editar_at_btn or excluir_at_btn:
                     st.warning("Selecione um atendimento na tabela primeiro.")
+
+            # Confirmação de exclusão de atendimento
+            if "confirmar_exclusao_at_id" in st.session_state:
+                _at_conf = db.query(Appointment).filter(Appointment.id == st.session_state["confirmar_exclusao_at_id"]).first()
+                if _at_conf:
+                    _nome_conf = _at_conf.cliente.nome if _at_conf.cliente else "Cliente"
+                    _data_conf = formatar_data_br(_at_conf.data) if _at_conf.data else "—"
+                    st.markdown("---")
+                    st.error(f"⚠️ Tem certeza que deseja excluir o atendimento de **{_nome_conf}** ({_data_conf})? Esta ação não pode ser desfeita.")
+                    _col_sim, _col_nao = st.columns(2)
+                    with _col_sim:
+                        if st.button("✅ Sim, excluir", use_container_width=True, key="btn_conf_excluir_sim"):
+                            at_del = db.query(Appointment).filter(Appointment.id == st.session_state["confirmar_exclusao_at_id"]).first()
+                            if at_del:
+                                mats_del = db.query(AppointmentMaterial).filter(AppointmentMaterial.atendimento_id == at_del.id).all()
+                                _nome_del = at_del.cliente.nome if at_del.cliente else "Cliente"
+                                for mat_del in mats_del:
+                                    if mat_del.lote_id and (mat_del.quantidade or 0) > 0:
+                                        try:
+                                            movimentar(mat_del.lote_id, "entrada", float(mat_del.quantidade), motivo=f"Devolução por exclusão do atendimento #{at_del.id} - {_nome_del}", db=db)
+                                        except Exception as _e_del:
+                                            st.warning(f"Não foi possível devolver estoque de {mat_del.produto.nome if mat_del.produto else 'material'}: {_e_del}")
+                                    db.delete(mat_del)
+                                db.delete(at_del)
+                                db.commit()
+                            st.session_state.pop("confirmar_exclusao_at_id", None)
+                            st.success("Atendimento excluído com sucesso!")
+                            st.rerun()
+                    with _col_nao:
+                        if st.button("❌ Não, cancelar", use_container_width=True, key="btn_conf_excluir_nao"):
+                            st.session_state.pop("confirmar_exclusao_at_id", None)
+                            st.rerun()
+                else:
+                    st.session_state.pop("confirmar_exclusao_at_id", None)
 
             # Modal de edição
             if "editar_atendimento_id" in st.session_state:
