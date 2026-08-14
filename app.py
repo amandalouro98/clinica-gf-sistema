@@ -981,6 +981,7 @@ def tela_dashboard():
                     db.query(StockLote, Product)
                     .join(Product, StockLote.produto_id == Product.id)
                     .filter(
+                        StockLote.quantidade_atual > 0,
                         (StockLote.quantidade_atual <= StockLote.quantidade_minima) |
                         (StockLote.data_validade <= _data_hoje + timedelta(days=30))
                     )
