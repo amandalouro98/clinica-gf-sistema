@@ -3548,6 +3548,40 @@ def tela_atendimentos():
         if cliente_at_nome:
             st.info(f"Cliente selecionada: **{cliente_at_nome}**")
 
+        # ── Pacote ativo (opcional) ──────────────────────────────
+        pacote_sel_item_id = None
+        if cliente_at_id:
+            try:
+                from models.sale import Sale, SaleItem
+                _pacotes_at = (
+                    db.query(SaleItem).join(Sale).filter(
+                        Sale.cliente_id == cliente_at_id,
+                        SaleItem.tipo == "pacote",
+                        SaleItem.sessoes_usadas < SaleItem.sessoes_total,
+                    ).all()
+                )
+                if _pacotes_at:
+                    _mapa_pac = {"— nenhum —": None}
+                    for _p in _pacotes_at:
+                        _rest = _p.sessoes_total - _p.sessoes_usadas
+                        _mapa_pac[f"📦 {_p.procedimento} — {_rest} sessão(ões) restante(s)"] = _p.id
+                    _sel_pac = st.selectbox(
+                        "Pacote ativo (descontar sessão)",
+                        list(_mapa_pac.keys()),
+                        key="at_pacote_sel",
+                    )
+                    pacote_sel_item_id = _mapa_pac.get(_sel_pac)
+                    if pacote_sel_item_id:
+                        _p_sel = next((p for p in _pacotes_at if p.id == pacote_sel_item_id), None)
+                        if _p_sel:
+                            _rest_sel = _p_sel.sessoes_total - _p_sel.sessoes_usadas
+                            if _rest_sel <= 1:
+                                st.warning(f"⚠️ Esta é a ÚLTIMA sessão do pacote **{_p_sel.procedimento}**.")
+                            else:
+                                st.caption(f"Após salvar, restarão {_rest_sel - 1} sessão(ões).")
+            except Exception:
+                pass
+
         st.markdown("---")
 
         col1, col2 = st.columns(2)
@@ -3584,8 +3618,14 @@ def tela_atendimentos():
         mats_cadastrados = db.query(Material).filter(Material.ativo == True).order_by(Material.nome.asc()).all()
         produtos = db.query(Product).order_by(Product.nome.asc()).all()
         mapa_prod = {p.nome: p.id for p in produtos}
-        # Lista de nomes para seleção: materiais cadastrados + produtos do estoque
-        nomes_materiais = sorted(set([m.nome for m in mats_cadastrados] + list(mapa_prod.keys())))
+        # Lista de nomes p/ seleção: produtos + materiais, sem duplicados
+        # (ignora maiúsc/minúsc e espaços; produtos têm prioridade p/ baixa de estoque)
+        _vistos = {}
+        for _n in [p.nome for p in produtos] + [m.nome for m in mats_cadastrados]:
+            _k = (_n or "").strip().lower()
+            if _k and _k not in _vistos:
+                _vistos[_k] = _n
+        nomes_materiais = sorted(_vistos.values(), key=lambda s: s.strip().lower())
 
         linhas = st.number_input("Quantos produtos diferentes foram usados?", min_value=0, step=1, value=0, key="at_linhas")
         materiais = []
@@ -3680,23 +3720,28 @@ def tela_atendimentos():
 
                     st.session_state.pop("atendimento_cliente_id", None)
                     st.session_state.pop("atendimento_cliente_nome", None)
-                    # Descontar sessão de pacote ativo do cliente (se houver)
-                    if tipo and cliente_at_id:
-                        try:
-                            from models.sale import Sale, SaleItem
+                    # Descontar sessão de pacote (seleção manual tem prioridade)
+                    try:
+                        from models.sale import Sale, SaleItem
+                        _pacote_item = None
+                        if pacote_sel_item_id:
+                            _pacote_item = db.query(SaleItem).filter(
+                                SaleItem.id == pacote_sel_item_id
+                            ).first()
+                        elif tipo and cliente_at_id:
                             _pacote_item = db.query(SaleItem).join(Sale).filter(
                                 Sale.cliente_id == cliente_at_id,
                                 SaleItem.procedimento == tipo,
                                 SaleItem.tipo == "pacote",
                                 SaleItem.sessoes_usadas < SaleItem.sessoes_total,
                             ).first()
-                            if _pacote_item:
-                                _pacote_item.sessoes_usadas += 1
-                                db.commit()
-                        except Exception:
-                            pass
+                        if _pacote_item and _pacote_item.sessoes_usadas < _pacote_item.sessoes_total:
+                            _pacote_item.sessoes_usadas += 1
+                            db.commit()
+                    except Exception:
+                        pass
                     # Limpar campos do formulário
-                    for key in ["atendimento_selectbox", "at_data", "at_queixa", "at_tipo", "at_protocolo", "at_obs", "at_linhas"]:
+                    for key in ["atendimento_selectbox", "at_data", "at_queixa", "at_tipo", "at_protocolo", "at_obs", "at_linhas", "at_pacote_sel"]:
                         if key in st.session_state:
                             st.session_state.pop(key, None)
                     st.session_state["at_salvo_ok"] = True
@@ -3906,7 +3951,12 @@ def tela_atendimentos():
                     mats_cadastrados_edit = db.query(Material).filter(Material.ativo == True).order_by(Material.nome.asc()).all()
                     produtos_edit = db.query(Product).order_by(Product.nome.asc()).all()
                     mapa_prod_edit = {p.nome: p.id for p in produtos_edit}
-                    nomes_materiais_edit = sorted(set([m.nome for m in mats_cadastrados_edit] + list(mapa_prod_edit.keys())))
+                    _vistos_edit = {}
+                    for _n in [p.nome for p in produtos_edit] + [m.nome for m in mats_cadastrados_edit]:
+                        _k = (_n or "").strip().lower()
+                        if _k and _k not in _vistos_edit:
+                            _vistos_edit[_k] = _n
+                    nomes_materiais_edit = sorted(_vistos_edit.values(), key=lambda s: s.strip().lower())
 
                     num_mats_edit = st.number_input("Quantos produtos adicionar?", min_value=0, step=1, value=0, key="edit_num_mats")
                     for i in range(int(num_mats_edit)):
