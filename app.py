@@ -2493,6 +2493,7 @@ def tela_clientes():
                     )
                     if _atendimentos_cli:
                         _rows_at_cli = []
+                        _ids_at_cli = []
                         for _at in _atendimentos_cli:
                             _mats_at = db.query(AppointmentMaterial).filter(AppointmentMaterial.atendimento_id == _at.id).all()
                             _mats_str = []
@@ -2503,7 +2504,9 @@ def tela_clientes():
                                 elif _m.lote and _m.lote.produto:
                                     _nome_m = _m.lote.produto.nome
                                 _mats_str.append(f"{_nome_m} ({_m.quantidade})")
+                            _ids_at_cli.append(_at.id)
                             _rows_at_cli.append({
+                                "Selecionar": False,
                                 "Data": _at.data.strftime("%d/%m/%Y") if _at.data else "—",
                                 "Protocolo": _at.protocolo_atendimento or "—",
                                 "Queixa": _at.queixa_consulta or "—",
@@ -2511,7 +2514,48 @@ def tela_clientes():
                                 "Materiais utilizados": ", ".join(_mats_str) if _mats_str else "—",
                                 "Observações": _at.observacoes or "—",
                             })
-                        st.dataframe(pd.DataFrame(_rows_at_cli), use_container_width=True, hide_index=True)
+                        _df_at_cli = pd.DataFrame(_rows_at_cli)
+                        _edited_at_cli = st.data_editor(
+                            _df_at_cli,
+                            use_container_width=True,
+                            hide_index=True,
+                            column_config={
+                                "Selecionar": st.column_config.CheckboxColumn("Selecionar", default=False),
+                            },
+                            disabled=["Data", "Protocolo", "Queixa", "Tipo Tratamento", "Materiais utilizados", "Observações"],
+                            key="at_cli_editor"
+                        )
+
+                        col_btn_edit_at, col_btn_del_at, _ = st.columns([1, 1, 6])
+                        with col_btn_edit_at:
+                            _btn_edit_at = st.button("✏️ Editar", use_container_width=True, key="at_cli_btn_edit")
+                        with col_btn_del_at:
+                            _btn_del_at = st.button("🗑️ Excluir", use_container_width=True, key="at_cli_btn_del")
+
+                        _selecionados_at = _edited_at_cli[_edited_at_cli["Selecionar"] == True]
+                        if len(_selecionados_at) > 1:
+                            st.warning("Selecione apenas 1 atendimento por vez.")
+                        elif len(_selecionados_at) == 1:
+                            _idx_at_sel = _selecionados_at.index[0]
+                            _at_id_sel = _ids_at_cli[_idx_at_sel]
+                            _at_sel_obj = _atendimentos_cli[_idx_at_sel]
+
+                            if _btn_edit_at:
+                                st.session_state["editar_atendimento_id"] = _at_id_sel
+                                st.session_state["at_hist_inicio"] = _at_sel_obj.data
+                                st.session_state["at_hist_fim"] = _at_sel_obj.data
+                                st.session_state.menu = "Atendimentos"
+                                st.rerun()
+
+                            if _btn_del_at:
+                                st.session_state["confirmar_exclusao_at_id"] = _at_id_sel
+                                st.session_state["at_hist_inicio"] = _at_sel_obj.data
+                                st.session_state["at_hist_fim"] = _at_sel_obj.data
+                                st.session_state.menu = "Atendimentos"
+                                st.rerun()
+                        else:
+                            if _btn_edit_at or _btn_del_at:
+                                st.warning("Selecione um atendimento na tabela primeiro.")
                     else:
                         st.info("Nenhum atendimento encontrado.")
 
