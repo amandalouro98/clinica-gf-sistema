@@ -688,14 +688,14 @@ def buscar_clientes(db, termo):
     termo = (termo or "").strip()
     if not termo:
         return []
-    like = f"%{termo}%"
+    like = f"%{termo.lower()}%"
     return (
         db.query(Client)
         .filter(
-            (Client.nome.like(like)) |
-            (Client.cpf.like(like)) |
-            (Client.telefone.like(like)) |
-            (Client.email.like(like))
+            (func.lower(Client.nome).like(like)) |
+            (func.lower(Client.cpf).like(like)) |
+            (func.lower(Client.telefone).like(like)) |
+            (func.lower(Client.email).like(like))
         )
         .order_by(Client.nome.asc())
         .limit(20)
@@ -736,7 +736,7 @@ def render_sugestoes_cliente(db, termo, contexto="cadastro"):
         if nome_base:
             cliente_escolhido = (
                 db.query(Client)
-                .filter(Client.nome.like(f"%{nome_base}%"))
+                .filter(func.lower(Client.nome).like(f"%{nome_base.lower()}%"))
                 .order_by(Client.nome.asc())
                 .first()
             )
@@ -1269,7 +1269,7 @@ def tela_agenda():
                         _sel_sug = st.selectbox("Selecionar cliente cadastrado (opcional):", _opcoes_sug, key="ag_sug_cli")
                         if _sel_sug and _sel_sug != "— usar o nome digitado —":
                             _cli_nome_sug = _sel_sug.split(" | ")[0]
-                            _cli_encontrado = db.query(Client).filter(Client.nome == _cli_nome_sug).first()
+                            _cli_encontrado = db.query(Client).filter(func.lower(Client.nome) == _cli_nome_sug.lower()).first()
                             cliente_sel = _cli_nome_sug
                             _cli_id_ag = _cli_encontrado.id if _cli_encontrado else None
                         else:
@@ -2482,6 +2482,176 @@ def tela_clientes():
 
                 # ── Histórico em abas ──
                 st.markdown("---")
+
+                @st.dialog("Editar Atendimento", width="large")
+                def _dialog_editar_atendimento_cliente(at_id):
+                    db_edit = SessionLocal()
+                    try:
+                        at_edit = db_edit.query(Appointment).filter(Appointment.id == at_id).first()
+                        if not at_edit:
+                            st.error("Atendimento não encontrado.")
+                            return
+
+                        st.markdown(f"**Paciente:** {at_edit.cliente.nome if at_edit.cliente else '—'}")
+
+                        edit_data = st.date_input("Data", value=at_edit.data, format="DD/MM/YYYY", key=f"dlg_cli_edit_data_{at_id}")
+                        edit_queixa = st.text_area("Queixa", value=at_edit.queixa_consulta or "", key=f"dlg_cli_edit_queixa_{at_id}")
+                        edit_protocolo = st.text_area("Protocolo", value=at_edit.protocolo_atendimento or "", key=f"dlg_cli_edit_protocolo_{at_id}")
+
+                        tratamentos_lista_edit = db_edit.query(Tratamento).filter(Tratamento.ativo == True).order_by(Tratamento.nome.asc()).all()
+                        opcoes_trat_edit = ["— selecione —"] + [t.nome for t in tratamentos_lista_edit]
+                        idx_trat = 0
+                        if at_edit.tipo_tratamento:
+                            try:
+                                idx_trat = opcoes_trat_edit.index(at_edit.tipo_tratamento)
+                            except ValueError:
+                                idx_trat = 0
+                        edit_tipo = st.selectbox("Tipo Tratamento", opcoes_trat_edit, index=idx_trat, key=f"dlg_cli_edit_tipo_{at_id}")
+                        if edit_tipo == "— selecione —":
+                            edit_tipo = ""
+
+                        edit_obs = st.text_area("Observações", value=at_edit.observacoes or "", key=f"dlg_cli_edit_obs_{at_id}")
+
+                        st.markdown("##### Materiais usados")
+                        mats_atuais = db_edit.query(AppointmentMaterial).filter(AppointmentMaterial.atendimento_id == at_id).all()
+                        if mats_atuais:
+                            for i, mat in enumerate(mats_atuais):
+                                nome_mat = "—"
+                                if mat.produto:
+                                    nome_mat = mat.produto.nome
+                                elif mat.lote and mat.lote.produto:
+                                    nome_mat = mat.lote.produto.nome
+                                col_mat_nome, col_mat_qtd, col_mat_rem = st.columns([4, 1, 1])
+                                col_mat_nome.text_input(f"Material {i+1}", value=nome_mat, disabled=True, key=f"dlg_cli_mat_atual_nome_{at_id}_{i}")
+                                col_mat_qtd.number_input("Qtd", value=float(mat.quantidade), min_value=0.0, step=1.0, key=f"dlg_cli_mat_atual_qtd_{at_id}_{i}")
+                                col_mat_rem.checkbox("Remover", key=f"dlg_cli_mat_atual_rem_{at_id}_{i}")
+                            st.markdown("---")
+
+                        st.markdown("**Adicionar materiais:**")
+                        mats_cadastrados_edit = db_edit.query(Material).filter(Material.ativo == True).order_by(Material.nome.asc()).all()
+                        produtos_edit = db_edit.query(Product).order_by(Product.nome.asc()).all()
+                        mapa_prod_edit = {p.nome: p.id for p in produtos_edit}
+                        _vistos_edit = {}
+                        for _n in [p.nome for p in produtos_edit] + [m.nome for m in mats_cadastrados_edit]:
+                            _k = (_n or "").strip().lower()
+                            if _k and _k not in _vistos_edit:
+                                _vistos_edit[_k] = _n
+                        nomes_materiais_edit = sorted(_vistos_edit.values(), key=lambda s: s.strip().lower())
+
+                        num_mats_edit = st.number_input("Quantos produtos adicionar?", min_value=0, step=1, value=0, key=f"dlg_cli_edit_num_mats_{at_id}")
+                        for i in range(int(num_mats_edit)):
+                            c1, c2, c3 = st.columns([3, 2, 1])
+                            with c1:
+                                prod_nome_edit = st.selectbox(
+                                    f"Material novo {i + 1}",
+                                    ["— selecione —"] + nomes_materiais_edit,
+                                    key=f"dlg_cli_edit_at_prod_{at_id}_{i}",
+                                )
+                            with c2:
+                                lote_opcoes_edit = ["— selecione —"]
+                                lote_map_edit = {}
+                                if prod_nome_edit and prod_nome_edit != "— selecione —" and prod_nome_edit in mapa_prod_edit:
+                                    lotes_disp_edit = (
+                                        db_edit.query(StockLote)
+                                        .filter(
+                                            StockLote.produto_id == mapa_prod_edit[prod_nome_edit],
+                                            StockLote.quantidade_atual > 0,
+                                        )
+                                        .all()
+                                    )
+                                    for lt in lotes_disp_edit:
+                                        label = f"Lote: {lt.lote or 'S/N'} | Qtd: {lt.quantidade_atual}"
+                                        lote_opcoes_edit.append(label)
+                                        lote_map_edit[label] = lt.id
+                                st.selectbox(f"Lote {i + 1}", lote_opcoes_edit, key=f"dlg_cli_edit_at_lote_{at_id}_{i}")
+                            with c3:
+                                st.number_input("Qtd", min_value=0, step=1, key=f"dlg_cli_edit_at_qtd_{at_id}_{i}")
+
+                        col_salvar, col_cancelar = st.columns(2)
+                        with col_salvar:
+                            salvar_edicao = st.button("Salvar", use_container_width=True, key=f"dlg_cli_btn_salvar_{at_id}")
+                        with col_cancelar:
+                            st.button("Cancelar", use_container_width=True, key=f"dlg_cli_btn_cancelar_{at_id}")
+
+                        if salvar_edicao:
+                            at_edit.data = edit_data
+                            at_edit.queixa_consulta = edit_queixa
+                            at_edit.protocolo_atendimento = edit_protocolo
+                            at_edit.tipo_tratamento = edit_tipo
+                            at_edit.observacoes = edit_obs
+
+                            _nome_cliente = at_edit.cliente.nome if at_edit.cliente else "Cliente"
+                            _erros_estoque = []
+
+                            for i, mat in enumerate(mats_atuais):
+                                remove_mat = st.session_state.get(f"dlg_cli_mat_atual_rem_{at_id}_{i}", False)
+                                new_qtd = st.session_state.get(f"dlg_cli_mat_atual_qtd_{at_id}_{i}")
+                                if new_qtd is not None:
+                                    new_qtd = float(new_qtd)
+                                else:
+                                    new_qtd = float(mat.quantidade or 0)
+                                qtd_atual = float(mat.quantidade or 0)
+
+                                if remove_mat:
+                                    if mat.lote_id and qtd_atual > 0:
+                                        try:
+                                            movimentar(mat.lote_id, "entrada", qtd_atual, motivo=f"Devolução por remoção no atendimento #{at_id} - {_nome_cliente}", db=db_edit)
+                                        except Exception as _e:
+                                            _erros_estoque.append(f"{mat.produto.nome if mat.produto else 'Material'}: {_e}")
+                                    db_edit.delete(mat)
+                                elif new_qtd != qtd_atual and mat.lote_id:
+                                    dif = new_qtd - qtd_atual
+                                    try:
+                                        if dif > 0:
+                                            movimentar(mat.lote_id, "saida", dif, motivo=f"Ajuste de quantidade no atendimento #{at_id} - {_nome_cliente}", db=db_edit)
+                                        else:
+                                            movimentar(mat.lote_id, "entrada", abs(dif), motivo=f"Ajuste de quantidade no atendimento #{at_id} - {_nome_cliente}", db=db_edit)
+                                    except Exception as _e:
+                                        _erros_estoque.append(f"{mat.produto.nome if mat.produto else 'Material'}: {_e}")
+                                    mat.quantidade = new_qtd
+
+                            num_novos = int(st.session_state.get(f"dlg_cli_edit_num_mats_{at_id}", 0))
+                            for i in range(num_novos):
+                                prod_nome_novo = st.session_state.get(f"dlg_cli_edit_at_prod_{at_id}_{i}")
+                                lote_sel_novo = st.session_state.get(f"dlg_cli_edit_at_lote_{at_id}_{i}")
+                                qtd_novo = st.session_state.get(f"dlg_cli_edit_at_qtd_{at_id}_{i}")
+                                if prod_nome_novo and prod_nome_novo != "— selecione —" and prod_nome_novo in mapa_prod_edit:
+                                    if lote_sel_novo and lote_sel_novo != "— selecione —":
+                                        lote_map_novo = {}
+                                        lotes_disp_novo = (
+                                            db_edit.query(StockLote)
+                                            .filter(StockLote.produto_id == mapa_prod_edit[prod_nome_novo])
+                                            .all()
+                                        )
+                                        for lt in lotes_disp_novo:
+                                            label = f"Lote: {lt.lote or 'S/N'} | Qtd: {lt.quantidade_atual}"
+                                            lote_map_novo[label] = lt.id
+                                        lote_id_novo = lote_map_novo.get(lote_sel_novo)
+                                    else:
+                                        lote_id_novo = None
+
+                                    if lote_id_novo and qtd_novo and qtd_novo > 0:
+                                        am_novo = AppointmentMaterial(
+                                            atendimento_id=at_id,
+                                            lote_id=lote_id_novo,
+                                            produto_id=mapa_prod_edit[prod_nome_novo],
+                                            quantidade=float(qtd_novo),
+                                        )
+                                        db_edit.add(am_novo)
+                                        try:
+                                            movimentar(lote_id_novo, "saida", float(qtd_novo), motivo=f"Atendimento #{at_id} - {_nome_cliente} (edição)", db=db_edit)
+                                        except Exception as _e:
+                                            _erros_estoque.append(f"{prod_nome_novo}: {_e}")
+
+                            db_edit.commit()
+                            if _erros_estoque:
+                                st.warning("Atendimento salvo, mas com alertas no estoque:\n" + "\n".join(_erros_estoque))
+                            else:
+                                st.success("Atendimento atualizado!")
+                            st.rerun()
+                    finally:
+                        db_edit.close()
+
                 abas = st.tabs(["📋 Atendimentos", "📐 Biometria", "📝 Pré-avaliações", "💳 Compras e Pacotes", "💉 Tabela de Doses"])
 
                 with abas[0]:
@@ -2538,24 +2708,75 @@ def tela_clientes():
                         elif len(_selecionados_at) == 1:
                             _idx_at_sel = _selecionados_at.index[0]
                             _at_id_sel = _ids_at_cli[_idx_at_sel]
-                            _at_sel_obj = _atendimentos_cli[_idx_at_sel]
 
                             if _btn_edit_at:
-                                st.session_state["editar_atendimento_id"] = _at_id_sel
-                                st.session_state["at_hist_inicio"] = _at_sel_obj.data
-                                st.session_state["at_hist_fim"] = _at_sel_obj.data
-                                st.session_state.menu = "Atendimentos"
-                                st.rerun()
+                                _dialog_editar_atendimento_cliente(_at_id_sel)
 
                             if _btn_del_at:
-                                st.session_state["confirmar_exclusao_at_id"] = _at_id_sel
-                                st.session_state["at_hist_inicio"] = _at_sel_obj.data
-                                st.session_state["at_hist_fim"] = _at_sel_obj.data
-                                st.session_state.menu = "Atendimentos"
+                                st.session_state["confirmar_exclusao_at_cli_id"] = _at_id_sel
                                 st.rerun()
                         else:
                             if _btn_edit_at or _btn_del_at:
                                 st.warning("Selecione um atendimento na tabela primeiro.")
+
+                    # Dialog de confirmação de exclusão
+                    if st.session_state.get("confirmar_exclusao_at_cli_id"):
+                        @st.dialog("Confirmar exclusão", width="small")
+                        def _dialog_confirmar_exclusao_at_cli():
+                            _at_del_id = st.session_state.get("confirmar_exclusao_at_cli_id")
+                            db_del = SessionLocal()
+                            try:
+                                at_del = db_del.query(Appointment).filter(Appointment.id == _at_del_id).first()
+                                if not at_del:
+                                    st.error("Atendimento não encontrado.")
+                                    return
+                                st.warning(f"Deseja realmente excluir o atendimento de **{formatar_data_br(at_del.data)}**?")
+                                col_sim, col_nao = st.columns(2)
+                                with col_sim:
+                                    if st.button("Sim, excluir", use_container_width=True, key="btn_conf_excluir_at_cli_sim"):
+                                        mats_del = db_del.query(AppointmentMaterial).filter(AppointmentMaterial.atendimento_id == at_del.id).all()
+                                        _nome_del = at_del.cliente.nome if at_del.cliente else "Cliente"
+                                        _snap = {
+                                            "cliente_id": at_del.cliente_id,
+                                            "data": str(at_del.data) if at_del.data else None,
+                                            "queixa_consulta": at_del.queixa_consulta,
+                                            "protocolo_atendimento": at_del.protocolo_atendimento,
+                                            "tipo_tratamento": at_del.tipo_tratamento,
+                                            "receituario": at_del.receituario,
+                                            "observacoes": at_del.observacoes,
+                                            "cadastrado_por": at_del.cadastrado_por,
+                                            "materiais": [
+                                                {"produto": (m.produto.nome if m.produto else None), "lote_id": m.lote_id, "quantidade": m.quantidade}
+                                                for m in mats_del
+                                            ],
+                                        }
+                                        registrar_exclusao(
+                                            db_del,
+                                            tipo="atendimento",
+                                            referencia_id=at_del.id,
+                                            descricao=f"{_nome_del} — {formatar_data_br(at_del.data) if at_del.data else ''}",
+                                            dados=_snap,
+                                        )
+                                        for mat_del in mats_del:
+                                            if mat_del.lote_id and (mat_del.quantidade or 0) > 0:
+                                                try:
+                                                    movimentar(mat_del.lote_id, "entrada", float(mat_del.quantidade), motivo=f"Devolução por exclusão do atendimento #{at_del.id} - {_nome_del}", db=db_del)
+                                                except Exception as _e_del:
+                                                    st.warning(f"Não foi possível devolver estoque de {mat_del.produto.nome if mat_del.produto else 'material'}: {_e_del}")
+                                            db_del.delete(mat_del)
+                                        db_del.delete(at_del)
+                                        db_del.commit()
+                                        st.session_state.pop("confirmar_exclusao_at_cli_id", None)
+                                        st.rerun()
+                                with col_nao:
+                                    if st.button("Não, cancelar", use_container_width=True, key="btn_conf_excluir_at_cli_nao"):
+                                        st.session_state.pop("confirmar_exclusao_at_cli_id", None)
+                                        st.rerun()
+                            finally:
+                                db_del.close()
+
+                        _dialog_confirmar_exclusao_at_cli()
+
                     else:
                         st.info("Nenhum atendimento encontrado.")
 
@@ -3158,7 +3379,7 @@ def _modal_tabela_doses():
             cliente_nome_dose = ""
             if sel_cli_dose:
                 cliente_nome_dose = sel_cli_dose.split(" | ")[0]
-                _cli = db.query(Client).filter(Client.nome == cliente_nome_dose).first()
+                _cli = db.query(Client).filter(func.lower(Client.nome) == cliente_nome_dose.lower()).first()
                 cliente_id = _cli.id if _cli else None
 
             # Fallback: usa cliente selecionado no atendimento se houver
@@ -3470,7 +3691,7 @@ def _modal_medidas_biometricas():
             cliente_med_nome = ""
             if sel_cli_med:
                 cliente_med_nome = sel_cli_med.split(" | ")[0]
-                _cli = db.query(Client).filter(Client.nome == cliente_med_nome).first()
+                _cli = db.query(Client).filter(func.lower(Client.nome) == cliente_med_nome.lower()).first()
                 cliente_med_id = _cli.id if _cli else None
 
             # Fallback: usa cliente selecionado no atendimento se houver
@@ -5214,9 +5435,9 @@ def tela_vendas():
         def buscar_cli_venda(termo):
             if not termo or len(termo) < 2:
                 return []
-            like = f"%{termo}%"
+            like = f"%{termo.lower()}%"
             res = db.query(Client).filter(
-                (Client.nome.like(like)) | (Client.cpf.like(like)) | (Client.telefone.like(like))
+                (func.lower(Client.nome).like(like)) | (func.lower(Client.cpf).like(like)) | (func.lower(Client.telefone).like(like))
             ).order_by(Client.nome).limit(20).all()
             return [f"{c.nome} | {c.cpf or c.telefone or ''}" for c in res]
 
@@ -5226,7 +5447,7 @@ def tela_vendas():
         venda_cliente_id = st.session_state.get("venda_cliente_id_selecionado", 0)
         if sel_cli:
             nome_base = str(sel_cli).split("|")[0].strip()
-            c_match = db.query(Client).filter(Client.nome.like(f"%{nome_base}%")).first()
+            c_match = db.query(Client).filter(func.lower(Client.nome).like(f"%{nome_base.lower()}%")).first()
             if c_match and c_match.id != venda_cliente_id:
                 st.session_state["venda_cliente_id_selecionado"] = c_match.id
                 venda_cliente_id = c_match.id
