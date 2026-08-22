@@ -208,7 +208,7 @@ def _coluna_html_full(ags_dia: list, col_w: int) -> str:
         card_h = max(28, (bloco_h - (n_no_grupo - 1) * 3) // n_no_grupo)
 
         for idx, ag in enumerate(grupo):
-            cor = ag.cor_profissional or "#E3A5C7"
+            cor = _cor_final_agendamento(ag)
             icone = "✅" if ag.confirmado else "⏳"
             pacote_flag = " 📦" if getattr(ag, "_tem_pacote", False) else ""
             sala_txt = f" · {ag.sala}" if getattr(ag, "sala", None) else ""
@@ -300,7 +300,7 @@ def _coluna_html(ags_dia: list, col_w: int) -> str:
         h    = _height_px(ag.duracao_min)
         ci   = col_idx.get(ag.id, 0)
         left = ci * (card_w + gutter)
-        cor  = ag.cor_profissional or "#E3A5C7"
+        cor  = _cor_final_agendamento(ag)
         icone = "✅" if ag.confirmado else "⏳"
         pacote_flag = " 📦" if getattr(ag, "_tem_pacote", False) else ""
 
@@ -456,7 +456,7 @@ def _render_calendario_dia_por_profissional(dia, ags_dia: list) -> str:
     colunas = ""
     for nome_prof, ags_prof in profs_ordenados:
         # cor do profissional (pega do primeiro agendamento)
-        cor = ags_prof[0].cor_profissional or "#E3A5C7"
+        cor = _cor_final_agendamento(ags_prof[0])
 
         cabecalho = (
             f'<div style="text-align:center;padding:6px 4px;'
@@ -1171,6 +1171,34 @@ CORES_PROFISSIONAIS = {
     "Cinza": "#C8C8C8",
 }
 
+CORES_ESPECIAIS = {
+    "ju": "#8A2BE2",      # roxo
+    "gabi": "#1E3A5F",    # azul escuro
+    "kauane": "#808080",  # cinza
+    "sala 2": "#FFC0CB",  # rosa
+    "sala 3": "#FFD700",  # amarelo
+}
+
+
+def _cor_final_agendamento(ag, cor_prof=None):
+    """Retorna a cor final do agendamento considerando profissional e sala."""
+    # Salas alugáveis têm cor fixa
+    if ag.sala:
+        sala_lower = ag.sala.lower()
+        if "sala 2" in sala_lower:
+            return CORES_ESPECIAIS.get("sala 2", "#FFC0CB")
+        if "sala 3" in sala_lower:
+            return CORES_ESPECIAIS.get("sala 3", "#FFD700")
+        # Sala 1 e Soroterapia seguem a cor do profissional
+    # Profissionais específicos
+    nome_prof = (ag.profissional or "").strip().lower()
+    if nome_prof:
+        for chave, cor in CORES_ESPECIAIS.items():
+            if chave in nome_prof:
+                return cor
+    # Fallback: cor do cadastro do profissional
+    return cor_prof or ag.cor_profissional or "#E3A5C7"
+
 
 def _init_agenda_state():
     defaults = {
@@ -1248,130 +1276,127 @@ def tela_agenda():
 
             OPCOES_SALA = ["— selecione —", "Sala 1", "Sala 2", "Sala 3", "Sala 4", "Sala 5", "Soroterapia"]
 
-            col1, col2 = st.columns(2)
-            with col1:
-                # Campo de texto livre para nome do cliente (permite não cadastrado)
-                _ag_cli_default = ""
-                if modo_edicao and ag_edit:
-                    _ag_cli_default = ag_edit.cliente_nome or ""
-                nome_ag_digitado = st.text_input("Cliente", value=st.session_state.get("ag_cliente_nome_livre", _ag_cli_default), key="ag_nome_livre_input", placeholder="Digite o nome, CPF ou telefone")
+            # Campo de texto livre para nome do cliente (permite não cadastrado)
+            _ag_cli_default = ""
+            if modo_edicao and ag_edit:
+                _ag_cli_default = ag_edit.cliente_nome or ""
+            nome_ag_digitado = st.text_input("Cliente", value=st.session_state.get("ag_cliente_nome_livre", _ag_cli_default), key="ag_nome_livre_input", placeholder="Digite o nome, CPF ou telefone")
 
-                cliente_sel = None
-                _cli_id_ag = None
-                if nome_ag_digitado and len(nome_ag_digitado) >= 2:
-                    _sugestoes_ag = db.query(Client).filter(
-                        (func.lower(Client.nome).like(f"%{nome_ag_digitado.lower()}%")) |
-                        (func.lower(Client.cpf).like(f"%{nome_ag_digitado.lower()}%")) |
-                        (func.lower(Client.telefone).like(f"%{nome_ag_digitado.lower()}%"))
-                    ).order_by(Client.nome).limit(10).all()
-                    if _sugestoes_ag:
-                        _opcoes_sug = ["— usar o nome digitado —"] + [f"{c.nome} | {c.cpf or c.telefone or ''}" for c in _sugestoes_ag]
-                        _sel_sug = st.selectbox("Selecionar cliente cadastrado (opcional):", _opcoes_sug, key="ag_sug_cli")
-                        if _sel_sug and _sel_sug != "— usar o nome digitado —":
-                            _cli_nome_sug = _sel_sug.split(" | ")[0]
-                            _cli_encontrado = db.query(Client).filter(func.lower(Client.nome) == _cli_nome_sug.lower()).first()
-                            cliente_sel = _cli_nome_sug
-                            _cli_id_ag = _cli_encontrado.id if _cli_encontrado else None
-                        else:
-                            cliente_sel = nome_ag_digitado
-                            _cli_id_ag = None
+            cliente_sel = None
+            _cli_id_ag = None
+            if nome_ag_digitado and len(nome_ag_digitado) >= 2:
+                _sugestoes_ag = db.query(Client).filter(
+                    (func.lower(Client.nome).like(f"%{nome_ag_digitado.lower()}%")) |
+                    (func.lower(Client.cpf).like(f"%{nome_ag_digitado.lower()}%")) |
+                    (func.lower(Client.telefone).like(f"%{nome_ag_digitado.lower()}%"))
+                ).order_by(Client.nome).limit(10).all()
+                if _sugestoes_ag:
+                    _opcoes_sug = ["— usar o nome digitado —"] + [f"{c.nome} | {c.cpf or c.telefone or ''}" for c in _sugestoes_ag]
+                    _sel_sug = st.selectbox("Selecionar cliente cadastrado (opcional):", _opcoes_sug, key="ag_sug_cli")
+                    if _sel_sug and _sel_sug != "— usar o nome digitado —":
+                        _cli_nome_sug = _sel_sug.split(" | ")[0]
+                        _cli_encontrado = db.query(Client).filter(func.lower(Client.nome) == _cli_nome_sug.lower()).first()
+                        cliente_sel = _cli_nome_sug
+                        _cli_id_ag = _cli_encontrado.id if _cli_encontrado else None
                     else:
                         cliente_sel = nome_ag_digitado
                         _cli_id_ag = None
                 else:
-                    cliente_sel = nome_ag_digitado if nome_ag_digitado else None
+                    cliente_sel = nome_ag_digitado
                     _cli_id_ag = None
+            else:
+                cliente_sel = nome_ag_digitado if nome_ag_digitado else None
+                _cli_id_ag = None
 
-                # Fallback em modo edição: preservar cliente original se não alterado
-                if modo_edicao and ag_edit and not cliente_sel:
-                    cliente_sel = ag_edit.cliente_nome
-                    _cli_id_ag = ag_edit.cliente_id
+            # Fallback em modo edição: preservar cliente original se não alterado
+            if modo_edicao and ag_edit and not cliente_sel:
+                cliente_sel = ag_edit.cliente_nome
+                _cli_id_ag = ag_edit.cliente_id
 
-                # ── Pacotes disponíveis (checkboxes) ──
-                if cliente_sel and _cli_id_ag:
-                        try:
-                            from models.sale import Sale, SaleItem
-                            _pacotes = (
-                                db.query(SaleItem)
-                                .join(Sale)
-                                .filter(
-                                    Sale.cliente_id == _cli_id_ag,
-                                    SaleItem.tipo == "pacote",
-                                    SaleItem.sessoes_usadas < SaleItem.sessoes_total,
-                                ).all()
-                            )
-                            if _pacotes:
-                                st.caption("📦 Pacotes ativos — selecione para vincular ao agendamento:")
-                                pacote_selecionado_id = st.session_state.get("ag_pacote_item_id")
-                                for _p in _pacotes:
-                                    rest = _p.sessoes_total - _p.sessoes_usadas
-                                    chave = f"pkg_{_p.id}"
-                                    marcado = st.checkbox(
-                                        f"📦 {_p.procedimento} — {rest} sessão(ões) restante(s)",
-                                        key=chave,
-                                        value=(pacote_selecionado_id == _p.id),
-                                    )
-                                    if marcado and pacote_selecionado_id != _p.id:
-                                        st.session_state["ag_pacote_item_id"] = _p.id
-                                        st.session_state["ag_proc"] = _p.procedimento
-                                        st.rerun()
-                                    elif not marcado and pacote_selecionado_id == _p.id:
-                                        st.session_state["ag_pacote_item_id"] = None
-                                        st.session_state["ag_proc"] = ""
-                                        st.rerun()
-                            else:
-                                st.caption("Sem pacotes ativos para esta cliente.")
-                        except Exception:
-                            pass
-
-                data_ag = st.date_input("Data", format="DD/MM/YYYY", key="ag_data")
-
-                if nomes_prof:
-                    opcoes_prof = ["— selecione —"] + nomes_prof
-                    if st.session_state.get("ag_prof") not in opcoes_prof:
-                        st.session_state["ag_prof"] = "— selecione —"
-                    prof_sel = st.selectbox("Profissional responsável*", opcoes_prof, key="ag_prof")
-                else:
-                    st.info("Cadastre um profissional abaixo primeiro.")
-                    prof_sel = "— selecione —"
-
-                procedimento = st.text_input("Procedimento", key="ag_proc")
-
-                if st.session_state.get("ag_sala") not in OPCOES_SALA:
-                    st.session_state["ag_sala"] = "— selecione —"
-                sala_sel = st.selectbox("Sala", OPCOES_SALA, key="ag_sala")
-
-            with col2:
-                if st.session_state.get("ag_hora_ini") not in slots:
-                    st.session_state["ag_hora_ini"] = "08:00"
-                hora_inicio = st.selectbox("Hora início", slots, key="ag_hora_ini")
-
-                if st.session_state.get("ag_duracao") not in duracoes:
-                    st.session_state["ag_duracao"] = 60
-                duracao = st.selectbox("Duração (min)", duracoes, key="ag_duracao")
-
-                # Calcula hora fim e exibe em tempo real
-                hora_fim_calc = calcular_hora_fim(hora_inicio, duracao)
-                st.markdown(f"**Hora fim:** {hora_fim_calc}")
-                observacoes_ag = st.text_area("Observações", key="ag_obs", height=150)
-
-                # Recorrência
-                if not modo_edicao:
-                    recorrente = st.checkbox("Recorrência", key="ag_recorrente")
-                    if recorrente:
-                        tipo_recorrencia = st.selectbox(
-                            "Tipo de recorrência",
-                            ["Semanal", "Quinzenal", "Mensal", "Bimestral", "Trimestral", "Semestral"],
-                            key="ag_tipo_recorrencia"
+            # ── Pacotes disponíveis (checkboxes) ──
+            if cliente_sel and _cli_id_ag:
+                    try:
+                        from models.sale import Sale, SaleItem
+                        _pacotes = (
+                            db.query(SaleItem)
+                            .join(Sale)
+                            .filter(
+                                Sale.cliente_id == _cli_id_ag,
+                                SaleItem.tipo == "pacote",
+                                SaleItem.sessoes_usadas < SaleItem.sessoes_total,
+                            ).all()
                         )
-                        num_repeticoes = st.number_input("Quantas vezes?", min_value=2, max_value=52, value=4, step=1, key="ag_num_repeticoes")
-                    else:
-                        tipo_recorrencia = None
-                        num_repeticoes = 1
+                        if _pacotes:
+                            st.caption("📦 Pacotes ativos — selecione para vincular ao agendamento:")
+                            pacote_selecionado_id = st.session_state.get("ag_pacote_item_id")
+                            for _p in _pacotes:
+                                rest = _p.sessoes_total - _p.sessoes_usadas
+                                chave = f"pkg_{_p.id}"
+                                marcado = st.checkbox(
+                                    f"📦 {_p.procedimento} — {rest} sessão(ões) restante(s)",
+                                    key=chave,
+                                    value=(pacote_selecionado_id == _p.id),
+                                )
+                                if marcado and pacote_selecionado_id != _p.id:
+                                    st.session_state["ag_pacote_item_id"] = _p.id
+                                    st.session_state["ag_proc"] = _p.procedimento
+                                    st.rerun()
+                                elif not marcado and pacote_selecionado_id == _p.id:
+                                    st.session_state["ag_pacote_item_id"] = None
+                                    st.session_state["ag_proc"] = ""
+                                    st.rerun()
+                        else:
+                            st.caption("Sem pacotes ativos para esta cliente.")
+                    except Exception:
+                        pass
+
+            data_ag = st.date_input("Data", format="DD/MM/YYYY", key="ag_data")
+
+            if nomes_prof:
+                opcoes_prof = ["— selecione —"] + nomes_prof
+                if st.session_state.get("ag_prof") not in opcoes_prof:
+                    st.session_state["ag_prof"] = "— selecione —"
+                prof_sel = st.selectbox("Profissional responsável*", opcoes_prof, key="ag_prof")
+            else:
+                st.info("Cadastre um profissional abaixo primeiro.")
+                prof_sel = "— selecione —"
+
+            procedimento = st.text_input("Procedimento", key="ag_proc")
+
+            if st.session_state.get("ag_sala") not in OPCOES_SALA:
+                st.session_state["ag_sala"] = "— selecione —"
+            sala_sel = st.selectbox("Sala", OPCOES_SALA, key="ag_sala")
+
+            if st.session_state.get("ag_hora_ini") not in slots:
+                st.session_state["ag_hora_ini"] = "08:00"
+            hora_inicio = st.selectbox("Hora início", slots, key="ag_hora_ini")
+
+            if st.session_state.get("ag_duracao") not in duracoes:
+                st.session_state["ag_duracao"] = 60
+            duracao = st.selectbox("Duração (min)", duracoes, key="ag_duracao")
+
+            # Calcula hora fim e exibe em tempo real
+            hora_fim_calc = calcular_hora_fim(hora_inicio, duracao)
+            st.markdown(f"**Hora fim:** {hora_fim_calc}")
+            observacoes_ag = st.text_area("Observações", key="ag_obs", height=120)
+
+            # Recorrência
+            if not modo_edicao:
+                recorrente = st.checkbox("Recorrência", key="ag_recorrente")
+                if recorrente:
+                    tipo_recorrencia = st.selectbox(
+                        "Tipo de recorrência",
+                        ["Semanal", "Quinzenal", "Mensal", "Bimestral", "Trimestral", "Semestral"],
+                        key="ag_tipo_recorrencia"
+                    )
+                    num_repeticoes = st.number_input("Quantas vezes?", min_value=2, max_value=52, value=4, step=1, key="ag_num_repeticoes")
                 else:
-                    recorrente = False
                     tipo_recorrencia = None
                     num_repeticoes = 1
+            else:
+                recorrente = False
+                tipo_recorrencia = None
+                num_repeticoes = 1
 
             btn_label = "💾 Salvar alterações" if modo_edicao else "💾 Salvar agendamento"
             if st.button(btn_label, use_container_width=True, key="ag_salvar"):
@@ -1628,8 +1653,8 @@ def tela_agenda():
                     prof_vinculado = p.nome
                     break
         
-        # Filtro por profissional
-        col_filt, _ = st.columns([1, 3])
+        # Filtro por profissional + tipo de visualização
+        col_filt, col_visual = st.columns([1, 1])
         with col_filt:
             if prof_vinculado:
                 filtro_prof = prof_vinculado
@@ -1638,6 +1663,8 @@ def tela_agenda():
                 opcoes_filt = ["Todos"] + nomes_prof
                 filtro_prof = st.selectbox("Profissional (filtrar)", opcoes_filt,
                                            key="ag_filtro_prof", label_visibility="visible")
+        with col_visual:
+            tipo_visual = st.radio("Visualização", ["Grade", "Lista"], horizontal=True, key="ag_tipo_visual")
 
         ags_periodo_raw = (
             db.query(ScheduledAppointment)
@@ -1681,7 +1708,7 @@ def tela_agenda():
         # Legenda de profissionais — compacta, numa só linha
         prof_vistos: dict = {}
         for ag in ags_periodo:
-            prof_vistos.setdefault(ag.profissional, ag.cor_profissional or "#E3A5C7")
+            prof_vistos.setdefault(ag.profissional, _cor_final_agendamento(ag))
         if prof_vistos:
             badges = " ".join(
                 f'<span style="background:{c};padding:3px 10px;border-radius:8px;'
@@ -1691,10 +1718,10 @@ def tela_agenda():
             st.markdown(f'<div style="margin-bottom:6px;">{badges}</div>', unsafe_allow_html=True)
 
         # Lista de agendamentos estilo Google Calendar
-        if ags_periodo:
+        if ags_periodo and tipo_visual == "Lista":
             st.markdown("#### Agendamentos")
             for ag in sorted(ags_periodo, key=lambda x: (x.data, x.hora_inicio)):
-                cor = ag.cor_profissional or "#E3A5C7"
+                cor = _cor_final_agendamento(ag)
                 pacote_label = " 📦" if getattr(ag, "_tem_pacote", False) else ""
                 prefixo = f"{ag.data.strftime('%d/%m')} | " if vista != "Dia" else ""
                 icone_conf = " ✅" if ag.confirmado else ""
@@ -1926,45 +1953,46 @@ def tela_agenda():
         st.markdown("---")
 
         # Calendário proporcional
-        if vista == "Mês":
-            # Renderizar grid mensal simplificado
-            nomes_sem = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
-            hoje = _hoje()
-            mes_html = '<table style="width:100%;border-collapse:collapse;font-family:sans-serif;font-size:12px;">'
-            mes_html += '<tr>'
-            for ns in nomes_sem:
-                mes_html += f'<th style="padding:6px;text-align:center;background:#f3f4f6;border:1px solid #e5e7eb;">{ns}</th>'
-            mes_html += '</tr>'
-            for i in range(0, len(dias), 7):
+        if tipo_visual == "Grade":
+            if vista == "Mês":
+                # Renderizar grid mensal simplificado
+                nomes_sem = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
+                hoje = _hoje()
+                mes_html = '<table style="width:100%;border-collapse:collapse;font-family:sans-serif;font-size:12px;">'
                 mes_html += '<tr>'
-                for dia in dias[i:i+7]:
-                    bg = "#fef2f2" if dia == hoje else ("#f9fafb" if dia.month == data_ref.month else "#fff")
-                    ags_dia = ags_por_dia.get(dia, [])
-                    cell_content = f'<div style="font-weight:700;margin-bottom:2px;">{dia.day}</div>'
-                    for ag in ags_dia[:3]:
-                        cor = ag.cor_profissional or "#E3A5C7"
-                        cell_content += (
-                            f'<div style="font-size:10px;background:{cor};color:#fff;'
-                            f'padding:1px 4px;border-radius:3px;margin-bottom:1px;'
-                            f'overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">'
-                            f'{ag.hora_inicio} {ag.cliente_nome or ""}</div>'
-                        )
-                    if len(ags_dia) > 3:
-                        cell_content += f'<div style="font-size:9px;color:#666;">+{len(ags_dia)-3} mais</div>'
-                    mes_html += (
-                        f'<td style="padding:4px;border:1px solid #e5e7eb;vertical-align:top;'
-                        f'background:{bg};min-height:60px;width:14.28%;">{cell_content}</td>'
-                    )
+                for ns in nomes_sem:
+                    mes_html += f'<th style="padding:6px;text-align:center;background:#f3f4f6;border:1px solid #e5e7eb;">{ns}</th>'
                 mes_html += '</tr>'
-            mes_html += '</table>'
-            st.markdown(mes_html, unsafe_allow_html=True)
-        else:
-            if vista == "Dia" and len(dias) == 1:
-                _ags_dia_unico = ags_por_dia.get(dias[0], [])
-                cal_html = _render_calendario_dia_por_profissional(dias[0], _ags_dia_unico)
+                for i in range(0, len(dias), 7):
+                    mes_html += '<tr>'
+                    for dia in dias[i:i+7]:
+                        bg = "#fef2f2" if dia == hoje else ("#f9fafb" if dia.month == data_ref.month else "#fff")
+                        ags_dia = ags_por_dia.get(dia, [])
+                        cell_content = f'<div style="font-weight:700;margin-bottom:2px;">{dia.day}</div>'
+                        for ag in ags_dia[:3]:
+                            cor = _cor_final_agendamento(ag)
+                            cell_content += (
+                                f'<div style="font-size:10px;background:{cor};color:#fff;'
+                                f'padding:1px 4px;border-radius:3px;margin-bottom:1px;'
+                                f'overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">'
+                                f'{ag.hora_inicio} {ag.cliente_nome or ""}</div>'
+                            )
+                        if len(ags_dia) > 3:
+                            cell_content += f'<div style="font-size:9px;color:#666;">+{len(ags_dia)-3} mais</div>'
+                        mes_html += (
+                            f'<td style="padding:4px;border:1px solid #e5e7eb;vertical-align:top;'
+                            f'background:{bg};min-height:60px;width:14.28%;">{cell_content}</td>'
+                        )
+                    mes_html += '</tr>'
+                mes_html += '</table>'
+                st.markdown(mes_html, unsafe_allow_html=True)
             else:
-                cal_html = _render_calendario(dias, ags_por_dia, semana=(vista == "Semana"))
-            st.markdown(cal_html, unsafe_allow_html=True)
+                if vista == "Dia" and len(dias) == 1:
+                    _ags_dia_unico = ags_por_dia.get(dias[0], [])
+                    cal_html = _render_calendario_dia_por_profissional(dias[0], _ags_dia_unico)
+                else:
+                    cal_html = _render_calendario(dias, ags_por_dia, semana=(vista == "Semana"))
+                st.markdown(cal_html, unsafe_allow_html=True)
 
         # ── Pop-up de edição rápida ──────────────────────────────────────────
         if "ag_popup_edit_id" in st.session_state:
@@ -2966,12 +2994,96 @@ def tela_clientes():
 
         st.markdown("---")
         st.markdown("#### Clientes cadastradas")
-        df_clientes = pd.read_sql(
-            db.query(Client).order_by(Client.id.desc()).statement, db.bind
-        )
-        if not df_clientes.empty:
-            colunas = [c for c in ["id", "nome", "cpf", "telefone", "email", "cidade"] if c in df_clientes.columns]
-            st.dataframe(df_clientes[colunas], use_container_width=True, hide_index=True)
+        _clientes_lista = db.query(Client).order_by(Client.id.desc()).all()
+        if _clientes_lista:
+            _rows_cli = []
+            _ids_cli = []
+            for _c in _clientes_lista:
+                _ids_cli.append(_c.id)
+                _rows_cli.append({
+                    "Selecionar": False,
+                    "id": _c.id,
+                    "nome": _c.nome,
+                    "cpf": _c.cpf or "—",
+                    "telefone": _c.telefone or "—",
+                    "email": _c.email or "—",
+                    "cidade": _c.cidade or "—",
+                })
+            _df_cli = pd.DataFrame(_rows_cli)
+            _edited_cli = st.data_editor(
+                _df_cli,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "Selecionar": st.column_config.CheckboxColumn("Selecionar", default=False),
+                },
+                disabled=["id", "nome", "cpf", "telefone", "email", "cidade"],
+                key="clientes_cadastrados_editor"
+            )
+
+            col_btn_edit_cli, col_btn_del_cli, _ = st.columns([1, 1, 6])
+            with col_btn_edit_cli:
+                _btn_edit_cli = st.button("✏️ Editar", use_container_width=True, key="cli_cad_btn_edit")
+            with col_btn_del_cli:
+                _btn_del_cli = st.button("🗑️ Excluir", use_container_width=True, key="cli_cad_btn_del")
+
+            _selecionados_cli = _edited_cli[_edited_cli["Selecionar"] == True]
+            if len(_selecionados_cli) > 1:
+                st.warning("Selecione apenas 1 cliente por vez.")
+            elif len(_selecionados_cli) == 1:
+                _idx_cli_sel = _selecionados_cli.index[0]
+                _cli_id_sel = _ids_cli[_idx_cli_sel]
+
+                if _btn_edit_cli:
+                    _modal_cliente("Editar Cliente", _cli_id_sel)
+
+                if _btn_del_cli:
+                    st.session_state["confirmar_exclusao_cli_id"] = _cli_id_sel
+                    st.rerun()
+            else:
+                if _btn_edit_cli or _btn_del_cli:
+                    st.warning("Selecione um cliente na tabela primeiro.")
+
+            # Dialog de confirmação de exclusão de cliente
+            if st.session_state.get("confirmar_exclusao_cli_id"):
+                @st.dialog("Confirmar exclusão", width="small")
+                def _dialog_confirmar_exclusao_cliente():
+                    _cli_del_id = st.session_state.get("confirmar_exclusao_cli_id")
+                    db_del = SessionLocal()
+                    try:
+                        cli_del = db_del.get(Client, _cli_del_id)
+                        if not cli_del:
+                            st.error("Cliente não encontrado.")
+                            return
+                        st.warning(f"Deseja realmente excluir a cliente **{cli_del.nome}**?\n\nEsta ação não pode ser desfeita.")
+                        col_sim, col_nao = st.columns(2)
+                        with col_sim:
+                            if st.button("Sim, excluir", use_container_width=True, key="btn_conf_excluir_cli_sim"):
+                                # Registrar na lixeira
+                                registrar_exclusao(
+                                    db_del,
+                                    tipo="cliente",
+                                    referencia_id=cli_del.id,
+                                    descricao=cli_del.nome,
+                                    dados={
+                                        "nome": cli_del.nome,
+                                        "cpf": cli_del.cpf,
+                                        "telefone": cli_del.telefone,
+                                        "email": cli_del.email,
+                                    },
+                                )
+                                db_del.delete(cli_del)
+                                db_del.commit()
+                                st.session_state.pop("confirmar_exclusao_cli_id", None)
+                                st.rerun()
+                        with col_nao:
+                            if st.button("Não, cancelar", use_container_width=True, key="btn_conf_excluir_cli_nao"):
+                                st.session_state.pop("confirmar_exclusao_cli_id", None)
+                                st.rerun()
+                    finally:
+                        db_del.close()
+
+                _dialog_confirmar_exclusao_cliente()
         else:
             st.info("Nenhum cliente encontrado.")
     finally:
@@ -4699,48 +4811,65 @@ def tela_estoque():
                 if btn_editar_est and linha_sel_est:
                     st.session_state["est_editando"] = linha_sel_est
                     st.rerun()
-                
-                # Form de edição
+
+                # Popup de edição de lote
                 if st.session_state.get("est_editando"):
-                    lt_ed = db.get(StockLote, st.session_state["est_editando"])
-                    if lt_ed:
-                        st.markdown("---")
-                        st.markdown("#### ✏️ Editar lote")
-                        ec1, ec2 = st.columns(2)
-                        with ec1:
-                            new_qtd = st.number_input("Quantidade", value=float(lt_ed.quantidade_atual or 0), key="est_ed_qtd")
-                            new_val = st.date_input("Validade", value=lt_ed.data_validade, key="est_ed_val")
-                        with ec2:
-                            new_forn = st.text_input("Fornecedor", value=lt_ed.fornecedor or "", key="est_ed_forn")
-                            new_lote = st.text_input("Lote", value=lt_ed.lote or "", key="est_ed_lote")
-                        bc1, bc2 = st.columns(2)
-                        with bc1:
-                            if st.button("💾 Salvar", key="est_save", use_container_width=True):
-                                qtd_anterior = float(lt_ed.quantidade_atual or 0)
-                                lt_ed.quantidade_atual = new_qtd
-                                lt_ed.data_validade = new_val
-                                lt_ed.fornecedor = new_forn if new_forn else None
-                                lt_ed.lote = new_lote if new_lote else None
-                                # Criar movimentação de ajuste se quantidade mudou
-                                diferenca = new_qtd - qtd_anterior
-                                if diferenca != 0:
-                                    tipo_ajuste = "entrada" if diferenca > 0 else "saida"
-                                    mov_ajuste = StockMovement(
-                                        lote_id=lt_ed.id,
-                                        produto_id=lt_ed.produto_id,
-                                        tipo=tipo_ajuste,
-                                        quantidade=abs(diferenca),
-                                        motivo="ajuste manual",
-                                    )
-                                    db.add(mov_ajuste)
-                                db.commit()
-                                del st.session_state["est_editando"]
-                                st.success("Lote atualizado!")
-                                st.rerun()
-                        with bc2:
-                            if st.button("❌ Cancelar", key="est_cancel", use_container_width=True):
-                                del st.session_state["est_editando"]
-                                st.rerun()
+                    _lt_ed_id = st.session_state["est_editando"]
+                    _lt_ed = db.get(StockLote, _lt_ed_id)
+                    if _lt_ed:
+                        _prod_ed = _lt_ed.produto.nome if _lt_ed.produto else "—"
+
+                        @st.dialog(f"Editar Lote - {_prod_ed}", width="large")
+                        def _dialog_editar_lote():
+                            db_ed = SessionLocal()
+                            try:
+                                lt_ed = db_ed.get(StockLote, _lt_ed_id)
+                                if not lt_ed:
+                                    st.error("Lote não encontrado.")
+                                    return
+
+                                st.markdown(f"**Produto:** {lt_ed.produto.nome if lt_ed.produto else '—'}")
+                                st.markdown(f"**Lote atual:** {lt_ed.lote or 'S/N'}")
+
+                                new_qtd = st.number_input("Quantidade", value=float(lt_ed.quantidade_atual or 0), key="est_popup_ed_qtd")
+                                new_val = st.date_input("Validade", value=lt_ed.data_validade, key="est_popup_ed_val")
+                                new_forn = st.text_input("Fornecedor", value=lt_ed.fornecedor or "", key="est_popup_ed_forn")
+                                new_lote = st.text_input("Lote", value=lt_ed.lote or "", key="est_popup_ed_lote")
+
+                                col_salvar, col_cancelar = st.columns(2)
+                                with col_salvar:
+                                    if st.button("💾 Salvar", use_container_width=True, key="est_popup_save"):
+                                        qtd_anterior = float(lt_ed.quantidade_atual or 0)
+                                        lt_ed.quantidade_atual = new_qtd
+                                        lt_ed.data_validade = new_val
+                                        lt_ed.fornecedor = new_forn if new_forn else None
+                                        lt_ed.lote = new_lote if new_lote else None
+                                        diferenca = new_qtd - qtd_anterior
+                                        if diferenca != 0:
+                                            tipo_ajuste = "entrada" if diferenca > 0 else "saida"
+                                            mov_ajuste = StockMovement(
+                                                lote_id=lt_ed.id,
+                                                produto_id=lt_ed.produto_id,
+                                                tipo=tipo_ajuste,
+                                                quantidade=abs(diferenca),
+                                                motivo="ajuste manual",
+                                            )
+                                            db_ed.add(mov_ajuste)
+                                        db_ed.commit()
+                                        st.session_state.pop("est_editando", None)
+                                        st.success("Lote atualizado!")
+                                        st.rerun()
+                                with col_cancelar:
+                                    if st.button("❌ Cancelar", use_container_width=True, key="est_popup_cancel"):
+                                        st.session_state.pop("est_editando", None)
+                                        st.rerun()
+                            finally:
+                                db_ed.close()
+
+                        _dialog_editar_lote()
+                    else:
+                        st.session_state.pop("est_editando", None)
+
             else:
                 st.info("Nenhum lote cadastrado.")
 
@@ -5638,39 +5767,60 @@ def tela_vendas():
         else:
             st.info("Nenhuma venda registrada.")
 
-        # ── Formulário de edição de venda ──
+        # Popup de edição de venda
         if st.session_state.get("venda_editando"):
             _vid = st.session_state["venda_editando"]
             _venda_ed = db.get(Sale, _vid)
             if _venda_ed:
-                st.markdown("---")
-                st.markdown("#### Editar Venda")
-                with st.form("form_editar_venda", clear_on_submit=False):
-                    _ed_data_v = st.date_input("Data", value=_venda_ed.data_venda, format="DD/MM/YYYY", key="ed_venda_data")
-                    _ed_pag_v = st.selectbox(
-                        "Forma de pagamento",
-                        ["Cartão de Crédito", "Cartão de Débito", "Pix", "Dinheiro"],
-                        index=["Cartão de Crédito", "Cartão de Débito", "Pix", "Dinheiro"].index(_venda_ed.forma_pagamento)
-                        if _venda_ed.forma_pagamento in ["Cartão de Crédito", "Cartão de Débito", "Pix", "Dinheiro"] else 0,
-                        key="ed_venda_pag",
-                    )
-                    _ed_obs_v = st.text_input("Observações", value=_venda_ed.observacoes or "", key="ed_venda_obs")
-                    col_sv2, col_cn2 = st.columns(2)
-                    with col_sv2:
-                        _salvar_venda_ed = st.form_submit_button("💾 Salvar", use_container_width=True)
-                    with col_cn2:
-                        _cancelar_venda_ed = st.form_submit_button("Cancelar", use_container_width=True)
-                if _salvar_venda_ed:
-                    _venda_ed.data_venda = _ed_data_v
-                    _venda_ed.forma_pagamento = _ed_pag_v
-                    _venda_ed.observacoes = _ed_obs_v or None
-                    db.commit()
-                    st.success("Venda atualizada!")
-                    st.session_state.pop("venda_editando", None)
-                    st.rerun()
-                if _cancelar_venda_ed:
-                    st.session_state.pop("venda_editando", None)
-                    st.rerun()
+                _cliente_nome_v = _venda_ed.cliente.nome if _venda_ed.cliente else "—"
+
+                @st.dialog(f"Editar Venda - {_cliente_nome_v}", width="large")
+                def _dialog_editar_venda():
+                    db_ed = SessionLocal()
+                    try:
+                        venda_ed = db_ed.get(Sale, _vid)
+                        if not venda_ed:
+                            st.error("Venda não encontrada.")
+                            return
+
+                        st.markdown(f"**Cliente:** {venda_ed.cliente.nome if venda_ed.cliente else '—'}")
+
+                        _ed_data_v = st.date_input("Data", value=venda_ed.data_venda, format="DD/MM/YYYY", key="dlg_ed_venda_data")
+                        _ed_pag_v = st.selectbox(
+                            "Forma de pagamento",
+                            ["Cartão de Crédito", "Cartão de Débito", "Pix", "Dinheiro"],
+                            index=["Cartão de Crédito", "Cartão de Débito", "Pix", "Dinheiro"].index(venda_ed.forma_pagamento)
+                            if venda_ed.forma_pagamento in ["Cartão de Crédito", "Cartão de Débito", "Pix", "Dinheiro"] else 0,
+                            key="dlg_ed_venda_pag",
+                        )
+                        _ed_obs_v = st.text_input("Observações", value=venda_ed.observacoes or "", key="dlg_ed_venda_obs")
+
+                        st.markdown("**Itens da venda**")
+                        for i, it in enumerate(venda_ed.itens):
+                            tipo_label = "📦 Pacote" if it.tipo == "pacote" else "1️⃣ Unitário"
+                            sessoes_label = f" — {it.sessoes_total} sessões" if it.tipo == "pacote" else ""
+                            st.write(f"{i+1}. **{it.procedimento}** {tipo_label}{sessoes_label} — R$ {it.valor:.2f}")
+
+                        col_salvar, col_cancelar = st.columns(2)
+                        with col_salvar:
+                            if st.button("💾 Salvar", use_container_width=True, key="dlg_ed_venda_salvar"):
+                                venda_ed.data_venda = _ed_data_v
+                                venda_ed.forma_pagamento = _ed_pag_v
+                                venda_ed.observacoes = _ed_obs_v or None
+                                db_ed.commit()
+                                st.session_state.pop("venda_editando", None)
+                                st.success("Venda atualizada!")
+                                st.rerun()
+                        with col_cancelar:
+                            if st.button("Cancelar", use_container_width=True, key="dlg_ed_venda_cancel"):
+                                st.session_state.pop("venda_editando", None)
+                                st.rerun()
+                    finally:
+                        db_ed.close()
+
+                _dialog_editar_venda()
+            else:
+                st.session_state.pop("venda_editando", None)
     finally:
         db.close()
 
