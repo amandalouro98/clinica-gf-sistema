@@ -1,6 +1,7 @@
 """Componente FullCalendar para agenda interativa."""
 
 import json
+import unicodedata
 from datetime import datetime, timedelta
 
 
@@ -13,44 +14,81 @@ COR_FUNDO_HOJE = "#fff0ee"
 COR_FOCO = "rgba(213, 156, 156, 0.45)"
 
 
+# Paleta oficial da clínica (espelha as cores usadas hoje no Google Agenda)
+COR_GABI = "#002E7A"        # azul escuro
+COR_JULIANA = "#9F6AAF"     # roxo
+COR_KAUANE = "#A79C8F"      # cinza
+COR_RECEPCAO = "#84B4CD"    # azul claro
+COR_ANIVERSARIOS = "#CD1F2B"  # vermelho
+COR_FAMILIA = "#C0CA33"     # verde-limão
+COR_SALA_2 = "#CC628A"      # rosa
+COR_SALA_3 = "#F7BF27"      # amarelo
+COR_SALA_4 = "#41CC52"      # verde
+
+# Opções oferecidas no cadastro de profissionais
 CORES_PROFISSIONAIS = {
-    "Rosa": "#F4A7B9",
-    "Lavanda": "#C9A7F4",
-    "Azul": "#A7D4F4",
-    "Verde": "#A7F4C9",
-    "Amarelo": "#F4E4A7",
-    "Laranja": "#F4C4A7",
-    "Vermelho": "#F4A7A7",
-    "Cinza": "#C8C8C8",
+    "Azul escuro (Gabi)": COR_GABI,
+    "Roxo (Juliana)": COR_JULIANA,
+    "Cinza (Kauane)": COR_KAUANE,
+    "Azul claro (Recepção)": COR_RECEPCAO,
+    "Vermelho (Aniversários)": COR_ANIVERSARIOS,
+    "Verde-limão (Família)": COR_FAMILIA,
+    "Rosa (Sala 2)": COR_SALA_2,
+    "Amarelo (Sala 3)": COR_SALA_3,
+    "Verde (Sala 4)": COR_SALA_4,
 }
 
-CORES_ESPECIAIS = {
-    "ju": "#8A2BE2",      # roxo
-    "gabi": "#1E3A5F",    # azul escuro
-    "kauane": "#808080",  # cinza
-    "sala 2": "#FFC0CB",  # rosa
-    "sala 3": "#FFD700",  # amarelo
+# Salas com cor fixa (são alugáveis, o controle é pela sala)
+CORES_SALAS = {
+    "sala 2": COR_SALA_2,
+    "sala 3": COR_SALA_3,
+    "sala 4": COR_SALA_4,
 }
+
+# Profissionais / agendas com cor fixa. A chave é comparada com o início do nome.
+CORES_ESPECIAIS = {
+    "gabi": COR_GABI,
+    "gabriela": COR_GABI,
+    "ju": COR_JULIANA,
+    "juliana": COR_JULIANA,
+    "kauane": COR_KAUANE,
+    "kawani": COR_KAUANE,
+    "recep": COR_RECEPCAO,
+    "aniversar": COR_ANIVERSARIOS,
+    "famil": COR_FAMILIA,
+}
+
+COR_PADRAO = "#E3A5C7"
+
+
+def _normalizar(texto: str) -> str:
+    """Minúsculas e sem acento, para comparar nomes com segurança."""
+    texto = (texto or "").strip().lower()
+    return "".join(
+        c for c in unicodedata.normalize("NFD", texto)
+        if unicodedata.category(c) != "Mn"
+    )
 
 
 def _cor_final_agendamento(ag, cor_prof=None):
-    """Retorna a cor final do agendamento considerando profissional e sala."""
-    # Salas alugáveis têm cor fixa
-    if ag.sala:
-        sala_lower = ag.sala.lower()
-        if "sala 2" in sala_lower:
-            return CORES_ESPECIAIS.get("sala 2", "#FFC0CB")
-        if "sala 3" in sala_lower:
-            return CORES_ESPECIAIS.get("sala 3", "#FFD700")
-        # Sala 1 e Soroterapia seguem a cor do profissional
-    # Profissionais específicos
-    nome_prof = (ag.profissional or "").strip().lower()
+    """Retorna a cor final do agendamento considerando sala e profissional.
+
+    Salas alugáveis (2, 3 e 4) têm prioridade, porque o controle delas é
+    feito pela sala. Sala 1 e Soroterapia herdam a cor do profissional.
+    """
+    sala = _normalizar(getattr(ag, "sala", None))
+    if sala:
+        for chave, cor in CORES_SALAS.items():
+            if chave in sala:
+                return cor
+
+    nome_prof = _normalizar(getattr(ag, "profissional", None))
     if nome_prof:
         for chave, cor in CORES_ESPECIAIS.items():
-            if chave in nome_prof:
+            if nome_prof.startswith(chave):
                 return cor
-    # Fallback: cor do cadastro do profissional
-    return cor_prof or getattr(ag, "cor_profissional", None) or "#E3A5C7"
+
+    return cor_prof or getattr(ag, "cor_profissional", None) or COR_PADRAO
 
 
 def _hex_to_rgba(hex_color: str, alpha: float = 1.0) -> str:
@@ -108,7 +146,7 @@ def render_fullcalendar(
         toolbar_json = json.dumps({
             "left": "prev,next today",
             "center": "title",
-            "right": "timeGridDay,timeGridWeek,dayGridMonth,listWeek",
+            "right": "timeGridDay,timeGridWeek,dayGridMonth",
         })
     else:
         toolbar_json = "false"
@@ -222,28 +260,53 @@ def render_fullcalendar(
         font-weight: 700;
         margin-right: 3px;
     }}
-    .event-acoes {{
+    .event-menu {{
         position: absolute;
-        top: 1px;
-        right: 2px;
-        z-index: 5;
-        display: flex;
-        gap: 3px;
-        line-height: 1;
-    }}
-    .event-acao {{
+        top: 0;
+        right: 1px;
+        z-index: 6;
         cursor: pointer;
-        font-size: 11px;
-        background: rgba(255,255,255,0.30);
+        font-weight: 700;
+        color: #fff;
+        line-height: 1;
+        padding: 0 2px;
         border-radius: 3px;
-        padding: 1px 2px;
+        background: rgba(255,255,255,0.22);
     }}
-    .event-acao:hover {{ background: rgba(255,255,255,0.65); }}
+    .event-menu:hover {{ background: rgba(255,255,255,0.55); }}
+    #menu-flutuante {{
+        position: fixed;
+        display: none;
+        z-index: 9999;
+        background: #ffffff;
+        border: 1px solid {COR_BORDA};
+        border-radius: 8px;
+        box-shadow: 0 4px 14px rgba(74,48,48,0.22);
+        overflow: hidden;
+        min-width: 132px;
+    }}
+    #menu-flutuante button {{
+        display: block;
+        width: 100%;
+        text-align: left;
+        background: none;
+        border: none;
+        padding: 9px 13px;
+        font-size: 13px;
+        color: {COR_TEXTO};
+        cursor: pointer;
+        font-family: inherit;
+    }}
+    #menu-flutuante button:hover {{ background: {COR_FUNDO_HOJE}; }}
 </style>
 </head>
 <body>
 {titulo_html}
 <div id="calendar"></div>
+<div id="menu-flutuante">
+    <button type="button" id="menu-editar">Editar</button>
+    <button type="button" id="menu-excluir">Excluir</button>
+</div>
 <script>
 (function() {{
     var events = {events_json};
@@ -265,6 +328,39 @@ def render_fullcalendar(
             console.error('Falha ao navegar:', e);
         }}
     }}
+
+    // Menu flutuante (3 pontinhos): Editar / Excluir
+    var menuEl = document.getElementById('menu-flutuante');
+    var menuAlvoId = null;
+
+    function fecharMenu() {{
+        menuEl.style.display = 'none';
+        menuAlvoId = null;
+    }}
+
+    function abrirMenu(x, y, eventoId) {{
+        menuAlvoId = eventoId;
+        menuEl.style.display = 'block';
+        var larg = menuEl.offsetWidth || 132;
+        var alt = menuEl.offsetHeight || 80;
+        // Mantem o menu dentro da area visivel
+        var left = Math.min(x, window.innerWidth - larg - 6);
+        var top = Math.min(y, window.innerHeight - alt - 6);
+        menuEl.style.left = Math.max(4, left) + 'px';
+        menuEl.style.top = Math.max(4, top) + 'px';
+    }}
+
+    document.getElementById('menu-editar').onclick = function() {{
+        if (menuAlvoId) {{ navigate('edit', menuAlvoId); }}
+        fecharMenu();
+    }};
+    document.getElementById('menu-excluir').onclick = function() {{
+        if (menuAlvoId) {{ navigate('delete', menuAlvoId); }}
+        fecharMenu();
+    }};
+    document.addEventListener('click', fecharMenu);
+    document.addEventListener('scroll', fecharMenu, true);
+    window.addEventListener('resize', fecharMenu);
 
     function boot() {{
         var el = document.getElementById('calendar');
@@ -302,33 +398,22 @@ def render_fullcalendar(
                     if (p.sala) partes.push(p.sala);
                     info.el.title = info.event.title + (partes.length ? ' - ' + partes.join(' | ') : '');
 
-                    var acoes = document.createElement('div');
-                    acoes.className = 'event-acoes';
-
-                    var btnEditar = document.createElement('span');
-                    btnEditar.className = 'event-acao';
-                    btnEditar.innerText = '\\u270F\\uFE0F';
-                    btnEditar.title = 'Editar agendamento';
-                    btnEditar.onclick = function(e) {{
+                    var menu = document.createElement('div');
+                    menu.className = 'event-menu';
+                    menu.innerText = '\\u22EE';
+                    menu.title = 'Opcoes';
+                    // Tamanho proporcional a altura do agendamento
+                    var altura = info.el.offsetHeight || 20;
+                    var tamanho = Math.max(10, Math.min(18, Math.round(altura * 0.42)));
+                    menu.style.fontSize = tamanho + 'px';
+                    menu.onclick = function(e) {{
                         e.stopPropagation();
                         e.preventDefault();
-                        navigate('edit', info.event.id);
+                        var r = menu.getBoundingClientRect();
+                        abrirMenu(r.left, r.bottom + 2, info.event.id);
                     }};
-
-                    var btnExcluir = document.createElement('span');
-                    btnExcluir.className = 'event-acao';
-                    btnExcluir.innerText = '\\uD83D\\uDDD1\\uFE0F';
-                    btnExcluir.title = 'Excluir agendamento';
-                    btnExcluir.onclick = function(e) {{
-                        e.stopPropagation();
-                        e.preventDefault();
-                        navigate('delete', info.event.id);
-                    }};
-
-                    acoes.appendChild(btnEditar);
-                    acoes.appendChild(btnExcluir);
                     info.el.style.position = 'relative';
-                    info.el.appendChild(acoes);
+                    info.el.appendChild(menu);
                 }},
                 eventClick: function(info) {{
                     if (info.jsEvent) {{ info.jsEvent.preventDefault(); }}

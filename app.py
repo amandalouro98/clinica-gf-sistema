@@ -69,6 +69,7 @@ from ui.calendar_component import (
     agenda_to_events,
     build_resources,
     _cor_final_agendamento,
+    CORES_PROFISSIONAIS,
 )
 
 # ====== CRIA O BANCO (SE NÃO EXISTIR) E SEED DO ADMIN ======
@@ -1280,18 +1281,6 @@ def tela_dashboard():
 
 
 # ====== TELA: AGENDA ======
-CORES_PROFISSIONAIS = {
-    "Rosa": "#F4A7B9",
-    "Lavanda": "#C9A7F4",
-    "Azul": "#A7D4F4",
-    "Verde": "#A7F4C9",
-    "Amarelo": "#F4E4A7",
-    "Laranja": "#F4C4A7",
-    "Vermelho": "#F4A7A7",
-    "Cinza": "#C8C8C8",
-}
-
-
 def _init_agenda_state():
     defaults = {
         "ag_edit_id": None,
@@ -1348,6 +1337,8 @@ def tela_agenda():
 
             if _ag_action == "edit" and _ag_id_int:
                 st.session_state["ag_popup_edit_id"] = _ag_id_int
+            elif _ag_action == "menu" and _ag_id_int:
+                st.session_state["ag_menu_id"] = _ag_id_int
             elif _ag_action == "delete" and _ag_id_int:
                 st.session_state["ag_excluir_id"] = _ag_id_int
             elif _ag_action == "move" and _ag_id_int:
@@ -1765,7 +1756,7 @@ def tela_agenda():
                 pacote_label = " 📦" if getattr(ag, "_tem_pacote", False) else ""
                 icone_conf = " ✅" if ag.confirmado else ""
                 _edit_url = f"?agenda_action=edit&agenda_id={ag.id}"
-                _del_url = f"?agenda_action=delete&agenda_id={ag.id}"
+                _menu_url = f"?agenda_action=menu&agenda_id={ag.id}"
 
                 _pos_total = series_map.get(ag.id)
                 _serie_badge = ""
@@ -1802,16 +1793,15 @@ def tela_agenda():
                             position: relative;
                             box-shadow: 0 1px 3px rgba(74,48,48,0.12);
                         ">
-                            <div style="position:absolute;top:6px;right:8px;display:flex;gap:6px;">
-                                <a href="{_edit_url}" title="Editar agendamento"
-                                   style="text-decoration:none;background:rgba(255,255,255,0.30);
-                                          border-radius:5px;padding:1px 5px;font-size:13px;">✏️</a>
-                                <a href="{_del_url}" title="Excluir agendamento"
-                                   style="text-decoration:none;background:rgba(255,255,255,0.30);
-                                          border-radius:5px;padding:1px 5px;font-size:13px;">🗑️</a>
+                            <div style="position:absolute;top:4px;right:6px;">
+                                <a href="{_menu_url}" title="Opções"
+                                   style="text-decoration:none;color:#fff;font-weight:700;
+                                          background:rgba(255,255,255,0.22);border-radius:4px;
+                                          padding:1px 6px;font-size:15px;line-height:1.1;
+                                          display:inline-block;">⋮</a>
                             </div>
                             <a href="{_edit_url}" style="text-decoration:none;color:#fff;display:block;
-                                                         padding-right:70px;cursor:pointer;">
+                                                         padding-right:34px;cursor:pointer;">
                                 <div style="font-weight: 600; font-size: 14px; margin-bottom: 1px;">
                                     {ag.hora_inicio}–{ag.hora_fim}{_serie_badge}
                                 </div>
@@ -1894,14 +1884,45 @@ def tela_agenda():
                             db.commit()
                             st.rerun()
 
+        # Popup de opções (⋮): Editar ou Excluir
+        if "ag_menu_id" in st.session_state:
+            _ag_menu = db.get(ScheduledAppointment, st.session_state["ag_menu_id"])
+            if _ag_menu:
+                _menu_id = _ag_menu.id
+                _menu_desc = (
+                    f"{_ag_menu.cliente_nome or 'Sem cliente'} — "
+                    f"{_ag_menu.data.strftime('%d/%m/%Y')} "
+                    f"{_ag_menu.hora_inicio}–{_ag_menu.hora_fim}"
+                )
+
+                @st.dialog("Opções do agendamento")
+                def _dialog_menu_ag():
+                    st.write(_menu_desc)
+                    if st.button("✏️ Editar", use_container_width=True, key="menu_ag_editar"):
+                        st.session_state.pop("ag_menu_id", None)
+                        st.session_state["ag_popup_edit_id"] = _menu_id
+                        st.rerun()
+                    if st.button("🗑️ Excluir", use_container_width=True, key="menu_ag_excluir"):
+                        st.session_state.pop("ag_menu_id", None)
+                        st.session_state["ag_excluir_id"] = _menu_id
+                        st.rerun()
+                    st.markdown("---")
+                    if st.button("Cancelar", use_container_width=True, key="menu_ag_cancelar"):
+                        st.session_state.pop("ag_menu_id", None)
+                        st.rerun()
+
+                _dialog_menu_ag()
+            else:
+                st.session_state.pop("ag_menu_id", None)
+
         if "ag_excluir_id" in st.session_state:
             _ag_del = db.get(ScheduledAppointment, st.session_state["ag_excluir_id"])
             if _ag_del:
                 _serie = _agendamentos_mesma_recorrencia(db, _ag_del)
                 _tem_recorrencia = len(_serie) > 1
 
-                with st.container(border=True):
-                    st.markdown("### 🗑️ Excluir agendamento")
+                @st.dialog("Excluir agendamento")
+                def _dialog_excluir_ag():
                     st.write(
                         f"Agendamento: **{_ag_del.cliente_nome or 'Sem cliente'}** — "
                         f"{_ag_del.data.strftime('%d/%m/%Y')} {_ag_del.hora_inicio}–{_ag_del.hora_fim}"
@@ -2021,6 +2042,8 @@ def tela_agenda():
                             if st.button("Cancelar", use_container_width=True, key=f"exc_cancel2_{_ag_del.id}"):
                                 st.session_state.pop("ag_excluir_id", None)
                                 st.rerun()
+
+                _dialog_excluir_ag()
             else:
                 st.session_state.pop("ag_excluir_id", None)
 
