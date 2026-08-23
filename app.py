@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 import altair as alt
 import json
@@ -63,6 +64,12 @@ from services.inventory import movimentar, alertas
 from services.contracts import gerar_pdf_contrato
 from services.importador import sincronizar_clientes
 from ui.components import header_titulo, month_from_date
+from ui.calendar_component import (
+    render_fullcalendar,
+    agenda_to_events,
+    build_resources,
+    _cor_final_agendamento,
+)
 
 # ====== CRIA O BANCO (SE NÃO EXISTIR) E SEED DO ADMIN ======
 Base.metadata.create_all(bind=engine)
@@ -1212,34 +1219,6 @@ CORES_PROFISSIONAIS = {
     "Cinza": "#C8C8C8",
 }
 
-CORES_ESPECIAIS = {
-    "ju": "#8A2BE2",      # roxo
-    "gabi": "#1E3A5F",    # azul escuro
-    "kauane": "#808080",  # cinza
-    "sala 2": "#FFC0CB",  # rosa
-    "sala 3": "#FFD700",  # amarelo
-}
-
-
-def _cor_final_agendamento(ag, cor_prof=None):
-    """Retorna a cor final do agendamento considerando profissional e sala."""
-    # Salas alugáveis têm cor fixa
-    if ag.sala:
-        sala_lower = ag.sala.lower()
-        if "sala 2" in sala_lower:
-            return CORES_ESPECIAIS.get("sala 2", "#FFC0CB")
-        if "sala 3" in sala_lower:
-            return CORES_ESPECIAIS.get("sala 3", "#FFD700")
-        # Sala 1 e Soroterapia seguem a cor do profissional
-    # Profissionais específicos
-    nome_prof = (ag.profissional or "").strip().lower()
-    if nome_prof:
-        for chave, cor in CORES_ESPECIAIS.items():
-            if chave in nome_prof:
-                return cor
-    # Fallback: cor do cadastro do profissional
-    return cor_prof or ag.cor_profissional or "#E3A5C7"
-
 
 def _init_agenda_state():
     defaults = {
@@ -1285,6 +1264,48 @@ def tela_agenda():
 
     db = SessionLocal()
     try:
+        # Processa ações vindas do FullCalendar (clique, arraste, novo)
+        _qp = st.query_params
+        if _qp.get("agenda_action"):
+            _ag_action = _qp.get("agenda_action")
+            _ag_id = _qp.get("agenda_id")
+            try:
+                _ag_id_int = int(_ag_id) if _ag_id else 0
+            except ValueError:
+                _ag_id_int = 0
+
+            if _ag_action == "edit" and _ag_id_int:
+                st.session_state["ag_popup_edit_id"] = _ag_id_int
+            elif _ag_action == "delete" and _ag_id_int:
+                st.session_state["ag_excluir_id"] = _ag_id_int
+            elif _ag_action == "move" and _ag_id_int:
+                _ag_move = db.get(ScheduledAppointment, _ag_id_int)
+                if _ag_move:
+                    _new_date = _qp.get("new_date")
+                    _new_time = _qp.get("new_time")
+                    if _new_date and _new_time:
+                        try:
+                            _ag_move.data = datetime.strptime(_new_date, "%Y-%m-%d").date()
+                            _ag_move.hora_inicio = _new_time
+                            _ag_move.hora_fim = calcular_hora_fim(_new_time, _ag_move.duracao_min or 60)
+                            db.commit()
+                            st.toast(f"Agendamento movido para {_new_date} {_new_time}")
+                        except Exception:
+                            pass
+            elif _ag_action == "new":
+                _date_new = _qp.get("date")
+                if _date_new:
+                    try:
+                        st.session_state["dlg_ag_data_pre"] = datetime.strptime(_date_new, "%Y-%m-%d").date()
+                    except Exception:
+                        pass
+                # abre popup de novo agendamento
+                # será acionado por botão/state abaixo
+                st.session_state["ag_abrir_novo_popup"] = True
+
+            # Limpa query params para não repetir a ação
+            st.query_params.clear()
+
         slots = gerar_slots_horario()
         duracoes = [15, 30, 45, 60, 75, 90, 105, 120]
 
@@ -1521,8 +1542,19 @@ def tela_agenda():
                 st.success("Agendamento salvo!")
             st.rerun()
 
+        # Abre popup automaticamente quando vem de clique em slot vazio do calendário
+        if st.session_state.pop("ag_abrir_novo_popup", False):
+            _data_pre = st.session_state.pop("dlg_ag_data_pre", None)
+            if _data_pre:
+                st.session_state["dlg_ag_data"] = _data_pre
+                st.session_state["dlg_ag_data_sala"] = _data_pre
+            _dialog_novo_agendamento()
+
         # Botão novo agendamento no topo
         if st.button("➕ Novo agendamento", use_container_width=False, type="primary"):
+            # Limpa data prévia para não herdar de clique anterior
+            st.session_state.pop("dlg_ag_data", None)
+            st.session_state.pop("dlg_ag_data_sala", None)
             _dialog_novo_agendamento()
 
         # ── Controles do calendário ─────────────────────────────────────────
@@ -1654,34 +1686,38 @@ def tela_agenda():
                 pacote_label = " 📦" if getattr(ag, "_tem_pacote", False) else ""
                 prefixo = f"{ag.data.strftime('%d/%m')} | " if vista != "Dia" else ""
                 icone_conf = " ✅" if ag.confirmado else ""
+                _edit_url = f"?agenda_action=edit&agenda_id={ag.id}"
 
-                col_caixa, col_conf, col_menu = st.columns([6, 1, 0.4])
+                col_caixa, col_conf, col_menu = st.columns([6, 1.2, 0.5])
 
                 with col_caixa:
                     st.markdown(
                         f"""
-                        <div style="
-                            background-color: {cor};
-                            color: #fff;
-                            border-radius: 8px;
-                            padding: 10px 14px;
-                            margin-bottom: 8px;
-                            font-family: sans-serif;
-                        ">
-                            <div style="font-weight: 600; font-size: 15px; margin-bottom: 2px;">
-                                {prefixo}{ag.hora_inicio}–{ag.hora_fim}
+                        <a href="{_edit_url}" style="text-decoration:none; display:block;">
+                            <div style="
+                                background-color: {cor};
+                                color: #fff;
+                                border-radius: 8px;
+                                padding: 8px 10px;
+                                margin-bottom: 8px;
+                                font-family: sans-serif;
+                                cursor: pointer;
+                            ">
+                                <div style="font-weight: 600; font-size: 14px; margin-bottom: 1px;">
+                                    {prefixo}{ag.hora_inicio}–{ag.hora_fim}
+                                </div>
+                                <div style="font-size: 13px; opacity: 0.95; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                                    {ag.cliente_nome or 'N/A'}{pacote_label} — {ag.procedimento or ''} | {ag.profissional}{icone_conf}
+                                </div>
                             </div>
-                            <div style="font-size: 14px; opacity: 0.95; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-                                {ag.cliente_nome or 'N/A'}{pacote_label} — {ag.procedimento or ''} | {ag.profissional}{icone_conf}
-                            </div>
-                        </div>
+                        </a>
                         """,
                         unsafe_allow_html=True,
                     )
 
                 with col_conf:
                     if not ag.confirmado:
-                        if st.button("Confirmar", key=f"conf_{ag.id}", use_container_width=True):
+                        if st.button("✓", key=f"conf_{ag.id}", help="Confirmar agendamento"):
                             ag.confirmado = True
                             db.commit()
                             try:
@@ -1744,7 +1780,7 @@ def tela_agenda():
                                 pass
                             st.rerun()
                     else:
-                        if st.button("✅ Confirmado", key=f"desc_{ag.id}", use_container_width=True):
+                        if st.button("✓", key=f"desc_{ag.id}", help="Desfazer confirmação"):
                             ag.confirmado = False
                             db.commit()
                             st.rerun()
@@ -1881,47 +1917,36 @@ def tela_agenda():
 
         st.markdown("---")
 
-        # Calendário proporcional
+        # Calendário interativo com FullCalendar
         if tipo_visual == "Grade":
-            if vista == "Mês":
-                # Renderizar grid mensal simplificado
-                nomes_sem = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
-                hoje = _hoje()
-                mes_html = '<table style="width:100%;border-collapse:collapse;font-family:sans-serif;font-size:12px;">'
-                mes_html += '<tr>'
-                for ns in nomes_sem:
-                    mes_html += f'<th style="padding:6px;text-align:center;background:#f3f4f6;border:1px solid #e5e7eb;">{ns}</th>'
-                mes_html += '</tr>'
-                for i in range(0, len(dias), 7):
-                    mes_html += '<tr>'
-                    for dia in dias[i:i+7]:
-                        bg = "#fef2f2" if dia == hoje else ("#f9fafb" if dia.month == data_ref.month else "#fff")
-                        ags_dia = ags_por_dia.get(dia, [])
-                        cell_content = f'<div style="font-weight:700;margin-bottom:2px;">{dia.day}</div>'
-                        for ag in ags_dia[:3]:
-                            cor = _cor_final_agendamento(ag)
-                            cell_content += (
-                                f'<div style="font-size:10px;background:{cor};color:#fff;'
-                                f'padding:1px 4px;border-radius:3px;margin-bottom:1px;'
-                                f'overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">'
-                                f'{ag.hora_inicio} {ag.cliente_nome or ""}</div>'
-                            )
-                        if len(ags_dia) > 3:
-                            cell_content += f'<div style="font-size:9px;color:#666;">+{len(ags_dia)-3} mais</div>'
-                        mes_html += (
-                            f'<td style="padding:4px;border:1px solid #e5e7eb;vertical-align:top;'
-                            f'background:{bg};min-height:60px;width:14.28%;">{cell_content}</td>'
-                        )
-                    mes_html += '</tr>'
-                mes_html += '</table>'
-                st.markdown(mes_html, unsafe_allow_html=True)
+            if vista == "Dia":
+                fc_view = "timeGridDay"
+            elif vista == "Semana":
+                fc_view = "timeGridWeek"
             else:
-                if vista == "Dia" and len(dias) == 1:
-                    _ags_dia_unico = ags_por_dia.get(dias[0], [])
-                    cal_html = _render_calendario_dia_por_profissional(dias[0], _ags_dia_unico)
-                else:
-                    cal_html = _render_calendario(dias, ags_por_dia, semana=(vista == "Semana"))
-                st.markdown(cal_html, unsafe_allow_html=True)
+                fc_view = "dayGridMonth"
+
+            # Recursos: Gabi à direita, demais à esquerda
+            preferencia = []
+            for nome in nomes_prof:
+                if "gabi" not in nome.lower():
+                    preferencia.append(nome)
+            for nome in nomes_prof:
+                if "gabi" in nome.lower():
+                    preferencia.append(nome)
+            recursos = build_resources(nomes_prof, preferencia)
+
+            eventos = agenda_to_events(ags_periodo)
+            data_inicial = dias[0].strftime("%Y-%m-%d") if dias else _hoje().strftime("%Y-%m-%d")
+
+            cal_html = render_fullcalendar(
+                agendamentos=eventos,
+                view=fc_view,
+                date_str=data_inicial,
+                resources=recursos,
+                height="700px",
+            )
+            components.html(cal_html, height=720, scrolling=True)
 
         # ── Pop-up de edição rápida ──────────────────────────────────────────
         if "ag_popup_edit_id" in st.session_state:
