@@ -54,12 +54,6 @@ def _hex_to_rgba(hex_color: str, alpha: float = 1.0) -> str:
     return f"rgba({r}, {g}, {b}, {alpha})"
 
 
-def _event_color(ag, cor_prof: str = None) -> str:
-    """Retorna a cor final do agendamento."""
-    from app import _cor_final_agendamento  # import local para evitar circular
-    return _cor_final_agendamento(ag)
-
-
 def render_fullcalendar(
     agendamentos: list,
     view: str = "timeGridDay",
@@ -284,8 +278,6 @@ def render_fullcalendar(
 
 def agenda_to_events(agendamentos, nomes_prof=None):
     """Converte objetos ScheduledAppointment em eventos do FullCalendar."""
-    from app import _cor_final_agendamento
-
     events = []
     for ag in agendamentos:
         try:
