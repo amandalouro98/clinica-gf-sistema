@@ -1926,27 +1926,61 @@ def tela_agenda():
             else:
                 fc_view = "dayGridMonth"
 
-            # Recursos: Gabi à direita, demais à esquerda
-            preferencia = []
-            for nome in nomes_prof:
-                if "gabi" not in nome.lower():
-                    preferencia.append(nome)
-            for nome in nomes_prof:
-                if "gabi" in nome.lower():
-                    preferencia.append(nome)
-            recursos = build_resources(nomes_prof, preferencia)
-
-            eventos = agenda_to_events(ags_periodo)
             data_inicial = dias[0].strftime("%Y-%m-%d") if dias else _hoje().strftime("%Y-%m-%d")
 
-            cal_html = render_fullcalendar(
-                agendamentos=eventos,
-                view=fc_view,
-                date_str=data_inicial,
-                resources=recursos,
-                height="700px",
+            # Separa Gabi (coluna direita) dos demais (coluna esquerda)
+            def _eh_gabi(ag):
+                return "gabi" in (ag.profissional or "").strip().lower()
+
+            ags_gabi = [ag for ag in ags_periodo if _eh_gabi(ag)]
+            ags_outros = [ag for ag in ags_periodo if not _eh_gabi(ag)]
+
+            colunas_separadas = (
+                filtro_prof == "Todos"
+                and fc_view != "dayGridMonth"
+                and bool(ags_gabi)
+                and bool(ags_outros)
             )
-            components.html(cal_html, height=720, scrolling=True)
+
+            if colunas_separadas:
+                col_esq, col_dir = st.columns(2)
+                with col_esq:
+                    components.html(
+                        render_fullcalendar(
+                            agendamentos=agenda_to_events(ags_outros),
+                            view=fc_view,
+                            date_str=data_inicial,
+                            height="640px",
+                            titulo="Ju / Kauane / Sala 2 / Sala 3",
+                            show_toolbar=False,
+                        ),
+                        height=690,
+                        scrolling=True,
+                    )
+                with col_dir:
+                    components.html(
+                        render_fullcalendar(
+                            agendamentos=agenda_to_events(ags_gabi),
+                            view=fc_view,
+                            date_str=data_inicial,
+                            height="640px",
+                            titulo="Gabi",
+                            show_toolbar=False,
+                        ),
+                        height=690,
+                        scrolling=True,
+                    )
+            else:
+                components.html(
+                    render_fullcalendar(
+                        agendamentos=agenda_to_events(ags_periodo),
+                        view=fc_view,
+                        date_str=data_inicial,
+                        height="700px",
+                    ),
+                    height=740,
+                    scrolling=True,
+                )
 
         # ── Pop-up de edição rápida ──────────────────────────────────────────
         if "ag_popup_edit_id" in st.session_state:
