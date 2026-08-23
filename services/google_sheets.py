@@ -1,10 +1,11 @@
 import os
+import time
 import gspread
 from google.oauth2.service_account import Credentials
 import pandas as pd
 
 SCOPES = [
-    "https://spreadsheets.google.com/feeds",
+    "https://www.googleapis.com/auth/spreadsheets",
     "https://www.googleapis.com/auth/drive",
 ]
 
@@ -37,19 +38,30 @@ def carregar_dados() -> pd.DataFrame:
             "Coloque o arquivo JSON em /opt/clinica-gf/secrets/google-credentials.json "
             "ou defina a variável de ambiente GOOGLE_CREDENTIALS_PATH."
         )
-    try:
-        creds = Credentials.from_service_account_file(caminho_cred, scopes=SCOPES)
-        client = gspread.authorize(creds)
-        sheet = client.open_by_url(SHEET_URL).sheet1
-        dados = sheet.get_all_records()
-        return pd.DataFrame(dados)
-    except Exception as e:
-        erro_msg = str(e)
-        if "invalid_grant" in erro_msg or "Invalid JWT" in erro_msg:
-            raise Exception(
-                "Credencial do Google expirada ou inválida. "
-                "Gere uma nova chave no Google Cloud Console "
-                "(IAM > Service Accounts > Criar nova chave JSON) e salve em "
-                f"'{caminho_cred}'. Erro: {erro_msg}"
-            )
-        raise
+
+    ultimo_erro = None
+    for tentativa in range(3):
+        try:
+            creds = Credentials.from_service_account_file(caminho_cred, scopes=SCOPES)
+            client = gspread.authorize(creds)
+            sheet = client.open_by_url(SHEET_URL).sheet1
+            dados = sheet.get_all_records()
+            return pd.DataFrame(dados)
+        except Exception as e:
+            ultimo_erro = e
+            erro_msg = str(e)
+            if "invalid_grant" in erro_msg or "Invalid JWT" in erro_msg:
+                raise Exception(
+                    "Credencial do Google expirada ou inválida. "
+                    "Gere uma nova chave no Google Cloud Console "
+                    "(IAM > Service Accounts > Criar nova chave JSON) e salve em "
+                    f"'{caminho_cred}'. Erro: {erro_msg}"
+                )
+            # Retry com espera crescente (1s, 3s, 5s)
+            if tentativa < 2:
+                time.sleep(1 + tentativa * 2)
+
+    raise Exception(
+        f"Não foi possível conectar ao Google Sheets após 3 tentativas. "
+        f"Erro: {ultimo_erro}"
+    )

@@ -2317,7 +2317,14 @@ def tela_clientes():
                             st.caption(f"• {n}")
                 st.rerun()
             except Exception as e:
-                st.error(f"Erro ao sincronizar: {e}")
+                erro_str = str(e)
+                st.error(f"Erro ao sincronizar: {erro_str}")
+                if "503" in erro_str or "unavailable" in erro_str.lower():
+                    st.info("💡 O Google Sheets está temporariamente indisponível. Tente novamente em alguns instantes.")
+                elif "Credencial" in erro_str:
+                    st.info("💡 Verifique se o arquivo de credenciais do Google está em /opt/clinica-gf/secrets/google-credentials.json")
+                else:
+                    st.info("💡 Se o erro persistir, verifique a conexão com a internet e as permissões da planilha.")
     with col_novo:
         if st.button("➕ Novo Cliente", use_container_width=True):
             _modal_cliente("Novo Cliente", 0)
