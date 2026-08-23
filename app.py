@@ -556,6 +556,78 @@ def _agendamentos_mesma_recorrencia(db, ag):
     )
 
 
+def _mapa_series_recorrencia(db, agendamentos):
+    """Mapeia {id_agendamento: (posicao, total)} para cada série recorrente.
+
+    A posição é derivada da ordem das datas, então excluir uma ocorrência
+    renumera as seguintes automaticamente.
+    """
+    mapa = {}
+    chaves = {}
+    for ag in agendamentos or []:
+        if not ag.cliente_id or not ag.procedimento:
+            continue
+        chave = (ag.cliente_id, ag.profissional, ag.procedimento, ag.hora_inicio, ag.hora_fim)
+        chaves.setdefault(chave, ag)
+
+    for ag_ref in chaves.values():
+        serie = _agendamentos_mesma_recorrencia(db, ag_ref)
+        total = len(serie)
+        if total <= 1:
+            continue
+        for posicao, item in enumerate(serie, start=1):
+            mapa[item.id] = (posicao, total)
+    return mapa
+
+
+def _intervalo_dias_serie(serie):
+    """Intervalo mais frequente, em dias, entre ocorrências consecutivas."""
+    if not serie or len(serie) < 2:
+        return None
+    deltas = []
+    for anterior, proximo in zip(serie, serie[1:]):
+        dias = (proximo.data - anterior.data).days
+        if dias > 0:
+            deltas.append(dias)
+    if not deltas:
+        return None
+    return max(set(deltas), key=deltas.count)
+
+
+def _repor_ocorrencia_serie(db, serie, ag_removido):
+    """Cria uma nova ocorrência no fim da série para manter o total do pacote.
+
+    Usada quando uma ocorrência é excluída: as seguintes renumeram sozinhas
+    (a posição vem da ordem das datas) e esta reposição preserva a contagem.
+    """
+    if not serie or len(serie) < 2:
+        return None
+    intervalo = _intervalo_dias_serie(serie)
+    if not intervalo:
+        return None
+    restantes = [a for a in serie if a.id != ag_removido.id]
+    if not restantes:
+        return None
+
+    ultimo = restantes[-1]
+    nova = ScheduledAppointment(
+        data=ultimo.data + timedelta(days=intervalo),
+        hora_inicio=ultimo.hora_inicio,
+        hora_fim=ultimo.hora_fim,
+        duracao_min=ultimo.duracao_min,
+        cliente_id=ultimo.cliente_id,
+        cliente_nome=ultimo.cliente_nome,
+        profissional=ultimo.profissional,
+        procedimento=ultimo.procedimento,
+        observacoes=ultimo.observacoes,
+        confirmado=False,
+        cor_profissional=ultimo.cor_profissional,
+        sala=ultimo.sala,
+    )
+    db.add(nova)
+    return nova
+
+
 # ====== LOGIN ======
 def login_screen():
     # Espaço superior
@@ -1666,6 +1738,12 @@ def tela_agenda():
         except Exception:
             pass
 
+        # Numeração das recorrências: {id: (posição, total)}
+        try:
+            series_map = _mapa_series_recorrencia(db, ags_periodo)
+        except Exception:
+            series_map = {}
+
         # Legenda de profissionais — compacta, numa só linha
         prof_vistos: dict = {}
         for ag in ags_periodo:
@@ -1681,36 +1759,67 @@ def tela_agenda():
         # Lista de agendamentos estilo Google Calendar
         if ags_periodo and tipo_visual == "Lista":
             st.markdown("#### Agendamentos")
+            _dia_corrente = None
             for ag in sorted(ags_periodo, key=lambda x: (x.data, x.hora_inicio)):
                 cor = _cor_final_agendamento(ag)
                 pacote_label = " 📦" if getattr(ag, "_tem_pacote", False) else ""
-                prefixo = f"{ag.data.strftime('%d/%m')} | " if vista != "Dia" else ""
                 icone_conf = " ✅" if ag.confirmado else ""
                 _edit_url = f"?agenda_action=edit&agenda_id={ag.id}"
+                _del_url = f"?agenda_action=delete&agenda_id={ag.id}"
 
-                col_caixa, col_conf, col_menu = st.columns([6, 1.2, 0.5])
+                _pos_total = series_map.get(ag.id)
+                _serie_badge = ""
+                if _pos_total and _pos_total[1] > 1:
+                    _serie_badge = (
+                        f'<span style="background:rgba(255,255,255,0.32);border-radius:5px;'
+                        f'padding:1px 6px;font-size:11px;font-weight:700;margin-left:6px;">'
+                        f'{_pos_total[0]} de {_pos_total[1]}</span>'
+                    )
+
+                # Cabeçalho do dia, como no Google Calendar
+                if vista != "Dia" and ag.data != _dia_corrente:
+                    _dia_corrente = ag.data
+                    _dias_pt = ["segunda", "terça", "quarta", "quinta", "sexta", "sábado", "domingo"]
+                    _rotulo_dia = f"{_dias_pt[ag.data.weekday()]}, {ag.data.strftime('%d/%m')}"
+                    st.markdown(
+                        f'<div style="color:#b87575;font-weight:700;font-size:13px;'
+                        f'margin:10px 0 4px 2px;text-transform:capitalize;">{_rotulo_dia}</div>',
+                        unsafe_allow_html=True,
+                    )
+
+                col_caixa, col_conf = st.columns([7, 1])
 
                 with col_caixa:
                     st.markdown(
                         f"""
-                        <a href="{_edit_url}" style="text-decoration:none; display:block;">
-                            <div style="
-                                background-color: {cor};
-                                color: #fff;
-                                border-radius: 8px;
-                                padding: 8px 10px;
-                                margin-bottom: 8px;
-                                font-family: sans-serif;
-                                cursor: pointer;
-                            ">
+                        <div style="
+                            background-color: {cor};
+                            color: #fff;
+                            border-radius: 10px;
+                            padding: 8px 10px;
+                            margin-bottom: 8px;
+                            font-family: sans-serif;
+                            position: relative;
+                            box-shadow: 0 1px 3px rgba(74,48,48,0.12);
+                        ">
+                            <div style="position:absolute;top:6px;right:8px;display:flex;gap:6px;">
+                                <a href="{_edit_url}" title="Editar agendamento"
+                                   style="text-decoration:none;background:rgba(255,255,255,0.30);
+                                          border-radius:5px;padding:1px 5px;font-size:13px;">✏️</a>
+                                <a href="{_del_url}" title="Excluir agendamento"
+                                   style="text-decoration:none;background:rgba(255,255,255,0.30);
+                                          border-radius:5px;padding:1px 5px;font-size:13px;">🗑️</a>
+                            </div>
+                            <a href="{_edit_url}" style="text-decoration:none;color:#fff;display:block;
+                                                         padding-right:70px;cursor:pointer;">
                                 <div style="font-weight: 600; font-size: 14px; margin-bottom: 1px;">
-                                    {prefixo}{ag.hora_inicio}–{ag.hora_fim}
+                                    {ag.hora_inicio}–{ag.hora_fim}{_serie_badge}
                                 </div>
                                 <div style="font-size: 13px; opacity: 0.95; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
                                     {ag.cliente_nome or 'N/A'}{pacote_label} — {ag.procedimento or ''} | {ag.profissional}{icone_conf}
                                 </div>
-                            </div>
-                        </a>
+                            </a>
+                        </div>
                         """,
                         unsafe_allow_html=True,
                     )
@@ -1784,30 +1893,6 @@ def tela_agenda():
                             ag.confirmado = False
                             db.commit()
                             st.rerun()
-                with col_menu:
-                    with st.popover("⋮"):
-                        if st.button("✏️ Editar", key=f"edit_{ag.id}", use_container_width=True):
-                            cli_key = "— selecione —"
-                            for k, (cid, _) in mapa_cli.items():
-                                if cid == ag.cliente_id:
-                                    cli_key = k
-                                    break
-                            st.session_state["ag_edit_id"] = ag.id
-                            st.session_state["ag_pending_edit"] = {
-                                "ag_cliente":  cli_key,
-                                "ag_prof":     ag.profissional if ag.profissional in nomes_prof else "— selecione —",
-                                "ag_proc":     ag.procedimento or "",
-                                "ag_data":     ag.data,
-                                "ag_hora_ini": ag.hora_inicio if ag.hora_inicio in slots else "08:00",
-                                "ag_duracao":  ag.duracao_min if ag.duracao_min in duracoes else 60,
-                                "ag_obs":      ag.observacoes or "",
-                                "ag_sala":     ag.sala if ag.sala else "— selecione —",
-                            }
-                            st.rerun()
-                        st.markdown("---")
-                        if st.button("🗑️ Excluir", key=f"del_{ag.id}", use_container_width=True):
-                            st.session_state["ag_excluir_id"] = ag.id
-                            st.rerun()
 
         if "ag_excluir_id" in st.session_state:
             _ag_del = db.get(ScheduledAppointment, st.session_state["ag_excluir_id"])
@@ -1823,7 +1908,20 @@ def tela_agenda():
                     )
 
                     if _tem_recorrencia:
-                        st.warning(f"Foram encontrados **{len(_serie)}** agendamentos da mesma recorrência.")
+                        _pos_del = next(
+                            (i for i, _it in enumerate(_serie, start=1) if _it.id == _ag_del.id), None
+                        )
+                        if _pos_del:
+                            st.warning(
+                                f"Esta é a ocorrência **{_pos_del} de {len(_serie)}** da recorrência."
+                            )
+                        else:
+                            st.warning(f"Foram encontrados **{len(_serie)}** agendamentos da mesma recorrência.")
+                        _repor = st.checkbox(
+                            "Repor uma sessão no fim da recorrência (mantém o total do pacote)",
+                            value=True,
+                            key=f"exc_repor_{_ag_del.id}",
+                        )
                         col_unico, col_todos, col_canc = st.columns(3)
                         with col_unico:
                             if st.button("Excluir só este", use_container_width=True, key=f"exc_um_{_ag_del.id}"):
@@ -1846,8 +1944,19 @@ def tela_agenda():
                                     db.commit()
                                 except Exception:
                                     pass
+                                _nova_ocorrencia = None
+                                if _repor:
+                                    try:
+                                        _nova_ocorrencia = _repor_ocorrencia_serie(db, _serie, _ag_del)
+                                    except Exception:
+                                        _nova_ocorrencia = None
                                 db.delete(_ag_del)
                                 db.commit()
+                                if _nova_ocorrencia is not None:
+                                    st.toast(
+                                        "Sessão reposta em "
+                                        f"{_nova_ocorrencia.data.strftime('%d/%m/%Y')}"
+                                    )
                                 st.session_state.pop("ag_excluir_id", None)
                                 st.rerun()
                         with col_todos:
@@ -1947,7 +2056,7 @@ def tela_agenda():
                 with col_esq:
                     components.html(
                         render_fullcalendar(
-                            agendamentos=agenda_to_events(ags_outros),
+                            agendamentos=agenda_to_events(ags_outros, series_map=series_map),
                             view=fc_view,
                             date_str=data_inicial,
                             height="640px",
@@ -1960,7 +2069,7 @@ def tela_agenda():
                 with col_dir:
                     components.html(
                         render_fullcalendar(
-                            agendamentos=agenda_to_events(ags_gabi),
+                            agendamentos=agenda_to_events(ags_gabi, series_map=series_map),
                             view=fc_view,
                             date_str=data_inicial,
                             height="640px",
@@ -1973,7 +2082,7 @@ def tela_agenda():
             else:
                 components.html(
                     render_fullcalendar(
-                        agendamentos=agenda_to_events(ags_periodo),
+                        agendamentos=agenda_to_events(ags_periodo, series_map=series_map),
                         view=fc_view,
                         date_str=data_inicial,
                         height="700px",
@@ -1995,51 +2104,96 @@ def tela_agenda():
                         if not _ag2:
                             st.error("Agendamento não encontrado.")
                             return
-                        col_d1, col_d2 = st.columns(2)
-                        with col_d1:
-                            _ed_data = st.date_input("Data", value=_ag2.data, format="DD/MM/YYYY", key="dlg_ag_data")
-                            _clientes_dlg = _db2.query(Client).order_by(Client.nome.asc()).all()
-                            _opcoes_cli_dlg = ["— selecione —"] + [f"{c.nome} ({c.cpf or ''})" for c in _clientes_dlg]
-                            _mapa_cli_dlg = {f"{c.nome} ({c.cpf or ''})": (c.id, c.nome) for c in _clientes_dlg}
-                            _cli_atual = "— selecione —"
-                            for k, (cid, _) in _mapa_cli_dlg.items():
-                                if cid == _ag2.cliente_id:
-                                    _cli_atual = k
-                                    break
-                            _ed_cli = st.selectbox("Cliente", _opcoes_cli_dlg, index=_opcoes_cli_dlg.index(_cli_atual) if _cli_atual in _opcoes_cli_dlg else 0, key="dlg_ag_cli")
-                            _profs_dlg = _db2.query(Professional).order_by(Professional.nome.asc()).all()
-                            _nomes_prof_dlg = [p.nome for p in _profs_dlg]
-                            _idx_prof = _nomes_prof_dlg.index(_ag2.profissional) if _ag2.profissional in _nomes_prof_dlg else 0
-                            _ed_prof = st.selectbox("Profissional", _nomes_prof_dlg, index=_idx_prof, key="dlg_ag_prof")
-                        with col_d2:
-                            _slots_dlg = gerar_slots_horario()
-                            _idx_hora = _slots_dlg.index(_ag2.hora_inicio) if _ag2.hora_inicio in _slots_dlg else 0
-                            _ed_hora = st.selectbox("Hora início", _slots_dlg, index=_idx_hora, key="dlg_ag_hora")
-                            _duracoes_dlg = [15, 30, 45, 60, 75, 90, 105, 120]
-                            _idx_dur = _duracoes_dlg.index(_ag2.duracao_min) if _ag2.duracao_min in _duracoes_dlg else 3
-                            _ed_dur = st.selectbox("Duração (min)", _duracoes_dlg, index=_idx_dur, key="dlg_ag_dur")
-                            _ed_proc = st.text_input("Procedimento", value=_ag2.procedimento or "", key="dlg_ag_proc")
-                            _ed_obs = st.text_area("Observações", value=_ag2.observacoes or "", key="dlg_ag_obs")
-                            OPCOES_SALA_DLG = ["— nenhuma —", "Sala 1", "Sala 2", "Sala 3", "Sala 4", "Sala 5", "Soroterapia"]
-                            _sala_idx = OPCOES_SALA_DLG.index(_ag2.sala) if _ag2.sala in OPCOES_SALA_DLG else 0
-                            _ed_sala = st.selectbox("Sala", OPCOES_SALA_DLG, index=_sala_idx, key="dlg_ag_sala")
+
+                        _serie_ed = _agendamentos_mesma_recorrencia(_db2, _ag2)
+                        _tem_serie = len(_serie_ed) > 1
+                        _escopo = "Somente este agendamento"
+                        if _tem_serie:
+                            _pos_ed = next(
+                                (i for i, _it in enumerate(_serie_ed, start=1) if _it.id == _ag2.id),
+                                None,
+                            )
+                            if _pos_ed:
+                                st.info(
+                                    f"Recorrência — ocorrência **{_pos_ed} de {len(_serie_ed)}**"
+                                )
+                            _escopo = st.radio(
+                                "O que deseja alterar?",
+                                ["Somente este agendamento", "Este e os próximos"],
+                                key="dlg_ag_escopo",
+                            )
+
+                        # Campos um embaixo do outro
+                        _ed_data = st.date_input("Data", value=_ag2.data, format="DD/MM/YYYY", key="dlg_ag_data")
+
+                        _slots_dlg = gerar_slots_horario()
+                        _idx_hora = _slots_dlg.index(_ag2.hora_inicio) if _ag2.hora_inicio in _slots_dlg else 0
+                        _ed_hora = st.selectbox("Hora início", _slots_dlg, index=_idx_hora, key="dlg_ag_hora")
+
+                        _duracoes_dlg = [15, 30, 45, 60, 75, 90, 105, 120]
+                        _idx_dur = _duracoes_dlg.index(_ag2.duracao_min) if _ag2.duracao_min in _duracoes_dlg else 3
+                        _ed_dur = st.selectbox("Duração (min)", _duracoes_dlg, index=_idx_dur, key="dlg_ag_dur")
+
+                        _clientes_dlg = _db2.query(Client).order_by(Client.nome.asc()).all()
+                        _opcoes_cli_dlg = ["— selecione —"] + [f"{c.nome} ({c.cpf or ''})" for c in _clientes_dlg]
+                        _mapa_cli_dlg = {f"{c.nome} ({c.cpf or ''})": (c.id, c.nome) for c in _clientes_dlg}
+                        _cli_atual = "— selecione —"
+                        for k, (cid, _) in _mapa_cli_dlg.items():
+                            if cid == _ag2.cliente_id:
+                                _cli_atual = k
+                                break
+                        _ed_cli = st.selectbox(
+                            "Cliente",
+                            _opcoes_cli_dlg,
+                            index=_opcoes_cli_dlg.index(_cli_atual) if _cli_atual in _opcoes_cli_dlg else 0,
+                            key="dlg_ag_cli",
+                        )
+
+                        _profs_dlg = _db2.query(Professional).order_by(Professional.nome.asc()).all()
+                        _nomes_prof_dlg = [p.nome for p in _profs_dlg]
+                        _idx_prof = _nomes_prof_dlg.index(_ag2.profissional) if _ag2.profissional in _nomes_prof_dlg else 0
+                        _ed_prof = st.selectbox("Profissional", _nomes_prof_dlg, index=_idx_prof, key="dlg_ag_prof")
+
+                        OPCOES_SALA_DLG = ["— nenhuma —", "Sala 1", "Sala 2", "Sala 3", "Sala 4", "Sala 5", "Soroterapia"]
+                        _sala_idx = OPCOES_SALA_DLG.index(_ag2.sala) if _ag2.sala in OPCOES_SALA_DLG else 0
+                        _ed_sala = st.selectbox("Sala", OPCOES_SALA_DLG, index=_sala_idx, key="dlg_ag_sala")
+
+                        _ed_proc = st.text_input("Procedimento", value=_ag2.procedimento or "", key="dlg_ag_proc")
+                        _ed_obs = st.text_area("Observações", value=_ag2.observacoes or "", key="dlg_ag_obs")
 
                         col_sv, col_cn = st.columns(2)
                         with col_sv:
                             if st.button("Salvar", use_container_width=True, key="dlg_ag_save", type="primary"):
-                                _ag2.data = _ed_data
-                                _ag2.hora_inicio = _ed_hora
-                                _ag2.hora_fim = calcular_hora_fim(_ed_hora, _ed_dur)
-                                _ag2.duracao_min = _ed_dur
-                                if _ed_cli != "— selecione —" and _ed_cli in _mapa_cli_dlg:
-                                    _ag2.cliente_id, _ag2.cliente_nome = _mapa_cli_dlg[_ed_cli]
-                                _ag2.profissional = _ed_prof
-                                _ag2.procedimento = _ed_proc.strip()
-                                _ag2.observacoes = _ed_obs
-                                _ag2.sala = _ed_sala if _ed_sala != "— nenhuma —" else None
+                                _data_original = _ag2.data
+                                _delta_dias = (_ed_data - _data_original).days
                                 _cor_map = {p.nome: (p.cor or "#E3A5C7") for p in _profs_dlg}
-                                _ag2.cor_profissional = _cor_map.get(_ed_prof, "#E3A5C7")
+                                _nova_cor = _cor_map.get(_ed_prof, "#E3A5C7")
+                                _nova_hora_fim = calcular_hora_fim(_ed_hora, _ed_dur)
+
+                                if _tem_serie and _escopo == "Este e os próximos":
+                                    _alvos = [a for a in _serie_ed if a.data >= _data_original]
+                                else:
+                                    _alvos = [_ag2]
+
+                                for _alvo in _alvos:
+                                    if _alvo.id == _ag2.id:
+                                        _alvo.data = _ed_data
+                                    elif _delta_dias:
+                                        _alvo.data = _alvo.data + timedelta(days=_delta_dias)
+                                    _alvo.hora_inicio = _ed_hora
+                                    _alvo.hora_fim = _nova_hora_fim
+                                    _alvo.duracao_min = _ed_dur
+                                    if _ed_cli != "— selecione —" and _ed_cli in _mapa_cli_dlg:
+                                        _alvo.cliente_id, _alvo.cliente_nome = _mapa_cli_dlg[_ed_cli]
+                                    _alvo.profissional = _ed_prof
+                                    _alvo.procedimento = _ed_proc.strip()
+                                    _alvo.observacoes = _ed_obs
+                                    _alvo.sala = _ed_sala if _ed_sala != "— nenhuma —" else None
+                                    _alvo.cor_profissional = _nova_cor
+
                                 _db2.commit()
+                                if len(_alvos) > 1:
+                                    st.toast(f"{len(_alvos)} agendamentos atualizados")
                                 st.session_state.pop("ag_popup_edit_id", None)
                                 st.rerun()
                         with col_cn:

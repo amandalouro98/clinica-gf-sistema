@@ -4,6 +4,15 @@ import json
 from datetime import datetime, timedelta
 
 
+# Paleta do sistema (espelha .streamlit/config.toml)
+COR_PRIMARIA = "#D59C9C"
+COR_PRIMARIA_ESCURA = "#b87575"
+COR_TEXTO = "#4a3030"
+COR_BORDA = "#f0d5ce"
+COR_FUNDO_HOJE = "#fff0ee"
+COR_FOCO = "rgba(213, 156, 156, 0.45)"
+
+
 CORES_PROFISSIONAIS = {
     "Rosa": "#F4A7B9",
     "Lavanda": "#C9A7F4",
@@ -107,8 +116,8 @@ def render_fullcalendar(
     titulo_html = ""
     if titulo:
         titulo_html = (
-            f'<div style="font-weight:700;font-size:13px;padding:6px 2px;'
-            f'color:#334155;">{titulo}</div>'
+            f'<div style="font-weight:700;font-size:13px;padding:6px 4px;'
+            f'color:{COR_PRIMARIA_ESCURA};">{titulo}</div>'
         )
 
     html = f"""<!DOCTYPE html>
@@ -125,12 +134,68 @@ def render_fullcalendar(
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         font-size: 13px;
         background: transparent;
+        color: {COR_TEXTO};
     }}
-    #calendar {{ width: 100%; }}
+    #calendar {{
+        width: 100%;
+        background: #ffffff;
+        border-radius: 10px;
+        padding: 8px;
+        box-sizing: border-box;
+        border: 1px solid {COR_BORDA};
+    }}
+    /* Grade em branco, no padrao do sistema */
+    .fc {{ --fc-page-bg-color: #ffffff; }}
+    .fc .fc-scrollgrid,
+    .fc .fc-scrollgrid-section > * {{ background: #ffffff; }}
+    .fc .fc-timegrid-slot,
+    .fc .fc-daygrid-day {{ background: #ffffff; }}
+    .fc .fc-day-today {{ background: {COR_FUNDO_HOJE} !important; }}
+    .fc .fc-theme-standard td,
+    .fc .fc-theme-standard th,
+    .fc .fc-scrollgrid {{ border-color: {COR_BORDA} !important; }}
+    .fc .fc-timegrid-slot-label,
+    .fc .fc-col-header-cell-cushion,
+    .fc .fc-list-day-text,
+    .fc .fc-list-day-side-text {{ color: {COR_TEXTO}; }}
+
+    /* Botoes dia / semana / mes na cor do sistema */
+    .fc .fc-button-primary {{
+        background-color: {COR_PRIMARIA} !important;
+        border-color: {COR_PRIMARIA} !important;
+        color: #ffffff !important;
+        font-weight: 600;
+        box-shadow: none !important;
+    }}
+    .fc .fc-button-primary:hover {{
+        background-color: {COR_PRIMARIA_ESCURA} !important;
+        border-color: {COR_PRIMARIA_ESCURA} !important;
+    }}
+    .fc .fc-button-primary:disabled {{
+        background-color: {COR_PRIMARIA} !important;
+        border-color: {COR_PRIMARIA} !important;
+        opacity: 0.5;
+    }}
+    .fc .fc-button-primary:not(:disabled).fc-button-active,
+    .fc .fc-button-primary:not(:disabled):active {{
+        background-color: {COR_PRIMARIA_ESCURA} !important;
+        border-color: {COR_PRIMARIA_ESCURA} !important;
+    }}
+    .fc .fc-button-primary:focus,
+    .fc .fc-button-primary:not(:disabled).fc-button-active:focus {{
+        box-shadow: 0 0 0 2px {COR_FOCO} !important;
+    }}
+    .fc .fc-toolbar-title {{
+        font-size: 15px !important;
+        color: {COR_TEXTO};
+        font-weight: 700;
+    }}
+    .fc .fc-button {{ font-size: 11px !important; padding: 3px 9px !important; border-radius: 7px !important; }}
+
     .fc .fc-event {{
         cursor: pointer;
         border: none !important;
-        border-radius: 4px !important;
+        border-radius: 6px !important;
         font-size: 11px;
         line-height: 1.2;
         padding: 1px 3px;
@@ -138,10 +203,9 @@ def render_fullcalendar(
     }}
     .fc .fc-event-title {{ font-weight: 600; white-space: normal !important; }}
     .fc .fc-event-time {{ font-size: 10px; opacity: 0.9; }}
-    .fc .fc-toolbar-title {{ font-size: 15px !important; }}
-    .fc .fc-button {{ font-size: 11px !important; padding: 3px 7px !important; }}
-    .fc .fc-col-header-cell-cushion {{ font-size: 12px; }}
+    .fc .fc-col-header-cell-cushion {{ font-size: 12px; font-weight: 600; }}
     .fc .fc-timegrid-slot {{ height: 1.7em; }}
+    .fc .fc-timegrid-now-indicator-line {{ border-color: {COR_PRIMARIA_ESCURA}; }}
     .fc-erro {{
         padding: 16px;
         color: #b91c1c;
@@ -149,20 +213,32 @@ def render_fullcalendar(
         border-radius: 8px;
         font-size: 13px;
     }}
-    .event-menu {{
+    .serie-badge {{
+        display: inline-block;
+        background: rgba(255,255,255,0.32);
+        border-radius: 4px;
+        padding: 0 3px;
+        font-size: 9px;
+        font-weight: 700;
+        margin-right: 3px;
+    }}
+    .event-acoes {{
         position: absolute;
         top: 1px;
-        right: 1px;
+        right: 2px;
         z-index: 5;
-        cursor: pointer;
-        background: rgba(255,255,255,0.28);
-        border-radius: 3px;
-        padding: 0 3px;
-        font-weight: bold;
-        color: #fff;
-        line-height: 1.1;
+        display: flex;
+        gap: 3px;
+        line-height: 1;
     }}
-    .event-menu:hover {{ background: rgba(255,255,255,0.55); }}
+    .event-acao {{
+        cursor: pointer;
+        font-size: 11px;
+        background: rgba(255,255,255,0.30);
+        border-radius: 3px;
+        padding: 1px 2px;
+    }}
+    .event-acao:hover {{ background: rgba(255,255,255,0.65); }}
 </style>
 </head>
 <body>
@@ -220,24 +296,39 @@ def render_fullcalendar(
                 eventDidMount: function(info) {{
                     var p = info.event.extendedProps || {{}};
                     var partes = [];
+                    if (p.serie_label) partes.push(p.serie_label);
                     if (p.procedimento) partes.push(p.procedimento);
                     if (p.profissional) partes.push(p.profissional);
                     if (p.sala) partes.push(p.sala);
                     info.el.title = info.event.title + (partes.length ? ' - ' + partes.join(' | ') : '');
 
-                    var menu = document.createElement('div');
-                    menu.className = 'event-menu';
-                    menu.innerText = '\\u22EE';
-                    menu.onclick = function(e) {{
+                    var acoes = document.createElement('div');
+                    acoes.className = 'event-acoes';
+
+                    var btnEditar = document.createElement('span');
+                    btnEditar.className = 'event-acao';
+                    btnEditar.innerText = '\\u270F\\uFE0F';
+                    btnEditar.title = 'Editar agendamento';
+                    btnEditar.onclick = function(e) {{
                         e.stopPropagation();
                         e.preventDefault();
-                        var excluir = window.confirm(
-                            'OK = excluir este agendamento.\\nCancelar = editar.'
-                        );
-                        navigate(excluir ? 'delete' : 'edit', info.event.id);
+                        navigate('edit', info.event.id);
                     }};
+
+                    var btnExcluir = document.createElement('span');
+                    btnExcluir.className = 'event-acao';
+                    btnExcluir.innerText = '\\uD83D\\uDDD1\\uFE0F';
+                    btnExcluir.title = 'Excluir agendamento';
+                    btnExcluir.onclick = function(e) {{
+                        e.stopPropagation();
+                        e.preventDefault();
+                        navigate('delete', info.event.id);
+                    }};
+
+                    acoes.appendChild(btnEditar);
+                    acoes.appendChild(btnExcluir);
                     info.el.style.position = 'relative';
-                    info.el.appendChild(menu);
+                    info.el.appendChild(acoes);
                 }},
                 eventClick: function(info) {{
                     if (info.jsEvent) {{ info.jsEvent.preventDefault(); }}
@@ -275,9 +366,17 @@ def render_fullcalendar(
     return html
 
 
-def agenda_to_events(agendamentos, nomes_prof=None):
-    """Converte objetos ScheduledAppointment em eventos do FullCalendar."""
+def agenda_to_events(agendamentos, nomes_prof=None, series_map=None):
+    """Converte objetos ScheduledAppointment em eventos do FullCalendar.
+
+    Args:
+        agendamentos: objetos ScheduledAppointment
+        nomes_prof: ignorado (compatibilidade)
+        series_map: dict {id_agendamento: (posicao, total)} para recorrências.
+            Quando informado, o título recebe o sufixo "(1 de 5)".
+    """
     events = []
+    series_map = series_map or {}
     for ag in agendamentos or []:
         try:
             if hasattr(ag.data, "strftime"):
@@ -306,9 +405,18 @@ def agenda_to_events(agendamentos, nomes_prof=None):
 
             cor = _cor_final_agendamento(ag)
 
+            titulo_evento = ag.cliente_nome or ag.procedimento or "Sem titulo"
+            serie_label = ""
+            posicao_total = series_map.get(ag.id)
+            if posicao_total:
+                pos, total = posicao_total
+                if total > 1:
+                    serie_label = f"{pos} de {total}"
+                    titulo_evento = f"{titulo_evento} ({serie_label})"
+
             events.append({
                 "id": str(ag.id),
-                "title": ag.cliente_nome or ag.procedimento or "Sem titulo",
+                "title": titulo_evento,
                 "start": inicio_dt.strftime("%Y-%m-%dT%H:%M:%S"),
                 "end": fim_dt.strftime("%Y-%m-%dT%H:%M:%S"),
                 "backgroundColor": cor,
@@ -319,6 +427,7 @@ def agenda_to_events(agendamentos, nomes_prof=None):
                     "procedimento": ag.procedimento or "",
                     "sala": ag.sala or "",
                     "confirmado": bool(getattr(ag, "confirmado", False)),
+                    "serie_label": serie_label,
                 },
             })
         except Exception:
