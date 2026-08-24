@@ -5,7 +5,7 @@ class Client(Base):
     __tablename__ = "clientes"
     id = Column(Integer, primary_key=True, index=True)
     nome = Column(String, nullable=False, index=True)
-    cpf = Column(String, unique=True, nullable=False, index=True)
+    cpf = Column(String, unique=True, nullable=True, index=True)
     data_nascimento = Column(Date, nullable=True)
     telefone = Column(String, nullable=True)
     email = Column(String, nullable=True)
