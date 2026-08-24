@@ -1,6 +1,7 @@
 """Componente FullCalendar para agenda interativa."""
 
 import json
+import re
 import unicodedata
 from datetime import datetime, timedelta
 
@@ -45,7 +46,8 @@ CORES_SALAS = {
     "sala 4": COR_SALA_4,
 }
 
-# Profissionais / agendas com cor fixa. A chave é comparada com o início do nome.
+# Profissionais / agendas com cor fixa. A chave pode estar em qualquer
+# parte do nome, para cobrir grafias compostas (ex: "Dra. Gabriela").
 CORES_ESPECIAIS = {
     "gabi": COR_GABI,
     "gabriela": COR_GABI,
@@ -57,6 +59,18 @@ CORES_ESPECIAIS = {
     "aniversar": COR_ANIVERSARIOS,
     "famil": COR_FAMILIA,
 }
+
+
+def _contem_palavra(texto: str, palavra: str) -> bool:
+    """Verifica se a palavra aparece como sub-palavra no texto.
+
+    Ex: 'Dra. Gabriela Silva' contém 'gabi' e 'gabriela'.
+    """
+    if not texto or not palavra:
+        return False
+    norm = _normalizar(texto)
+    # limita a fronteira de palavra: início, fim ou entre caracteres não-letra
+    return re.search(r"(^|[^a-z])" + re.escape(palavra) + r"($|[^a-z])", norm) is not None
 
 COR_PADRAO = "#E3A5C7"
 
@@ -84,11 +98,20 @@ def _cor_final_agendamento(ag, cor_prof=None):
 
     nome_prof = _normalizar(getattr(ag, "profissional", None))
     if nome_prof:
+        # 1) prefixo do nome (ex: "recepcao" comeca com "recep")
         for chave, cor in CORES_ESPECIAIS.items():
             if nome_prof.startswith(chave):
                 return cor
+        # 2) palavra contida em qualquer parte do nome (ex: "Dra. Gabriela Silva")
+        for chave, cor in CORES_ESPECIAIS.items():
+            if _contem_palavra(nome_prof, chave):
+                return cor
+        # 3) fallback: cor cadastrada no profissional
+        cor_cadastrada = cor_prof or getattr(ag, "cor_profissional", None)
+        if cor_cadastrada:
+            return cor_cadastrada
 
-    return cor_prof or getattr(ag, "cor_profissional", None) or COR_PADRAO
+    return COR_PADRAO
 
 
 def _hex_to_rgba(hex_color: str, alpha: float = 1.0) -> str:
