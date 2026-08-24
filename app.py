@@ -1654,40 +1654,10 @@ def tela_agenda():
 
         # ── Controles do calendário ─────────────────────────────────────────
         st.markdown("---")
-        ctrl1, ctrl2, ctrl3, ctrl4 = st.columns([1, 1, 1, 1])
-        with ctrl1:
-            vista = st.radio("Visualizar", ["Dia", "Semana", "Mês"], horizontal=True, key="ag_vista")
-
-        if vista == "Dia":
-            with ctrl2:
-                data_ref = st.date_input("Data", value=_hoje(), format="DD/MM/YYYY", key="ag_data_ref")
-            dias = [data_ref]
-        elif vista == "Semana":
-            with ctrl2:
-                data_ref = st.date_input("Qualquer data da semana", value=_hoje(),
-                                         format="DD/MM/YYYY", key="ag_data_ref")
-            monday = data_ref - timedelta(days=data_ref.weekday())
-            sunday = monday + timedelta(days=6)
-            with ctrl3:
-                st.date_input("Início (Seg)", value=monday, format="DD/MM/YYYY",
-                              disabled=True, key="ag_sem_ini")
-            with ctrl4:
-                st.date_input("Fim (Dom)", value=sunday, format="DD/MM/YYYY",
-                              disabled=True, key="ag_sem_fim")
-            dias = [monday + timedelta(days=i) for i in range(7)]
-        else:  # Mês
-            with ctrl2:
-                data_ref = st.date_input("Qualquer data do mês", value=_hoje(),
-                                         format="DD/MM/YYYY", key="ag_data_ref")
-            import calendar
-            primeiro_dia_mes = data_ref.replace(day=1)
-            _, dias_no_mes = calendar.monthrange(data_ref.year, data_ref.month)
-            ultimo_dia_mes = data_ref.replace(day=dias_no_mes)
-            # Começa na segunda da primeira semana
-            inicio_cal = primeiro_dia_mes - timedelta(days=primeiro_dia_mes.weekday())
-            # Termina no domingo da última semana
-            fim_cal = ultimo_dia_mes + timedelta(days=(6 - ultimo_dia_mes.weekday()))
-            dias = [inicio_cal + timedelta(days=i) for i in range((fim_cal - inicio_cal).days + 1)]
+        # A navegação Dia/Semana/Mês fica dentro do proprio calendario (FullCalendar).
+        # Aqui ficam so o filtro de profissional e o toggle Grade/Lista.
+        _hoje_local = _hoje()
+        dias = [_hoje_local - timedelta(days=30), _hoje_local + timedelta(days=180)]
 
         # Verificar se usuário é profissional (restrição de acesso)
         user_atual = st.session_state.get("user", {}) or {}
@@ -1843,7 +1813,7 @@ def tela_agenda():
                     )
 
                 # Cabeçalho do dia, como no Google Calendar
-                if vista != "Dia" and ag.data != _dia_corrente:
+                if ag.data != _dia_corrente:
                     _dia_corrente = ag.data
                     _dias_pt = ["segunda", "terça", "quarta", "quinta", "sexta", "sábado", "domingo"]
                     _rotulo_dia = f"{_dias_pt[ag.data.weekday()]}, {ag.data.strftime('%d/%m')}"
@@ -2118,14 +2088,10 @@ def tela_agenda():
 
         # Calendário interativo com FullCalendar
         if tipo_visual == "Grade":
-            if vista == "Dia":
-                fc_view = "timeGridDay"
-            elif vista == "Semana":
-                fc_view = "timeGridWeek"
-            else:
-                fc_view = "dayGridMonth"
-
-            data_inicial = dias[0].strftime("%Y-%m-%d") if dias else _hoje().strftime("%Y-%m-%d")
+            # Inicia em vista de semana; usuario muda entre Dia/Semana/Mes
+            # pelos botoes internos do calendario.
+            fc_view = "timeGridWeek"
+            data_inicial = _hoje().strftime("%Y-%m-%d")
 
             # ── Ponte de ações da grade ──
             # A grade roda dentro de um iframe. Navegar por URL recarregaria a
