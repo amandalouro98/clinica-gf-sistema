@@ -84,32 +84,37 @@ def _normalizar(texto: str) -> str:
     )
 
 
-def _cor_final_agendamento(ag, cor_prof=None):
+def _cor_final_agendamento(ag, cor_prof=None, cores_prof=None, cores_sala=None):
     """Retorna a cor final do agendamento considerando sala e profissional.
 
-    Salas alugáveis (2, 3 e 4) têm prioridade, porque o controle delas é
-    feito pela sala. Sala 1 e Soroterapia herdam a cor do profissional.
+    A cor SEMPRE vem do cadastro:
+      1) Se a sala estiver cadastrada com cor, usa a cor da sala.
+      2) Senão, usa a cor do profissional cadastrado.
+      3) Senão, usa a cor salva no agendamento.
+      4) Por último, a cor padrão.
+
+    Args:
+        ag: objeto ScheduledAppointment
+        cor_prof: cor do profissional (obsoleto, mantido para compatibilidade)
+        cores_prof: dict {nome_profissional_normalizado: cor}
+        cores_sala: dict {nome_sala_normalizado: cor}
     """
     sala = _normalizar(getattr(ag, "sala", None))
-    if sala:
-        for chave, cor in CORES_SALAS.items():
-            if chave in sala:
-                return cor
+    if sala and cores_sala:
+        cor_sala = cores_sala.get(sala)
+        if cor_sala:
+            return cor_sala
 
     nome_prof = _normalizar(getattr(ag, "profissional", None))
-    if nome_prof:
-        # 1) prefixo do nome (ex: "recepcao" comeca com "recep")
-        for chave, cor in CORES_ESPECIAIS.items():
-            if nome_prof.startswith(chave):
-                return cor
-        # 2) palavra contida em qualquer parte do nome (ex: "Dra. Gabriela Silva")
-        for chave, cor in CORES_ESPECIAIS.items():
-            if _contem_palavra(nome_prof, chave):
-                return cor
-        # 3) fallback: cor cadastrada no profissional
-        cor_cadastrada = cor_prof or getattr(ag, "cor_profissional", None)
+    if nome_prof and cores_prof:
+        cor_cadastrada = cores_prof.get(nome_prof)
         if cor_cadastrada:
             return cor_cadastrada
+
+    # Fallbacks: cor salva no agendamento ou passada como argumento
+    cor_salva = cor_prof or getattr(ag, "cor_profissional", None)
+    if cor_salva:
+        return cor_salva
 
     return COR_PADRAO
 
@@ -539,7 +544,7 @@ def render_fullcalendar(
     return html
 
 
-def agenda_to_events(agendamentos, nomes_prof=None, series_map=None):
+def agenda_to_events(agendamentos, nomes_prof=None, series_map=None, cores_prof=None, cores_sala=None):
     """Converte objetos ScheduledAppointment em eventos do FullCalendar.
 
     Args:
@@ -547,6 +552,8 @@ def agenda_to_events(agendamentos, nomes_prof=None, series_map=None):
         nomes_prof: ignorado (compatibilidade)
         series_map: dict {id_agendamento: (posicao, total)} para recorrências.
             Quando informado, o título recebe o sufixo "(1 de 5)".
+        cores_prof: dict {nome_profissional_normalizado: cor}
+        cores_sala: dict {nome_sala_normalizado: cor}
     """
     events = []
     series_map = series_map or {}
@@ -576,7 +583,7 @@ def agenda_to_events(agendamentos, nomes_prof=None, series_map=None):
             if not fim_dt or fim_dt <= inicio_dt:
                 fim_dt = inicio_dt + timedelta(minutes=getattr(ag, "duracao_min", None) or 60)
 
-            cor = _cor_final_agendamento(ag)
+            cor = _cor_final_agendamento(ag, cores_prof=cores_prof, cores_sala=cores_sala)
 
             titulo_evento = ag.cliente_nome or ag.procedimento or "Sem titulo"
             serie_label = ""

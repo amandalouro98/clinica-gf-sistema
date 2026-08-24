@@ -3,6 +3,7 @@ import streamlit.components.v1 as components
 import pandas as pd
 import altair as alt
 import json
+import unicodedata
 from datetime import date, datetime, timedelta, timezone
 
 # Fuso horário de Brasília (GMT-3)
@@ -13,6 +14,15 @@ def _hoje():
 
 def _agora():
     return datetime.now(BR_TZ)
+
+
+def _normalizar_nome(texto: str) -> str:
+    """Minúsculas e sem acento para comparar nomes de profissionais/salas."""
+    texto = (texto or "").strip().lower()
+    return "".join(
+        c for c in unicodedata.normalize("NFD", texto)
+        if unicodedata.category(c) != "Mn"
+    )
 
 
 def registrar_exclusao(db, tipo, referencia_id, descricao, dados: dict):
@@ -51,6 +61,7 @@ from models.biometrics import Biometrics
 from models.contract import Contract
 from models.schedule import ScheduledAppointment
 from models.professional import Professional
+from models.room import Room
 from models.sale import Sale, SaleItem, SessionUsage
 from models.schedule_log import AgendaLog
 from models.dose_table import DoseTable
@@ -216,7 +227,7 @@ def _coluna_html_full(ags_dia: list, col_w: int) -> str:
         card_h = max(28, (bloco_h - (n_no_grupo - 1) * 3) // n_no_grupo)
 
         for idx, ag in enumerate(grupo):
-            cor = _cor_final_agendamento(ag)
+            cor = _cor_final_agendamento(ag, cores_prof=cores_prof_normalizado, cores_sala=cores_sala_normalizado)
             icone = "✅" if ag.confirmado else "⏳"
             pacote_flag = " 📦" if getattr(ag, "_tem_pacote", False) else ""
             sala_txt = f" · {ag.sala}" if getattr(ag, "sala", None) else ""
@@ -308,7 +319,7 @@ def _coluna_html(ags_dia: list, col_w: int) -> str:
         h    = _height_px(ag.duracao_min)
         ci   = col_idx.get(ag.id, 0)
         left = ci * (card_w + gutter)
-        cor  = _cor_final_agendamento(ag)
+        cor  = _cor_final_agendamento(ag, cores_prof=cores_prof_normalizado, cores_sala=cores_sala_normalizado)
         icone = "✅" if ag.confirmado else "⏳"
         pacote_flag = " 📦" if getattr(ag, "_tem_pacote", False) else ""
 
@@ -464,7 +475,7 @@ def _render_calendario_dia_por_profissional(dia, ags_dia: list) -> str:
     colunas = ""
     for nome_prof, ags_prof in profs_ordenados:
         # cor do profissional (pega do primeiro agendamento)
-        cor = _cor_final_agendamento(ags_prof[0])
+        cor = _cor_final_agendamento(ags_prof[0], cores_prof=cores_prof_normalizado, cores_sala=cores_sala_normalizado)
 
         cabecalho = (
             f'<div style="text-align:center;padding:6px 4px;'
@@ -1375,6 +1386,27 @@ def tela_agenda():
         profs_db = db.query(Professional).order_by(Professional.nome.asc()).all()
         nomes_prof = [p.nome for p in profs_db]
         cor_por_prof = {p.nome: (p.cor or "#E3A5C7") for p in profs_db}
+        cores_prof_normalizado = {_normalizar_nome(p.nome): (p.cor or "#E3A5C7") for p in profs_db}
+
+        salas_db = db.query(Room).order_by(Room.nome.asc()).all()
+        # Cria salas padrao caso ainda nao existam
+        _salas_padrao = {
+            "Sala 1": "#E3A5C7",
+            "Sala 2": "#CC628A",
+            "Sala 3": "#F7BF27",
+            "Sala 4": "#41CC52",
+            "Sala 5": "#84B4CD",
+            "Soroterapia": "#A79C8F",
+        }
+        _existentes = {_normalizar_nome(r.nome) for r in salas_db}
+        for _nome_sala, _cor_sala in _salas_padrao.items():
+            if _normalizar_nome(_nome_sala) not in _existentes:
+                db.add(Room(nome=_nome_sala, cor=_cor_sala))
+        if len(_existentes) < len(_salas_padrao):
+            db.commit()
+            salas_db = db.query(Room).order_by(Room.nome.asc()).all()
+        cores_sala_normalizado = {_normalizar_nome(r.nome): (r.cor or "#E3A5C7") for r in salas_db}
+
         clientes = db.query(Client).order_by(Client.nome.asc()).all()
         mapa_cli = {f"{c.nome} ({c.cpf or ''})": (c.id, c.nome) for c in clientes}
         opcoes_cli = ["— selecione —"] + list(mapa_cli.keys())
@@ -1774,7 +1806,7 @@ def tela_agenda():
         # Legenda de profissionais — compacta, numa só linha
         prof_vistos: dict = {}
         for ag in ags_periodo:
-            prof_vistos.setdefault(ag.profissional, _cor_final_agendamento(ag))
+            prof_vistos.setdefault(ag.profissional, _cor_final_agendamento(ag, cores_prof=cores_prof_normalizado, cores_sala=cores_sala_normalizado))
         if prof_vistos:
             badges = " ".join(
                 f'<span style="background:{c};padding:3px 10px;border-radius:8px;'
@@ -1796,7 +1828,7 @@ def tela_agenda():
             except TypeError:
                 _box_lista = st.container()
             for ag in sorted(ags_periodo, key=lambda x: (x.data, x.hora_inicio)):
-                cor = _cor_final_agendamento(ag)
+                cor = _cor_final_agendamento(ag, cores_prof=cores_prof_normalizado, cores_sala=cores_sala_normalizado)
                 pacote_label = " 📦" if getattr(ag, "_tem_pacote", False) else ""
                 icone_conf = " ✅" if ag.confirmado else ""
 
@@ -2153,7 +2185,7 @@ def tela_agenda():
                 with col_esq:
                     components.html(
                         render_fullcalendar(
-                            agendamentos=agenda_to_events(ags_outros, series_map=series_map),
+                            agendamentos=agenda_to_events(ags_outros, series_map=series_map, cores_prof=cores_prof_normalizado, cores_sala=cores_sala_normalizado),
                             view=fc_view,
                             date_str=data_inicial,
                             height="640px",
@@ -2166,7 +2198,7 @@ def tela_agenda():
                 with col_dir:
                     components.html(
                         render_fullcalendar(
-                            agendamentos=agenda_to_events(ags_gabi, series_map=series_map),
+                            agendamentos=agenda_to_events(ags_gabi, series_map=series_map, cores_prof=cores_prof_normalizado, cores_sala=cores_sala_normalizado),
                             view=fc_view,
                             date_str=data_inicial,
                             height="640px",
@@ -2179,7 +2211,7 @@ def tela_agenda():
             else:
                 components.html(
                     render_fullcalendar(
-                        agendamentos=agenda_to_events(ags_periodo, series_map=series_map),
+                        agendamentos=agenda_to_events(ags_periodo, series_map=series_map, cores_prof=cores_prof_normalizado, cores_sala=cores_sala_normalizado),
                         view=fc_view,
                         date_str=data_inicial,
                         height="700px",
@@ -2382,6 +2414,87 @@ def tela_agenda():
                         db.add(Professional(nome=novo_nome.strip(), cor=CORES_PROFISSIONAIS[cor_escolhida]))
                         db.commit()
                         st.success(f"{novo_nome} adicionado!")
+                        st.rerun()
+                else:
+                    st.error("Informe o nome.")
+
+        # ── Gerenciar Salas ──────────────────────────────────────────────────
+        st.markdown("---")
+        st.markdown("### Salas")
+        salas_db = db.query(Room).order_by(Room.nome.asc()).all()
+        if salas_db:
+            for r in salas_db:
+                col_rcor, col_rnome, col_rbtn = st.columns([0.4, 4, 0.4])
+                with col_rcor:
+                    st.markdown(
+                        f'<div style="width:22px;height:22px;background:{r.cor};'
+                        f'border-radius:50%;margin-top:10px;"></div>',
+                        unsafe_allow_html=True,
+                    )
+                with col_rnome:
+                    st.write(r.nome)
+                with col_rbtn:
+                    with st.popover("⋮", use_container_width=True):
+                        if st.button("✏️ Editar", key=f"room_edit_{r.id}"):
+                            st.session_state["room_editando"] = r.id
+                            st.rerun()
+                        if st.button("🗑️ Remover", key=f"rem_room_{r.id}", use_container_width=True):
+                            db.delete(r)
+                            db.commit()
+                            st.rerun()
+            if st.session_state.get("room_editando"):
+                _rid = st.session_state["room_editando"]
+                _room_ed = db.get(Room, _rid)
+                if _room_ed:
+                    st.markdown("---")
+                    st.markdown("##### Editar Sala")
+                    with st.form("form_editar_room", clear_on_submit=False):
+                        _ed_room_nome = st.text_input("Nome", value=_room_ed.nome, key="ed_room_nome")
+                        _ed_room_cor = st.selectbox(
+                            "Cor", list(CORES_PROFISSIONAIS.keys()),
+                            index=list(CORES_PROFISSIONAIS.values()).index(_room_ed.cor)
+                            if _room_ed.cor in CORES_PROFISSIONAIS.values() else 0,
+                            key="ed_room_cor",
+                        )
+                        col_rsv, col_rcn = st.columns(2)
+                        with col_rsv:
+                            _salvar_room = st.form_submit_button("💾 Salvar", use_container_width=True)
+                        with col_rcn:
+                            _cancelar_room = st.form_submit_button("Cancelar", use_container_width=True)
+                    if _salvar_room:
+                        if not _ed_room_nome.strip():
+                            st.error("Informe o nome.")
+                        else:
+                            _room_ed.nome = _ed_room_nome.strip()
+                            _room_ed.cor = CORES_PROFISSIONAIS[_ed_room_cor]
+                            db.commit()
+                            st.success("Sala atualizada!")
+                            st.session_state.pop("room_editando", None)
+                            st.rerun()
+                    if _cancelar_room:
+                        st.session_state.pop("room_editando", None)
+                        st.rerun()
+        else:
+            st.info("Nenhuma sala cadastrada.")
+
+        st.markdown("#### Cadastrar sala")
+        col_r1, col_r2, col_r3 = st.columns([3, 2, 1])
+        with col_r1:
+            novo_room_nome = st.text_input("Nome", key="novo_room_nome", label_visibility="collapsed",
+                                           placeholder="Nome da sala")
+        with col_r2:
+            cor_room_escolhida = st.selectbox("Cor", list(CORES_PROFISSIONAIS.keys()), key="novo_room_cor",
+                                              label_visibility="collapsed")
+        with col_r3:
+            if st.button("Adicionar", use_container_width=True, key="btn_add_room"):
+                if novo_room_nome.strip():
+                    existe = db.query(Room).filter(Room.nome == novo_room_nome.strip()).first()
+                    if existe:
+                        st.warning("Sala já cadastrada.")
+                    else:
+                        db.add(Room(nome=novo_room_nome.strip(), cor=CORES_PROFISSIONAIS[cor_room_escolhida]))
+                        db.commit()
+                        st.success(f"{novo_room_nome} adicionada!")
                         st.rerun()
                 else:
                     st.error("Informe o nome.")
