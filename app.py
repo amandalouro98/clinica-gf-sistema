@@ -1946,6 +1946,11 @@ def tela_agenda():
                                 db.commit()
                                 st.rerun()
 
+        # Garante que apenas um dialog da agenda esteja aberto por vez
+        if "ag_popup_edit_id" in st.session_state:
+            st.session_state.pop("ag_menu_id", None)
+            st.session_state.pop("ag_excluir_id", None)
+
         # Popup de opções (⋮): Editar ou Excluir
         if "ag_menu_id" in st.session_state:
             _ag_menu = db.get(ScheduledAppointment, st.session_state["ag_menu_id"])
@@ -1977,7 +1982,7 @@ def tela_agenda():
             else:
                 st.session_state.pop("ag_menu_id", None)
 
-        if "ag_excluir_id" in st.session_state:
+        elif "ag_excluir_id" in st.session_state:
             _ag_del = db.get(ScheduledAppointment, st.session_state["ag_excluir_id"])
             if _ag_del:
                 _serie = _agendamentos_mesma_recorrencia(db, _ag_del)
@@ -2221,7 +2226,7 @@ def tela_agenda():
                 )
 
         # ── Pop-up de edição rápida ──────────────────────────────────────────
-        if "ag_popup_edit_id" in st.session_state:
+        elif "ag_popup_edit_id" in st.session_state:
             _popup_id = st.session_state["ag_popup_edit_id"]
             _ag_popup = db.get(ScheduledAppointment, _popup_id)
             if _ag_popup:
