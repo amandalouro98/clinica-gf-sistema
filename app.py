@@ -1679,19 +1679,7 @@ def tela_agenda():
                     prof_vinculado = p.nome
                     break
         
-        # Filtro por profissional + tipo de visualização
-        col_filt, col_visual = st.columns([1, 1])
-        with col_filt:
-            if prof_vinculado:
-                filtro_prof = prof_vinculado
-                st.info(f"Visualizando agenda de: {filtro_prof}")
-            else:
-                opcoes_filt = ["Todos"] + nomes_prof
-                filtro_prof = st.selectbox("Profissional (filtrar)", opcoes_filt,
-                                           key="ag_filtro_prof", label_visibility="visible")
-        with col_visual:
-            tipo_visual = st.radio("Visualização", ["Grade", "Lista"], horizontal=True, key="ag_tipo_visual")
-
+        # Busca agendamentos do periodo antes de montar o filtro
         ags_periodo_raw = (
             db.query(ScheduledAppointment)
             .filter(
@@ -1701,6 +1689,24 @@ def tela_agenda():
             .order_by(ScheduledAppointment.hora_inicio.asc())
             .all()
         )
+
+        # Profissionais/salas presentes nos agendamentos do periodo
+        _nomes_no_periodo = sorted({ag.profissional for ag in ags_periodo_raw if ag.profissional},
+                                   key=lambda x: x.lower())
+        _opcoes_filt = ["Todos"] + sorted(set(nomes_prof + _nomes_no_periodo), key=lambda x: x.lower())
+
+        # Filtro por profissional + tipo de visualização
+        col_filt, col_visual = st.columns([1, 1])
+        with col_filt:
+            if prof_vinculado:
+                filtro_prof = prof_vinculado
+                st.info(f"Visualizando agenda de: {filtro_prof}")
+            else:
+                filtro_prof = st.selectbox("Profissional (filtrar)", _opcoes_filt,
+                                           key="ag_filtro_prof", label_visibility="visible")
+        with col_visual:
+            tipo_visual = st.radio("Visualização", ["Grade", "Lista"], horizontal=True, key="ag_tipo_visual")
+
         # Aplica filtro de profissional
         ags_periodo = (
             ags_periodo_raw if filtro_prof == "Todos"
