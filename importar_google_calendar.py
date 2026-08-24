@@ -138,10 +138,15 @@ def get_engine():
 
 
 def main():
-    pasta = Path(__file__).parent / "temp" / "google_calendar"
+    import sys
+    if len(sys.argv) > 1:
+        pasta = Path(sys.argv[1])
+    else:
+        pasta = Path(__file__).parent / "temp" / "google_calendar"
     if not pasta.exists():
         print(f"Pasta nao encontrada: {pasta}")
-        print("Crie a pasta e copie os arquivos .xlsx do Google Calendar para la.")
+        print("Uso: python importar_google_calendar.py /caminho/da/pasta/com/xlsx")
+        print("     python importar_google_calendar.py  # usa temp/google_calendar/")
         return
 
     arquivos = sorted(pasta.glob("*.xlsx"))
