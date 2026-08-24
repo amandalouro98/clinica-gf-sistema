@@ -1735,6 +1735,42 @@ def tela_agenda():
         except Exception:
             series_map = {}
 
+        # Estilos da agenda: texto branco dentro dos cards coloridos e,
+        # no celular, ⋮ e ✓ ao lado do card em vez de empilhados embaixo.
+        st.markdown(
+            """<style>
+.ag-card, .ag-card * { color: #ffffff !important; }
+.ag-legenda, .ag-legenda * { color: #ffffff !important; }
+.st-key-ag_lista [data-testid="stHorizontalBlock"] {
+    flex-wrap: nowrap !important;
+    align-items: center !important;
+    gap: 4px !important;
+}
+.st-key-ag_lista [data-testid="stColumn"] { min-width: 0 !important; }
+.st-key-ag_lista [data-testid="stColumn"]:not(:first-child) {
+    flex: 0 0 38px !important;
+    width: 38px !important;
+    max-width: 38px !important;
+}
+.st-key-ag_lista [data-testid="stColumn"] button {
+    padding: 0 !important;
+    min-height: 34px !important;
+    height: 34px !important;
+    width: 100% !important;
+    font-size: 17px !important;
+    line-height: 1 !important;
+}
+.st-key-ag_lista [data-testid="stColumn"] [data-testid="stElementContainer"] {
+    margin-bottom: 6px !important;
+}
+@media (max-width: 640px) {
+    .ag-card { padding: 5px 8px !important; }
+    .ag-card div { font-size: 12px !important; }
+}
+</style>""",
+            unsafe_allow_html=True,
+        )
+
         # Legenda de profissionais — compacta, numa só linha
         prof_vistos: dict = {}
         for ag in ags_periodo:
@@ -1742,15 +1778,23 @@ def tela_agenda():
         if prof_vistos:
             badges = " ".join(
                 f'<span style="background:{c};padding:3px 10px;border-radius:8px;'
-                f'font-size:12px;margin-right:6px;display:inline-block;"><b>{p}</b></span>'
+                f'font-size:12px;margin-right:6px;display:inline-block;color:#fff;">'
+                f'<b>{p}</b></span>'
                 for p, c in prof_vistos.items()
             )
-            st.markdown(f'<div style="margin-bottom:6px;">{badges}</div>', unsafe_allow_html=True)
+            st.markdown(
+                f'<div class="ag-legenda" style="margin-bottom:6px;">{badges}</div>',
+                unsafe_allow_html=True,
+            )
 
         # Lista de agendamentos estilo Google Calendar
         if ags_periodo and tipo_visual == "Lista":
             st.markdown("#### Agendamentos")
             _dia_corrente = None
+            try:
+                _box_lista = st.container(key="ag_lista")
+            except TypeError:
+                _box_lista = st.container()
             for ag in sorted(ags_periodo, key=lambda x: (x.data, x.hora_inicio)):
                 cor = _cor_final_agendamento(ag)
                 pacote_label = " 📦" if getattr(ag, "_tem_pacote", False) else ""
@@ -1762,7 +1806,7 @@ def tela_agenda():
                     _serie_badge = (
                         f'<span style="background:rgba(255,255,255,0.32);border-radius:5px;'
                         f'padding:1px 6px;font-size:11px;font-weight:700;margin-left:6px;'
-                        f'color:#fff !important;">'
+                        f'color:#fff;">'
                         f'{_pos_total[0]} de {_pos_total[1]}</span>'
                     )
 
@@ -1771,110 +1815,104 @@ def tela_agenda():
                     _dia_corrente = ag.data
                     _dias_pt = ["segunda", "terça", "quarta", "quinta", "sexta", "sábado", "domingo"]
                     _rotulo_dia = f"{_dias_pt[ag.data.weekday()]}, {ag.data.strftime('%d/%m')}"
-                    st.markdown(
-                        f'<div style="color:#b87575;font-weight:700;font-size:13px;'
-                        f'margin:10px 0 4px 2px;text-transform:capitalize;">{_rotulo_dia}</div>',
-                        unsafe_allow_html=True,
-                    )
+                    with _box_lista:
+                        st.markdown(
+                            f'<div style="color:#b87575;font-weight:700;font-size:13px;'
+                            f'margin:10px 0 4px 2px;text-transform:capitalize;">{_rotulo_dia}</div>',
+                            unsafe_allow_html=True,
+                        )
 
-                col_caixa, col_menu, col_conf = st.columns([7, 1, 1])
+                _linha = ""
+                _linha += f'<div class="ag-card" style="background-color:{cor};border-radius:10px;'
+                _linha += 'padding:7px 10px;margin-bottom:6px;font-family:sans-serif;'
+                _linha += "box-shadow:0 1px 3px rgba(74,48,48,0.12);color:#fff;\">"
+                _linha += f'<div style="font-weight:600;font-size:14px;color:#fff;">'
+                _linha += f'{ag.hora_inicio}–{ag.hora_fim}{_serie_badge}</div>'
+                _linha += '<div style="font-size:13px;color:#fff;white-space:nowrap;'
+                _linha += "overflow:hidden;text-overflow:ellipsis;\">"
+                _linha += f"{ag.cliente_nome or 'N/A'}{pacote_label} — {ag.procedimento or ''}"
+                _linha += f" | {ag.profissional}{icone_conf}</div></div>"
 
-                with col_caixa:
-                    st.markdown(
-                        f"""
-                        <div style="
-                            background-color: {cor};
-                            border-radius: 10px;
-                            padding: 8px 10px;
-                            margin-bottom: 8px;
-                            font-family: sans-serif;
-                            box-shadow: 0 1px 3px rgba(74,48,48,0.12);
-                        ">
-                            <div style="font-weight:600;font-size:14px;margin-bottom:1px;color:#fff !important;">
-                                {ag.hora_inicio}–{ag.hora_fim}{_serie_badge}
-                            </div>
-                            <div style="font-size:13px;color:#fff !important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-                                {ag.cliente_nome or 'N/A'}{pacote_label} — {ag.procedimento or ''} | {ag.profissional}{icone_conf}
-                            </div>
-                        </div>
-                        """,
-                        unsafe_allow_html=True,
-                    )
+                with _box_lista:
+                    col_caixa, col_menu, col_conf = st.columns([8, 1, 1])
 
-                with col_menu:
-                    if st.button("⋮", key=f"lst_menu_{ag.id}", help="Editar ou excluir"):
-                        st.session_state["ag_menu_id"] = ag.id
-                        st.rerun()
+                    with col_caixa:
+                        st.markdown(_linha, unsafe_allow_html=True)
 
-                with col_conf:
-                    if not ag.confirmado:
-                        if st.button("✓", key=f"conf_{ag.id}", help="Confirmar agendamento"):
-                            ag.confirmado = True
-                            db.commit()
-                            try:
-                                from models.sale import Sale, SaleItem, SessionUsage
-                                if ag.cliente_id:
-                                    item_vinculado = (
-                                        db.get(SaleItem, ag.sale_item_id)
-                                        if getattr(ag, "sale_item_id", None)
-                                        else None
-                                    )
-                                    if item_vinculado and item_vinculado.sessoes_usadas < item_vinculado.sessoes_total:
-                                        match_p = item_vinculado
-                                    elif ag.procedimento:
-                                        proc_norm = ag.procedimento.strip().lower()
-                                        item_pacote = (
-                                            db.query(SaleItem)
-                                            .join(Sale)
-                                            .filter(
-                                                Sale.cliente_id == ag.cliente_id,
-                                                SaleItem.tipo == "pacote",
-                                                SaleItem.sessoes_usadas < SaleItem.sessoes_total,
-                                            )
-                                            .order_by(Sale.data_venda)
-                                            .all()
-                                        )
-                                        match_p = next(
-                                            (it for it in item_pacote if it.procedimento.strip().lower() == proc_norm),
-                                            item_pacote[0] if item_pacote else None,
-                                        )
-                                    else:
-                                        match_p = None
-                                    if match_p:
-                                        match_p.sessoes_usadas += 1
-                                        db.add(SessionUsage(
-                                            sale_item_id=match_p.id,
-                                            agendamento_id=ag.id,
-                                            data_uso=ag.data,
-                                        ))
-                                        db.commit()
-                            except Exception:
-                                pass
-                            try:
-                                _ulog = st.session_state.get("user", {})
-                                db.add(AgendaLog(
-                                    agendamento_id=ag.id,
-                                    acao="confirmado",
-                                    usuario_id=_ulog.get("id"),
-                                    usuario_nome=_ulog.get("nome", ""),
-                                    dados_depois=__import__("json").dumps({
-                                        "cliente": ag.cliente_nome,
-                                        "profissional": ag.profissional,
-                                        "data": str(ag.data),
-                                        "hora_inicio": ag.hora_inicio,
-                                        "procedimento": ag.procedimento,
-                                        "sala": ag.sala,
-                                    }, ensure_ascii=False),
-                                ))
+                    with col_menu:
+                        if st.button("⋮", key=f"lst_menu_{ag.id}", help="Editar ou excluir"):
+                            st.session_state["ag_menu_id"] = ag.id
+                            st.rerun()
+
+                    with col_conf:
+                        if not ag.confirmado:
+                            if st.button("✓", key=f"conf_{ag.id}", help="Confirmar agendamento"):
+                                ag.confirmado = True
                                 db.commit()
-                            except Exception:
-                                pass
-                            st.rerun()
-                    else:
-                        if st.button("✓", key=f"desc_{ag.id}", help="Desfazer confirmação"):
-                            ag.confirmado = False
-                            db.commit()
-                            st.rerun()
+                                try:
+                                    from models.sale import Sale, SaleItem, SessionUsage
+                                    if ag.cliente_id:
+                                        item_vinculado = (
+                                            db.get(SaleItem, ag.sale_item_id)
+                                            if getattr(ag, "sale_item_id", None)
+                                            else None
+                                        )
+                                        if item_vinculado and item_vinculado.sessoes_usadas < item_vinculado.sessoes_total:
+                                            match_p = item_vinculado
+                                        elif ag.procedimento:
+                                            proc_norm = ag.procedimento.strip().lower()
+                                            item_pacote = (
+                                                db.query(SaleItem)
+                                                .join(Sale)
+                                                .filter(
+                                                    Sale.cliente_id == ag.cliente_id,
+                                                    SaleItem.tipo == "pacote",
+                                                    SaleItem.sessoes_usadas < SaleItem.sessoes_total,
+                                                )
+                                                .order_by(Sale.data_venda)
+                                                .all()
+                                            )
+                                            match_p = next(
+                                                (it for it in item_pacote if it.procedimento.strip().lower() == proc_norm),
+                                                item_pacote[0] if item_pacote else None,
+                                            )
+                                        else:
+                                            match_p = None
+                                        if match_p:
+                                            match_p.sessoes_usadas += 1
+                                            db.add(SessionUsage(
+                                                sale_item_id=match_p.id,
+                                                agendamento_id=ag.id,
+                                                data_uso=ag.data,
+                                            ))
+                                            db.commit()
+                                except Exception:
+                                    pass
+                                try:
+                                    _ulog = st.session_state.get("user", {})
+                                    db.add(AgendaLog(
+                                        agendamento_id=ag.id,
+                                        acao="confirmado",
+                                        usuario_id=_ulog.get("id"),
+                                        usuario_nome=_ulog.get("nome", ""),
+                                        dados_depois=__import__("json").dumps({
+                                            "cliente": ag.cliente_nome,
+                                            "profissional": ag.profissional,
+                                            "data": str(ag.data),
+                                            "hora_inicio": ag.hora_inicio,
+                                            "procedimento": ag.procedimento,
+                                            "sala": ag.sala,
+                                        }, ensure_ascii=False),
+                                    ))
+                                    db.commit()
+                                except Exception:
+                                    pass
+                                st.rerun()
+                        else:
+                            if st.button("✓", key=f"desc_{ag.id}", help="Desfazer confirmação"):
+                                ag.confirmado = False
+                                db.commit()
+                                st.rerun()
 
         # Popup de opções (⋮): Editar ou Excluir
         if "ag_menu_id" in st.session_state:
@@ -2182,17 +2220,10 @@ def tela_agenda():
                                 key="dlg_ag_escopo",
                             )
 
-                        # Campos um embaixo do outro
-                        _ed_data = st.date_input("Data", value=_ag2.data, format="DD/MM/YYYY", key="dlg_ag_data")
-
-                        _slots_dlg = gerar_slots_horario()
-                        _idx_hora = _slots_dlg.index(_ag2.hora_inicio) if _ag2.hora_inicio in _slots_dlg else 0
-                        _ed_hora = st.selectbox("Hora início", _slots_dlg, index=_idx_hora, key="dlg_ag_hora")
-
-                        _duracoes_dlg = [15, 30, 45, 60, 75, 90, 105, 120]
-                        _idx_dur = _duracoes_dlg.index(_ag2.duracao_min) if _ag2.duracao_min in _duracoes_dlg else 3
-                        _ed_dur = st.selectbox("Duração (min)", _duracoes_dlg, index=_idx_dur, key="dlg_ag_dur")
-
+                        # Campos um embaixo do outro.
+                        # O Cliente vem primeiro de proposito: o Streamlit da foco
+                        # ao primeiro campo do popup e, se fosse a Data, o
+                        # calendario ja abriria expandido.
                         _clientes_dlg = _db2.query(Client).order_by(Client.nome.asc()).all()
                         _opcoes_cli_dlg = ["— selecione —"] + [f"{c.nome} ({c.cpf or ''})" for c in _clientes_dlg]
                         _mapa_cli_dlg = {f"{c.nome} ({c.cpf or ''})": (c.id, c.nome) for c in _clientes_dlg}
@@ -2212,6 +2243,16 @@ def tela_agenda():
                         _nomes_prof_dlg = [p.nome for p in _profs_dlg]
                         _idx_prof = _nomes_prof_dlg.index(_ag2.profissional) if _ag2.profissional in _nomes_prof_dlg else 0
                         _ed_prof = st.selectbox("Profissional", _nomes_prof_dlg, index=_idx_prof, key="dlg_ag_prof")
+
+                        _ed_data = st.date_input("Data", value=_ag2.data, format="DD/MM/YYYY", key="dlg_ag_data")
+
+                        _slots_dlg = gerar_slots_horario()
+                        _idx_hora = _slots_dlg.index(_ag2.hora_inicio) if _ag2.hora_inicio in _slots_dlg else 0
+                        _ed_hora = st.selectbox("Hora início", _slots_dlg, index=_idx_hora, key="dlg_ag_hora")
+
+                        _duracoes_dlg = [15, 30, 45, 60, 75, 90, 105, 120]
+                        _idx_dur = _duracoes_dlg.index(_ag2.duracao_min) if _ag2.duracao_min in _duracoes_dlg else 3
+                        _ed_dur = st.selectbox("Duração (min)", _duracoes_dlg, index=_idx_dur, key="dlg_ag_dur")
 
                         OPCOES_SALA_DLG = ["— nenhuma —", "Sala 1", "Sala 2", "Sala 3", "Sala 4", "Sala 5", "Soroterapia"]
                         _sala_idx = OPCOES_SALA_DLG.index(_ag2.sala) if _ag2.sala in OPCOES_SALA_DLG else 0

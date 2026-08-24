@@ -239,7 +239,7 @@ def render_fullcalendar(
         padding: 1px 3px;
         box-shadow: 0 1px 2px rgba(0,0,0,0.15);
     }}
-    .fc .fc-event-title {{ font-weight: 600; white-space: normal !important; padding-right: 20px; }}
+    .fc .fc-event-title {{ font-weight: 600; white-space: normal !important; padding-right: 26px; }}
     .fc .fc-event-time {{ font-size: 10px; opacity: 0.9; }}
     .fc .fc-col-header-cell-cushion {{ font-size: 12px; font-weight: 600; }}
     .fc .fc-timegrid-slot {{ height: 1.7em; }}
@@ -262,8 +262,9 @@ def render_fullcalendar(
     }}
     .event-menu {{
         position: absolute;
-        top: 0;
-        right: 0;
+        top: 50%;
+        right: 2px;
+        transform: translateY(-50%);
         z-index: 6;
         cursor: pointer;
         font-weight: 900;
@@ -272,7 +273,6 @@ def render_fullcalendar(
         display: flex;
         align-items: center;
         justify-content: center;
-        min-width: 20px;
         border-radius: 4px;
         background: rgba(255,255,255,0.30);
         text-shadow: 0 1px 1px rgba(0,0,0,0.35);
@@ -459,12 +459,12 @@ def render_fullcalendar(
                     menu.className = 'event-menu';
                     menu.innerText = '\\u22EE';
                     menu.title = 'Opcoes';
-                    // Tamanho proporcional a altura do agendamento, sempre clicavel
+                    // Proporcional a altura do agendamento e centralizado no quadradinho
                     var altura = info.el.offsetHeight || 24;
-                    var tamanho = Math.max(17, Math.min(26, Math.round(altura * 0.55)));
-                    menu.style.fontSize = tamanho + 'px';
-                    menu.style.height = Math.max(20, Math.min(30, altura - 2)) + 'px';
-                    menu.style.minWidth = Math.max(20, Math.round(tamanho * 1.15)) + 'px';
+                    var lado = Math.max(18, Math.min(30, Math.round(altura * 0.62)));
+                    menu.style.fontSize = Math.round(lado * 0.85) + 'px';
+                    menu.style.width = lado + 'px';
+                    menu.style.height = lado + 'px';
                     menu.onclick = function(e) {{
                         e.stopPropagation();
                         e.preventDefault();
