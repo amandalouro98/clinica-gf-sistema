@@ -239,7 +239,7 @@ def render_fullcalendar(
         padding: 1px 3px;
         box-shadow: 0 1px 2px rgba(0,0,0,0.15);
     }}
-    .fc .fc-event-title {{ font-weight: 600; white-space: normal !important; }}
+    .fc .fc-event-title {{ font-weight: 600; white-space: normal !important; padding-right: 20px; }}
     .fc .fc-event-time {{ font-size: 10px; opacity: 0.9; }}
     .fc .fc-col-header-cell-cushion {{ font-size: 12px; font-weight: 600; }}
     .fc .fc-timegrid-slot {{ height: 1.7em; }}
@@ -263,17 +263,21 @@ def render_fullcalendar(
     .event-menu {{
         position: absolute;
         top: 0;
-        right: 1px;
+        right: 0;
         z-index: 6;
         cursor: pointer;
-        font-weight: 700;
+        font-weight: 900;
         color: #fff;
         line-height: 1;
-        padding: 0 2px;
-        border-radius: 3px;
-        background: rgba(255,255,255,0.22);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 20px;
+        border-radius: 4px;
+        background: rgba(255,255,255,0.30);
+        text-shadow: 0 1px 1px rgba(0,0,0,0.35);
     }}
-    .event-menu:hover {{ background: rgba(255,255,255,0.55); }}
+    .event-menu:hover {{ background: rgba(255,255,255,0.65); }}
     #menu-flutuante {{
         position: fixed;
         display: none;
@@ -312,21 +316,74 @@ def render_fullcalendar(
     var events = {events_json};
     var headerToolbar = {toolbar_json};
 
-    function navigate(action, id, extra) {{
+    // ------------------------------------------------------------------
+    // Ponte com o Streamlit.
+    // Navegar por URL recarrega a pagina inteira e derruba o login, entao
+    // acionamos botoes ocultos que o Streamlit ja renderizou na pagina mae.
+    // ------------------------------------------------------------------
+    function docPai() {{
         try {{
-            var target = (window.parent && window.parent !== window) ? window.parent : window;
-            var url = new URL(target.location.href);
-            url.searchParams.set('agenda_action', action);
-            url.searchParams.set('agenda_id', id);
-            if (extra) {{
-                Object.keys(extra).forEach(function(k) {{
-                    url.searchParams.set(k, extra[k]);
-                }});
-            }}
-            target.location.href = url.toString();
+            return (window.parent && window.parent !== window) ? window.parent.document : document;
         }} catch (e) {{
-            console.error('Falha ao navegar:', e);
+            return null;
         }}
+    }}
+
+    function textoBotao(btn) {{
+        // innerText fica vazio em elemento oculto, entao usa textContent tambem
+        return ((btn.innerText || btn.textContent) || '').trim();
+    }}
+
+    function acharBotao(marcador) {{
+        var doc = docPai();
+        if (!doc) return null;
+        var botoes = doc.querySelectorAll('button');
+        for (var i = 0; i < botoes.length; i++) {{
+            if (textoBotao(botoes[i]) === marcador) return botoes[i];
+        }}
+        return null;
+    }}
+
+    function esconderPonte() {{
+        var doc = docPai();
+        if (!doc) return;
+        var botoes = doc.querySelectorAll('button');
+        for (var i = 0; i < botoes.length; i++) {{
+            var txt = textoBotao(botoes[i]);
+            if (txt.indexOf('agx-') === 0) {{
+                var caixa = botoes[i].closest('[data-testid="stElementContainer"]')
+                         || botoes[i].closest('[data-testid="element-container"]')
+                         || botoes[i].parentElement;
+                if (caixa) {{ caixa.style.display = 'none'; }}
+            }}
+        }}
+    }}
+
+    function acionar(action, id) {{
+        var btn = acharBotao('agx-' + action + '-' + id);
+        if (btn) {{ btn.click(); return true; }}
+        console.warn('Ponte nao encontrada para agx-' + action + '-' + id);
+        return false;
+    }}
+
+    function acionarMover(id, novaData, novaHora) {{
+        var doc = docPai();
+        var campo = doc ? doc.querySelector('input[aria-label="agx-payload"]') : null;
+        var btn = acharBotao('agx-move');
+        if (!campo || !btn) {{ return false; }}
+        try {{
+            var proto = (window.parent || window).HTMLInputElement.prototype;
+            var setter = Object.getOwnPropertyDescriptor(proto, 'value').set;
+            setter.call(campo, id + '|' + novaData + '|' + novaHora);
+            campo.dispatchEvent(new Event('input', {{ bubbles: true }}));
+            campo.dispatchEvent(new Event('change', {{ bubbles: true }}));
+            campo.blur();
+        }} catch (e) {{
+            console.error('Falha ao preencher payload:', e);
+            return false;
+        }}
+        setTimeout(function() {{ btn.click(); }}, 120);
+        return true;
     }}
 
     // Menu flutuante (3 pontinhos): Editar / Excluir
@@ -351,11 +408,11 @@ def render_fullcalendar(
     }}
 
     document.getElementById('menu-editar').onclick = function() {{
-        if (menuAlvoId) {{ navigate('edit', menuAlvoId); }}
+        if (menuAlvoId) {{ acionar('edit', menuAlvoId); }}
         fecharMenu();
     }};
     document.getElementById('menu-excluir').onclick = function() {{
-        if (menuAlvoId) {{ navigate('delete', menuAlvoId); }}
+        if (menuAlvoId) {{ acionar('delete', menuAlvoId); }}
         fecharMenu();
     }};
     document.addEventListener('click', fecharMenu);
@@ -402,10 +459,12 @@ def render_fullcalendar(
                     menu.className = 'event-menu';
                     menu.innerText = '\\u22EE';
                     menu.title = 'Opcoes';
-                    // Tamanho proporcional a altura do agendamento
-                    var altura = info.el.offsetHeight || 20;
-                    var tamanho = Math.max(10, Math.min(18, Math.round(altura * 0.42)));
+                    // Tamanho proporcional a altura do agendamento, sempre clicavel
+                    var altura = info.el.offsetHeight || 24;
+                    var tamanho = Math.max(17, Math.min(26, Math.round(altura * 0.55)));
                     menu.style.fontSize = tamanho + 'px';
+                    menu.style.height = Math.max(20, Math.min(30, altura - 2)) + 'px';
+                    menu.style.minWidth = Math.max(20, Math.round(tamanho * 1.15)) + 'px';
                     menu.onclick = function(e) {{
                         e.stopPropagation();
                         e.preventDefault();
@@ -417,7 +476,7 @@ def render_fullcalendar(
                 }},
                 eventClick: function(info) {{
                     if (info.jsEvent) {{ info.jsEvent.preventDefault(); }}
-                    navigate('edit', info.event.id);
+                    acionar('edit', info.event.id);
                 }},
                 eventDrop: function(info) {{
                     var s = info.event.start;
@@ -425,13 +484,19 @@ def render_fullcalendar(
                     var pad = function(n) {{ return (n < 10 ? '0' : '') + n; }};
                     var novaData = s.getFullYear() + '-' + pad(s.getMonth() + 1) + '-' + pad(s.getDate());
                     var novaHora = pad(s.getHours()) + ':' + pad(s.getMinutes());
-                    navigate('move', info.event.id, {{ new_date: novaData, new_time: novaHora }});
+                    if (!acionarMover(info.event.id, novaData, novaHora)) {{
+                        info.revert();
+                        alert('Nao foi possivel salvar o novo horario. Recarregue a pagina e tente de novo.');
+                    }}
                 }},
                 dateClick: function(info) {{
-                    navigate('new', '0', {{ date: info.dateStr.slice(0, 10) }});
+                    acionar('new', '0');
                 }}
             }});
             calendar.render();
+            esconderPonte();
+            setTimeout(esconderPonte, 400);
+            setTimeout(esconderPonte, 1200);
         }} catch (err) {{
             console.error(err);
             el.innerHTML = '<div class="fc-erro">Erro ao montar o calendario: '

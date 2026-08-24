@@ -1755,15 +1755,14 @@ def tela_agenda():
                 cor = _cor_final_agendamento(ag)
                 pacote_label = " 📦" if getattr(ag, "_tem_pacote", False) else ""
                 icone_conf = " ✅" if ag.confirmado else ""
-                _edit_url = f"?agenda_action=edit&agenda_id={ag.id}"
-                _menu_url = f"?agenda_action=menu&agenda_id={ag.id}"
 
                 _pos_total = series_map.get(ag.id)
                 _serie_badge = ""
                 if _pos_total and _pos_total[1] > 1:
                     _serie_badge = (
                         f'<span style="background:rgba(255,255,255,0.32);border-radius:5px;'
-                        f'padding:1px 6px;font-size:11px;font-weight:700;margin-left:6px;">'
+                        f'padding:1px 6px;font-size:11px;font-weight:700;margin-left:6px;'
+                        f'color:#fff !important;">'
                         f'{_pos_total[0]} de {_pos_total[1]}</span>'
                     )
 
@@ -1778,41 +1777,34 @@ def tela_agenda():
                         unsafe_allow_html=True,
                     )
 
-                col_caixa, col_conf = st.columns([7, 1])
+                col_caixa, col_menu, col_conf = st.columns([7, 1, 1])
 
                 with col_caixa:
                     st.markdown(
                         f"""
                         <div style="
                             background-color: {cor};
-                            color: #fff;
                             border-radius: 10px;
                             padding: 8px 10px;
                             margin-bottom: 8px;
                             font-family: sans-serif;
-                            position: relative;
                             box-shadow: 0 1px 3px rgba(74,48,48,0.12);
                         ">
-                            <div style="position:absolute;top:4px;right:6px;">
-                                <a href="{_menu_url}" title="Opções"
-                                   style="text-decoration:none;color:#fff;font-weight:700;
-                                          background:rgba(255,255,255,0.22);border-radius:4px;
-                                          padding:1px 6px;font-size:15px;line-height:1.1;
-                                          display:inline-block;">⋮</a>
+                            <div style="font-weight:600;font-size:14px;margin-bottom:1px;color:#fff !important;">
+                                {ag.hora_inicio}–{ag.hora_fim}{_serie_badge}
                             </div>
-                            <a href="{_edit_url}" style="text-decoration:none;color:#fff;display:block;
-                                                         padding-right:34px;cursor:pointer;">
-                                <div style="font-weight: 600; font-size: 14px; margin-bottom: 1px;">
-                                    {ag.hora_inicio}–{ag.hora_fim}{_serie_badge}
-                                </div>
-                                <div style="font-size: 13px; opacity: 0.95; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-                                    {ag.cliente_nome or 'N/A'}{pacote_label} — {ag.procedimento or ''} | {ag.profissional}{icone_conf}
-                                </div>
-                            </a>
+                            <div style="font-size:13px;color:#fff !important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                                {ag.cliente_nome or 'N/A'}{pacote_label} — {ag.procedimento or ''} | {ag.profissional}{icone_conf}
+                            </div>
                         </div>
                         """,
                         unsafe_allow_html=True,
                     )
+
+                with col_menu:
+                    if st.button("⋮", key=f"lst_menu_{ag.id}", help="Editar ou excluir"):
+                        st.session_state["ag_menu_id"] = ag.id
+                        st.rerun()
 
                 with col_conf:
                     if not ag.confirmado:
@@ -2059,6 +2051,50 @@ def tela_agenda():
                 fc_view = "dayGridMonth"
 
             data_inicial = dias[0].strftime("%Y-%m-%d") if dias else _hoje().strftime("%Y-%m-%d")
+
+            # ── Ponte de ações da grade ──
+            # A grade roda dentro de um iframe. Navegar por URL recarregaria a
+            # página e derrubaria o login, então o iframe aciona estes botões
+            # ocultos, mantendo a sessão viva.
+            try:
+                _ponte = st.container(key="agx_ponte")
+            except TypeError:
+                _ponte = st.container()
+            st.markdown(
+                "<style>.st-key-agx_ponte { display:none !important; }</style>",
+                unsafe_allow_html=True,
+            )
+
+            with _ponte:
+                for _ag_p in ags_periodo:
+                    if st.button(f"agx-edit-{_ag_p.id}", key=f"agx_edit_{_ag_p.id}"):
+                        st.session_state["ag_popup_edit_id"] = _ag_p.id
+                        st.rerun()
+                    if st.button(f"agx-delete-{_ag_p.id}", key=f"agx_del_{_ag_p.id}"):
+                        st.session_state["ag_excluir_id"] = _ag_p.id
+                        st.rerun()
+
+                if st.button("agx-new-0", key="agx_novo"):
+                    st.session_state["ag_abrir_novo_popup"] = True
+                    st.rerun()
+
+                _payload = st.text_input("agx-payload", value="", key="agx_payload")
+                if st.button("agx-move", key="agx_move"):
+                    try:
+                        _pid, _pdata, _phora = (_payload or "").split("|")
+                        _ag_mv = db.get(ScheduledAppointment, int(_pid))
+                        if _ag_mv:
+                            _ag_mv.data = datetime.strptime(_pdata, "%Y-%m-%d").date()
+                            _ag_mv.hora_inicio = _phora
+                            _ag_mv.hora_fim = calcular_hora_fim(_phora, _ag_mv.duracao_min or 60)
+                            db.commit()
+                            st.toast(
+                                f"{_ag_mv.cliente_nome or 'Agendamento'} movido para "
+                                f"{_ag_mv.data.strftime('%d/%m')} às {_phora}"
+                            )
+                    except Exception as _e:
+                        st.warning(f"Não foi possível mover o agendamento: {_e}")
+                    st.rerun()
 
             # Separa Gabi (coluna direita) dos demais (coluna esquerda)
             def _eh_gabi(ag):
