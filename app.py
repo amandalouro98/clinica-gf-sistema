@@ -5881,18 +5881,11 @@ def tela_pacotes():
         _nomes_procs = ["— digitar manualmente —"] + [p.nome for p in _procs_cadastrados]
         _mapa_procs = {p.nome: p for p in _procs_cadastrados}
 
-        col1, col2 = st.columns(2)
-        with col1:
-            proc_selecionado = st.selectbox("Procedimento cadastrado", _nomes_procs, key="pacote_proc_sel")
-        with col2:
-            data_compra = st.date_input("Data da compra", value=_hoje(), key="pacote_data", format="DD/MM/YYYY")
+        proc_selecionado = st.selectbox("Procedimento cadastrado", _nomes_procs, key="pacote_proc_sel")
 
-        _val_default = 0.0
         _sessoes_default = 1
         if proc_selecionado != "— digitar manualmente —" and proc_selecionado in _mapa_procs:
-            _p_ref = _mapa_procs[proc_selecionado]
-            _val_default = _p_ref.valor_pacote or _p_ref.valor_unitario or 0.0
-            _sessoes_default = _p_ref.sessoes_pacote or 1
+            _sessoes_default = _mapa_procs[proc_selecionado].sessoes_pacote or 1
 
         if proc_selecionado == "— digitar manualmente —":
             procedimento = st.text_input("Procedimento*", key="pacote_proc")
@@ -5900,38 +5893,33 @@ def tela_pacotes():
             procedimento = proc_selecionado
             st.text_input("Procedimento*", value=proc_selecionado, disabled=True, key="pacote_proc_show")
 
-        col5, col6, col7 = st.columns(3)
-        with col5:
-            sessoes_total = st.number_input("Qtd. sessões do pacote*", min_value=1, step=1, value=_sessoes_default, key="pacote_sessoes")
-        with col6:
-            sessoes_usadas = st.number_input("Sessão atual (já realizadas)", min_value=0, step=1, value=0, key="pacote_usadas")
-        with col7:
-            pagamento = st.selectbox("Forma de pagamento*", ["Cartão de Crédito", "Cartão de Débito", "Pix", "Dinheiro"], key="pacote_pag")
+        col1, col2 = st.columns(2)
+        with col1:
+            sessoes_total = st.number_input("Pacote (qtd. sessões)*", min_value=1, step=1, value=_sessoes_default, key="pacote_sessoes")
+        with col2:
+            sessoes_usadas = st.number_input("Sessão atual (realizadas)*", min_value=0, step=1, value=0, key="pacote_usadas")
 
-        col8, col9 = st.columns(2)
-        with col8:
-            data_inicio = st.date_input("Data de início", value=_hoje(), key="pacote_data_inicio", format="DD/MM/YYYY")
-        with col9:
-            st.date_input("Data de término", value=None, disabled=True, key="pacote_data_termino", format="DD/MM/YYYY")
-            st.caption("Calculada automaticamente pela última sessão agendada.")
-
-        obs_pacote = st.text_input("Observações (opcional)", key="pacote_obs")
+        col3, col4 = st.columns(2)
+        with col3:
+            data_inicio = st.date_input("Data início", value=_hoje(), key="pacote_data_inicio", format="DD/MM/YYYY")
+        with col4:
+            st.date_input("Data fim", value=None, disabled=True, key="pacote_data_termino", format="DD/MM/YYYY")
+            st.caption("Calculada pela última sessão agendada.")
 
         if st.button("💾 Salvar Pacote", use_container_width=True, type="primary", key="btn_salvar_pacote"):
             if not pacote_cliente_id:
                 st.error("Selecione a cliente.")
             elif not procedimento.strip():
                 st.error("Informe o procedimento.")
-            # Valor é opcional (padrão zero para planilha de pacotes)
             elif sessoes_usadas > sessoes_total:
                 st.error("Sessões realizadas não pode ser maior que o total.")
             else:
                 novo_sale = Sale(
                     cliente_id=pacote_cliente_id,
-                    data_venda=data_compra,
-                    forma_pagamento=pagamento,
-                    valor_total=valor_total,
-                    observacoes=obs_pacote or None,
+                    data_venda=data_inicio,
+                    forma_pagamento="Não informado",
+                    valor_total=0.0,
+                    observacoes=None,
                 )
                 db.add(novo_sale)
                 db.flush()
@@ -5982,17 +5970,12 @@ def tela_pacotes():
                 inicio_str = item.data_inicio.strftime("%d/%m/%Y") if item.data_inicio else "—"
                 dados.append({
                     "Selecionar": False,
-                    "Data": v.data_venda.strftime("%d/%m/%Y") if v and v.data_venda else "—",
-                    "Cliente": c.nome if c else "—",
+                    "Paciente": c.nome if c else "—",
                     "Procedimento": item.procedimento or "—",
-                    "Qtd. sessões": item.sessoes_total,
+                    "Pacote": item.sessoes_total,
                     "Sessão atual": item.sessoes_usadas,
-                    "Sessões restantes": restantes,
-                    "Data de início": inicio_str,
-                    "Data de término": termino_str,
-                    "Status": status,
-                    "Pagamento": v.forma_pagamento or "—" if v else "—",
-                    "Observação": v.observacoes or "—" if v else "—",
+                    "Data início": inicio_str,
+                    "Data fim": termino_str,
                 })
 
             df_pacotes = pd.DataFrame(dados)
@@ -6003,7 +5986,7 @@ def tela_pacotes():
                 column_config={
                     "Selecionar": st.column_config.CheckboxColumn("Selecionar", default=False),
                 },
-                disabled=["Data", "Cliente", "Procedimento", "Qtd. sessões", "Sessão atual", "Sessões restantes", "Data de início", "Data de término", "Status", "Pagamento", "Observação"],
+                disabled=["Paciente", "Procedimento", "Pacote", "Sessão atual", "Data início", "Data fim"],
                 key="pacotes_editor",
             )
 
@@ -6042,34 +6025,23 @@ def tela_pacotes():
                             return
 
                         venda_ed = item_ed.venda
-                        st.markdown(f"**Cliente:** {venda_ed.cliente.nome if venda_ed.cliente else '—'}")
+                        st.markdown(f"**Paciente:** {venda_ed.cliente.nome if venda_ed.cliente else '—'}")
 
-                        _ed_data = st.date_input("Data da compra", value=venda_ed.data_venda, format="DD/MM/YYYY", key="dlg_ed_pacote_data")
-                        _ed_pag = st.selectbox(
-                            "Forma de pagamento",
-                            ["Cartão de Crédito", "Cartão de Débito", "Pix", "Dinheiro"],
-                            index=["Cartão de Crédito", "Cartão de Débito", "Pix", "Dinheiro"].index(venda_ed.forma_pagamento)
-                            if venda_ed.forma_pagamento in ["Cartão de Crédito", "Cartão de Débito", "Pix", "Dinheiro"] else 0,
-                            key="dlg_ed_pacote_pag",
-                        )
                         _ed_proc = st.text_input("Procedimento", value=item_ed.procedimento or "", key="dlg_ed_pacote_proc")
-                        col_a, col_b, col_c = st.columns(3)
+                        col_a, col_b = st.columns(2)
                         with col_a:
-                            _ed_total = st.number_input("Qtd. sessões do pacote", min_value=1, step=1, value=item_ed.sessoes_total, key="dlg_ed_pacote_total")
+                            _ed_total = st.number_input("Pacote (qtd. sessões)", min_value=1, step=1, value=item_ed.sessoes_total, key="dlg_ed_pacote_total")
                         with col_b:
-                            _ed_usadas = st.number_input("Sessão atual (já realizadas)", min_value=0, step=1, value=item_ed.sessoes_usadas, key="dlg_ed_pacote_usadas")
-                        # Valor não é exibido (sempre zero)
+                            _ed_usadas = st.number_input("Sessão atual (realizadas)", min_value=0, step=1, value=item_ed.sessoes_usadas, key="dlg_ed_pacote_usadas")
 
                         col_d, col_e = st.columns(2)
                         with col_d:
-                            _ed_data_inicio = st.date_input("Data de início", value=item_ed.data_inicio, format="DD/MM/YYYY", key="dlg_ed_pacote_inicio")
+                            _ed_data_inicio = st.date_input("Data início", value=item_ed.data_inicio, format="DD/MM/YYYY", key="dlg_ed_pacote_inicio")
                         with col_e:
                             termino_calculado = item_ed.data_termino_calculada
                             termino_display = termino_calculado if termino_calculado else item_ed.data_termino
-                            st.date_input("Data de término", value=termino_display, disabled=True, format="DD/MM/YYYY", key="dlg_ed_pacote_termino")
+                            st.date_input("Data fim", value=termino_display, disabled=True, format="DD/MM/YYYY", key="dlg_ed_pacote_termino")
                             st.caption("Calculada pela última sessão agendada.")
-
-                        _ed_obs = st.text_input("Observações", value=venda_ed.observacoes or "", key="dlg_ed_pacote_obs")
 
                         # Histórico de usos
                         usos = db_ed.query(SessionUsage).filter(SessionUsage.sale_item_id == item_ed.id).order_by(SessionUsage.data_uso.desc()).all()
@@ -6087,9 +6059,9 @@ def tela_pacotes():
                                 elif _ed_usadas < item_ed.sessoes_usadas:
                                     st.error(f"Não é possível reduzir sessões realizadas abaixo de {item_ed.sessoes_usadas} (já usadas no sistema).")
                                 else:
-                                    venda_ed.data_venda = _ed_data
-                                    venda_ed.forma_pagamento = _ed_pag
-                                    venda_ed.observacoes = _ed_obs or None
+                                    venda_ed.data_venda = _ed_data_inicio
+                                    venda_ed.forma_pagamento = "Não informado"
+                                    venda_ed.observacoes = None
                                     item_ed.procedimento = _ed_proc.strip()
                                     item_ed.sessoes_total = int(_ed_total)
                                     item_ed.sessoes_usadas = int(_ed_usadas)
