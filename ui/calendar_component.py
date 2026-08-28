@@ -593,19 +593,22 @@ def agenda_to_events(agendamentos, nomes_prof=None, series_map=None, cores_prof=
                 titulo_evento = f"{_nome_ev} | {_proc_ev}"
             else:
                 titulo_evento = _nome_ev or _proc_ev or "Sem titulo"
-            serie_label = ""
-            posicao_total = series_map.get(ag.id)
-            if posicao_total:
-                pos, total = posicao_total
-                if total > 1:
-                    serie_label = f"{pos} de {total}"
-                    titulo_evento = f"{titulo_evento} ({serie_label})"
-
             _pre = bool(getattr(ag, "pre_agendamento", False))
+
+            serie_label = ""
             if _pre:
-                # Pré-agendamento de renovação: cinza claro, sem cor do profissional
-                titulo_evento = f"⏳ {titulo_evento}"
+                # Reserva de horário para renovação: não recebe numeração,
+                # porque essa sessão ainda não foi vendida.
+                serie_label = "reserva p/ renovação"
+                titulo_evento = f"⏳ {titulo_evento} (reserva)"
                 cor = "#D9D9D9"
+            else:
+                posicao_total = series_map.get(ag.id)
+                if posicao_total:
+                    pos, total = posicao_total
+                    if total > 1:
+                        serie_label = f"{pos} de {total}"
+                        titulo_evento = f"{titulo_evento} ({serie_label})"
 
             events.append({
                 "id": str(ag.id),

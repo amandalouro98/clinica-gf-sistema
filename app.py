@@ -584,11 +584,29 @@ def _mapa_series_recorrencia(db, agendamentos):
 
     for ag_ref in chaves.values():
         serie = _agendamentos_mesma_recorrencia(db, ag_ref)
-        total = len(serie)
+        # Pré-agendamento é apenas reserva de horário (não foi vendido),
+        # então fica fora da contagem "1 de 5".
+        efetivos = [a for a in serie if not getattr(a, "pre_agendamento", False)]
+        total = len(efetivos)
+
+        # Quando a série está ligada a um pacote, o total é o que foi contratado
+        _item_id = next(
+            (getattr(a, "sale_item_id", None) for a in efetivos
+             if getattr(a, "sale_item_id", None)), None
+        )
+        if _item_id:
+            try:
+                from models.sale import SaleItem
+                _item = db.get(SaleItem, _item_id)
+                if _item and (_item.sessoes_total or 0) > 0:
+                    total = int(_item.sessoes_total)
+            except Exception:
+                pass
+
         if total <= 1:
             continue
-        for posicao, item in enumerate(serie, start=1):
-            mapa[item.id] = (posicao, total)
+        for posicao, item in enumerate(efetivos, start=1):
+            mapa[item.id] = (min(posicao, total), total)
     return mapa
 
 
@@ -1962,11 +1980,20 @@ def tela_agenda():
                 _box_lista = st.container()
             for ag in sorted(ags_periodo, key=lambda x: (x.data, x.hora_inicio)):
                 cor = _cor_final_agendamento(ag, cores_prof=cores_prof_normalizado, cores_sala=cores_sala_normalizado)
+                _pre_ag = bool(getattr(ag, "pre_agendamento", False))
+                if _pre_ag:
+                    cor = "#D9D9D9"
                 pacote_label = " 📦" if getattr(ag, "_tem_pacote", False) else ""
                 icone_conf = " ✅" if ag.confirmado else ""
 
-                _pos_total = series_map.get(ag.id)
+                _pos_total = None if _pre_ag else series_map.get(ag.id)
                 _serie_badge = ""
+                if _pre_ag:
+                    _serie_badge = (
+                        '<span style="background:rgba(0,0,0,0.12);border-radius:5px;'
+                        'padding:1px 6px;font-size:11px;font-weight:700;margin-left:6px;'
+                        'color:#5a5a5a;">reserva</span>'
+                    )
                 if _pos_total and _pos_total[1] > 1:
                     _serie_badge = (
                         f'<span style="background:rgba(255,255,255,0.32);border-radius:5px;'
@@ -2369,14 +2396,39 @@ def tela_agenda():
                         _serie_ed = _agendamentos_mesma_recorrencia(_db2, _ag2)
                         _tem_serie = len(_serie_ed) > 1
                         _escopo = "Somente este agendamento"
-                        if _tem_serie:
+                        if bool(getattr(_ag2, "pre_agendamento", False)):
+                            st.warning(
+                                "⏳ **Reserva para renovação** — este horário está apenas "
+                                "guardado para a cliente. Não faz parte do pacote vendido "
+                                "e não conta sessão."
+                            )
+                        elif _tem_serie:
+                            # A numeração usa o total do pacote contratado e ignora
+                            # as reservas de renovação (que ainda não foram vendidas).
+                            _efetivos_ed = [
+                                _it for _it in _serie_ed
+                                if not getattr(_it, "pre_agendamento", False)
+                            ]
+                            _total_ed = len(_efetivos_ed)
+                            _item_ed = getattr(_ag2, "sale_item_id", None) or next(
+                                (getattr(_it, "sale_item_id", None) for _it in _efetivos_ed
+                                 if getattr(_it, "sale_item_id", None)), None
+                            )
+                            if _item_ed:
+                                try:
+                                    from models.sale import SaleItem as _SI
+                                    _si = _db2.get(_SI, _item_ed)
+                                    if _si and (_si.sessoes_total or 0) > 0:
+                                        _total_ed = int(_si.sessoes_total)
+                                except Exception:
+                                    pass
                             _pos_ed = next(
-                                (i for i, _it in enumerate(_serie_ed, start=1) if _it.id == _ag2.id),
+                                (i for i, _it in enumerate(_efetivos_ed, start=1) if _it.id == _ag2.id),
                                 None,
                             )
-                            if _pos_ed:
+                            if _pos_ed and _total_ed > 1:
                                 st.info(
-                                    f"Recorrência — ocorrência **{_pos_ed} de {len(_serie_ed)}**"
+                                    f"Recorrência — sessão **{min(_pos_ed, _total_ed)} de {_total_ed}**"
                                 )
                             _escopo = st.radio(
                                 "O que deseja alterar?",
