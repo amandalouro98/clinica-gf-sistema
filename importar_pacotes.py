@@ -133,6 +133,7 @@ def importar_pacotes(caminho_xlsx: str, data_compra: date = None, limpar_antigos
             print(f"Clientes não encontrados ({len(nao_encontrados)}):")
             for nome in nao_encontrados:
                 print(f"  - {nome}")
+        print(f"\nTotal no banco após importação: {db.query(SaleItem).filter(SaleItem.tipo == 'pacote').count()} pacotes")
     except Exception as e:
         db.rollback()
         print(f"\n[ERRO] Importação cancelada: {e}")
