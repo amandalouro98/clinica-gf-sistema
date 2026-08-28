@@ -45,7 +45,7 @@ def _parse_sessao_atual(valor, total):
         return 0
 
 
-def importar_pacotes(caminho_xlsx: str, data_compra: date = None):
+def importar_pacotes(caminho_xlsx: str, data_compra: date = None, limpar_antigos: bool = True):
     data_compra = data_compra or date.today()
 
     df = pd.read_excel(caminho_xlsx)
@@ -53,6 +53,16 @@ def importar_pacotes(caminho_xlsx: str, data_compra: date = None):
 
     db = SessionLocal()
     try:
+        if limpar_antigos:
+            antigos = db.query(SaleItem).filter(SaleItem.tipo == "pacote").all()
+            for item in antigos:
+                if item.venda:
+                    db.delete(item.venda)
+                else:
+                    db.delete(item)
+            db.commit()
+            print(f"[LIMPO] {len(antigos)} pacote(s) antigo(s) removido(s).")
+
         clientes = db.query(Client).all()
         mapa_clientes = {}
         for c in clientes:
@@ -85,18 +95,6 @@ def importar_pacotes(caminho_xlsx: str, data_compra: date = None):
 
             if not cliente:
                 nao_encontrados.append(nome_raw)
-                continue
-
-            # Verifica se já existe pacote idêntico para evitar duplicar
-            existente = db.query(SaleItem).join(Sale).filter(
-                Sale.cliente_id == cliente.id,
-                SaleItem.procedimento.ilike(procedimento),
-                SaleItem.sessoes_total == total,
-                SaleItem.tipo == "pacote",
-            ).first()
-            if existente:
-                print(f"[IGNORADO - JÁ EXISTE] {nome_raw} - {procedimento} ({total}x)")
-                ignorados += 1
                 continue
 
             sale = Sale(

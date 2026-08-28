@@ -5902,7 +5902,7 @@ def tela_pacotes():
                 procedimento = proc_selecionado
                 st.text_input("Procedimento*", value=proc_selecionado, disabled=True, key="pacote_proc_show")
         with col4:
-            valor_total = st.number_input("Valor total (R$)*", min_value=0.0, step=0.01, value=_val_default, key="pacote_valor")
+            valor_total = st.number_input("Valor total (R$)", min_value=0.0, step=0.01, value=0.0, key="pacote_valor")
 
         col5, col6, col7 = st.columns(3)
         with col5:
@@ -5926,8 +5926,7 @@ def tela_pacotes():
                 st.error("Selecione a cliente.")
             elif not procedimento.strip():
                 st.error("Informe o procedimento.")
-            elif valor_total <= 0:
-                st.error("Informe um valor maior que zero.")
+            # Valor é opcional (padrão zero para planilha de pacotes)
             elif sessoes_usadas > sessoes_total:
                 st.error("Sessões realizadas não pode ser maior que o total.")
             else:
@@ -6065,7 +6064,7 @@ def tela_pacotes():
                         with col_b:
                             _ed_usadas = st.number_input("Sessão atual (já realizadas)", min_value=0, step=1, value=item_ed.sessoes_usadas, key="dlg_ed_pacote_usadas")
                         with col_c:
-                            _ed_valor = st.number_input("Valor total (R$)", min_value=0.0, step=0.01, value=item_ed.valor, key="dlg_ed_pacote_valor")
+                            _ed_valor = st.number_input("Valor total (R$)", min_value=0.0, step=0.01, value=float(item_ed.valor or 0.0), key="dlg_ed_pacote_valor")
 
                         col_d, col_e = st.columns(2)
                         with col_d:
