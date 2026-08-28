@@ -640,6 +640,42 @@ def _repor_ocorrencia_serie(db, serie, ag_removido):
     return nova
 
 
+def sincronizar_datas_pacote(db, sale_item_id):
+    """Recalcula data de inicio/termino do pacote a partir dos agendamentos.
+
+    Chamado ao criar, editar, arrastar ou excluir um agendamento vinculado a
+    um pacote, para que a aba Pacotes reflita sempre a agenda real.
+    """
+    if not sale_item_id:
+        return
+    try:
+        from models.sale import SaleItem
+        item = db.get(SaleItem, int(sale_item_id))
+        if not item:
+            return
+        datas = [
+            a.data for a in db.query(ScheduledAppointment).filter(
+                ScheduledAppointment.sale_item_id == item.id,
+                ScheduledAppointment.pre_agendamento == False,  # noqa: E712
+            ).all() if a.data
+        ]
+        if datas:
+            item.data_inicio = min(datas)
+            item.data_termino = max(datas)
+            db.commit()
+    except Exception:
+        db.rollback()
+
+
+def meses_a_frente(data_base, meses):
+    """Retorna a data deslocada em N meses, sem depender de dateutil."""
+    ano = data_base.year + (data_base.month - 1 + meses) // 12
+    mes = (data_base.month - 1 + meses) % 12 + 1
+    dia = min(data_base.day, [31, 29 if ano % 4 == 0 and (ano % 100 != 0 or ano % 400 == 0) else 28,
+                              31, 30, 31, 30, 31, 31, 30, 31, 30, 31][mes - 1])
+    return date(ano, mes, dia)
+
+
 # ====== LOGIN ======
 def login_screen():
     # Espaço superior
@@ -1542,30 +1578,37 @@ def tela_agenda():
 
                     obs_dlg = st.text_area("Observações", key="dlg_ag_obs", height=100)
 
-                    recorrente_dlg = st.checkbox("Recorrência", key="dlg_ag_recorrente")
-                    pre_ag_dlg = 0
-                    if st.session_state.get("dlg_ag_pacote_item_id"):
-                        if st.checkbox(
-                            "Reservar horários extras para renovação (pré-agendamento)",
-                            key="dlg_ag_pre_renov",
-                            help="Mantém a mesma recorrência além do pacote atual. "
-                                 "Aparecem em transparência e não contam sessão.",
-                        ):
-                            pre_ag_dlg = int(st.number_input(
-                                "Quantos pré-agendamentos?",
-                                min_value=1, max_value=24, value=4, step=1,
-                                key="dlg_ag_pre_qtd",
-                            ))
-                    if recorrente_dlg:
+                    _restam_dlg = int(st.session_state.get("dlg_ag_pkg_restam") or 0)
+                    if st.session_state.get("dlg_ag_pacote_item_id") and _restam_dlg > 0:
+                        # Pacote selecionado: a quantidade de agendamentos vem
+                        # das sessões restantes; o pré-agendamento de renovação
+                        # (3 meses) é criado automaticamente.
                         tipo_rec_dlg = st.selectbox(
-                            "Tipo de recorrência",
-                            ["Semanal", "Quinzenal", "Mensal", "Bimestral", "Trimestral", "Semestral"],
-                            key="dlg_ag_tipo_recorrencia"
+                            "Recorrência do pacote",
+                            ["Semanal", "Quinzenal", "Mensal"],
+                            key="dlg_ag_tipo_recorrencia",
                         )
-                        num_rep_dlg = st.number_input("Quantas vezes?", min_value=2, max_value=52, value=4, step=1, key="dlg_ag_num_repeticoes")
+                        num_rep_dlg = _restam_dlg
+                        pre_ag_dlg = -1  # -1 = preencher 3 meses automaticamente
+                        st.caption(
+                            f"Serão criados **{_restam_dlg}** agendamentos "
+                            f"({tipo_rec_dlg.lower()}) para fechar o pacote, mais "
+                            "**3 meses** de pré-agendamento em cinza claro para "
+                            "possível renovação."
+                        )
                     else:
-                        tipo_rec_dlg = None
-                        num_rep_dlg = 1
+                        pre_ag_dlg = 0
+                        recorrente_dlg = st.checkbox("Recorrência", key="dlg_ag_recorrente")
+                        if recorrente_dlg:
+                            tipo_rec_dlg = st.selectbox(
+                                "Tipo de recorrência",
+                                ["Semanal", "Quinzenal", "Mensal", "Bimestral", "Trimestral", "Semestral"],
+                                key="dlg_ag_tipo_recorrencia"
+                            )
+                            num_rep_dlg = st.number_input("Quantas vezes?", min_value=2, max_value=52, value=4, step=1, key="dlg_ag_num_repeticoes")
+                        else:
+                            tipo_rec_dlg = None
+                            num_rep_dlg = 1
 
                     col_salvar_cli, col_cancelar_cli = st.columns(2)
                     with col_salvar_cli:
@@ -1714,11 +1757,21 @@ def tela_agenda():
                     _criar(data_ag + timedelta(days=_passo * _i), _pre=False)
 
                 # Pré-agendamento: mantém a recorrência além do pacote, em
-                # transparência, para a cliente ter prioridade se renovar.
-                for _j in range(int(qtd_pre_agendamentos or 0)):
-                    _criar(data_ag + timedelta(days=_passo * (_total_rep + _j)), _pre=True)
+                # cinza claro, para a cliente ter prioridade se renovar.
+                _ultima = data_ag + timedelta(days=_passo * (_total_rep - 1))
+                if int(qtd_pre_agendamentos or 0) == -1:
+                    # Automático: preenche 3 meses após o fim do pacote
+                    _limite = meses_a_frente(_ultima, 3)
+                    _prox = _ultima + timedelta(days=_passo)
+                    while _prox <= _limite:
+                        _criar(_prox, _pre=True)
+                        _prox = _prox + timedelta(days=_passo)
+                else:
+                    for _j in range(int(qtd_pre_agendamentos or 0)):
+                        _criar(_ultima + timedelta(days=_passo * (_j + 1)), _pre=True)
 
                 db_save.commit()
+                sincronizar_datas_pacote(db_save, _pacote_item_id)
             except Exception as _err_save:
                 db_save.rollback()
                 st.error(f"Erro ao salvar agendamento: {_err_save}")
@@ -2118,8 +2171,10 @@ def tela_agenda():
                                         _nova_ocorrencia = _repor_ocorrencia_serie(db, _serie, _ag_del)
                                     except Exception:
                                         _nova_ocorrencia = None
+                                _pkg_sync = getattr(_ag_del, "sale_item_id", None)
                                 db.delete(_ag_del)
                                 db.commit()
+                                sincronizar_datas_pacote(db, _pkg_sync)
                                 if _nova_ocorrencia is not None:
                                     st.toast(
                                         "Sessão reposta em "
@@ -2149,9 +2204,14 @@ def tela_agenda():
                                     db.commit()
                                 except Exception:
                                     pass
+                                _pkg_sync = next(
+                                    (getattr(_a, "sale_item_id", None) for _a in _serie
+                                     if getattr(_a, "sale_item_id", None)), None
+                                )
                                 for _ag_item in _serie:
                                     db.delete(_ag_item)
                                 db.commit()
+                                sincronizar_datas_pacote(db, _pkg_sync)
                                 st.session_state.pop("ag_excluir_id", None)
                                 st.rerun()
                         with col_canc:
@@ -2181,8 +2241,10 @@ def tela_agenda():
                                     db.commit()
                                 except Exception:
                                     pass
+                                _pkg_sync = getattr(_ag_del, "sale_item_id", None)
                                 db.delete(_ag_del)
                                 db.commit()
+                                sincronizar_datas_pacote(db, _pkg_sync)
                                 st.session_state.pop("ag_excluir_id", None)
                                 st.rerun()
                         with col_canc2:
@@ -2249,6 +2311,7 @@ def tela_agenda():
                         _ag_mv.hora_inicio = _phora
                         _ag_mv.hora_fim = calcular_hora_fim(_phora, _ag_mv.duracao_min or 60)
                         db.commit()
+                        sincronizar_datas_pacote(db, getattr(_ag_mv, "sale_item_id", None))
                         try:
                             _ulog = st.session_state.get("user", {}) or {}
                             db.add(AgendaLog(
@@ -2393,6 +2456,10 @@ def tela_agenda():
                                     _alvo.cor_profissional = _nova_cor
 
                                 _db2.commit()
+                                # Remarcou: a aba Pacotes acompanha a nova data
+                                sincronizar_datas_pacote(
+                                    _db2, getattr(_ag2, "sale_item_id", None)
+                                )
                                 if len(_alvos) > 1:
                                     st.toast(f"{len(_alvos)} agendamentos atualizados")
                                 st.session_state.pop("ag_popup_edit_id", None)

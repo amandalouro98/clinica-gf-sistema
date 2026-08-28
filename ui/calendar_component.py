@@ -268,7 +268,8 @@ def render_fullcalendar(
         box-shadow: 0 1px 2px rgba(0,0,0,0.15);
     }}
     .fc .fc-event-title {{ font-weight: 600; white-space: normal !important; padding-right: 26px; }}
-    .fc .ag-pre {{ opacity: 0.45 !important; border-style: dashed !important; border-width: 2px !important; }}
+    .fc .ag-pre {{ background: #D9D9D9 !important; border: 1px dashed #A6A6A6 !important; }}
+    .fc .ag-pre .fc-event-title, .fc .ag-pre .fc-event-time {{ color: #6B6B6B !important; }}
     .fc .fc-event-time {{ font-size: 10px; opacity: 0.9; }}
     .fc .fc-col-header-cell-cushion {{ font-size: 12px; font-weight: 600; }}
     .fc .fc-timegrid-slot {{ height: 1.7em; }}
@@ -602,7 +603,9 @@ def agenda_to_events(agendamentos, nomes_prof=None, series_map=None, cores_prof=
 
             _pre = bool(getattr(ag, "pre_agendamento", False))
             if _pre:
+                # Pré-agendamento de renovação: cinza claro, sem cor do profissional
                 titulo_evento = f"⏳ {titulo_evento}"
+                cor = "#D9D9D9"
 
             events.append({
                 "id": str(ag.id),
@@ -611,7 +614,7 @@ def agenda_to_events(agendamentos, nomes_prof=None, series_map=None, cores_prof=
                 "end": fim_dt.strftime("%Y-%m-%dT%H:%M:%S"),
                 "backgroundColor": cor,
                 "borderColor": cor,
-                "textColor": "#ffffff",
+                "textColor": "#6B6B6B" if _pre else "#ffffff",
                 "classNames": ["ag-pre"] if _pre else [],
                 "extendedProps": {
                     "profissional": ag.profissional or "",
