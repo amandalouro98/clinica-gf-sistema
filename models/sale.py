@@ -28,6 +28,8 @@ class SaleItem(Base):
     sessoes_total = Column(Integer, nullable=False, default=1)
     sessoes_usadas = Column(Integer, nullable=False, default=0)
     valor = Column(Float, nullable=False, default=0.0)
+    data_inicio = Column(Date, nullable=True)
+    data_termino = Column(Date, nullable=True)
 
     venda = relationship("Sale", back_populates="itens")
     usos = relationship("SessionUsage", back_populates="item", cascade="all, delete-orphan")
@@ -35,6 +37,13 @@ class SaleItem(Base):
     @property
     def sessoes_restantes(self):
         return self.sessoes_total - self.sessoes_usadas
+
+    @property
+    def data_termino_calculada(self):
+        """Retorna a data da última sessão utilizada, se houver."""
+        if self.usos:
+            return max(u.data_uso for u in self.usos if u.data_uso)
+        return self.data_termino
 
 
 class SessionUsage(Base):

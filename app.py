@@ -896,7 +896,7 @@ def sidebar_menu():
         if perfil == "admin":
             # Admin vê tudo
             gestao_itens = [
-                ("💳", "Vendas", "Vendas"),
+                ("📦", "Pacotes", "Pacotes"),
                 ("📦", "Estoque", "Estoque"),
                 ("📊", "Relatórios", "Relatórios"),
                 ("📝", "Contratos", "Contratos"),
@@ -906,13 +906,13 @@ def sidebar_menu():
         elif perfil == "recepcao":
             # Recepção não vê Relatórios
             gestao_itens = [
-                ("💳", "Vendas", "Vendas"),
+                ("📦", "Pacotes", "Pacotes"),
                 ("📦", "Estoque", "Estoque"),
                 ("📝", "Contratos", "Contratos"),
                 ("🗂️", "Cadastros", "Cadastros"),
             ]
         elif perfil == "profissional":
-            # Profissional não vê Vendas, Relatórios, Usuários
+            # Profissional não vê Pacotes, Relatórios, Usuários
             gestao_itens = [
                 ("📦", "Estoque", "Estoque"),
                 ("📝", "Contratos", "Contratos"),
@@ -5379,7 +5379,7 @@ def tela_relatorios():
         _data_hoje = _hoje()
         _ini_mes = _data_hoje.replace(day=1)
         aba_analise, aba_vendas, aba_estoque, aba_clientes = st.tabs([
-            "📊 Análise Geral", "💰 Vendas", "📦 Estoque", "👤 Clientes"
+            "📊 Análise Geral", "📦 Pacotes", "📦 Estoque", "👤 Clientes"
         ])
 
         # ══════════════════════════════════════════
@@ -5411,7 +5411,7 @@ def tela_relatorios():
             cv1, cv2, cv3, cv4 = st.columns(4)
             cv1.metric("Atendimentos no período", _n_at)
             cv2.metric("Total de clientes", _n_cli)
-            cv3.metric("Vendas no período", _n_vendas)
+            cv3.metric("Pacotes no período", _n_vendas)
             cv4.metric("Receita no período", f"R$ {_val_vendas:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
 
             st.markdown("---")
@@ -5459,11 +5459,11 @@ def tela_relatorios():
                 if not _df_v.empty:
                     _df_v["mes"] = pd.to_datetime(_df_v["data_venda"], errors="coerce").dt.strftime("%Y-%m")
                     _vg = _df_v.groupby("mes").agg(
-                        Vendas=("id", "count"), Valor=("valor_total", "sum")).reset_index()
-                    st.markdown("#### Vendas por mês")
+                        Pacotes=("id", "count"), Valor=("valor_total", "sum")).reset_index()
+                    st.markdown("#### Pacotes por mês")
                     _base = alt.Chart(_vg)
                     _bars = _base.mark_bar(color="#D59C9C", opacity=0.85).encode(
-                        x=alt.X("mes:O", title="Mês"), y=alt.Y("Vendas:Q"), tooltip=["mes", "Vendas", "Valor"])
+                        x=alt.X("mes:O", title="Mês"), y=alt.Y("Pacotes:Q"), tooltip=["mes", "Pacotes", "Valor"])
                     _line = _base.mark_line(color="#9b5555", strokeWidth=2, point=True).encode(
                         x="mes:O", y=alt.Y("Valor:Q", axis=alt.Axis(title="Valor (R$)")))
                     st.altair_chart(alt.layer(_bars, _line).resolve_scale(y="independent").properties(height=280),
@@ -5549,7 +5549,7 @@ def tela_relatorios():
                     _pdf.set_font("Helvetica", "", 11)
                     _pdf.cell(0, 8, f"Atendimentos no período: {_n_at}", ln=True)
                     _pdf.cell(0, 8, f"Total de clientes: {_n_cli}", ln=True)
-                    _pdf.cell(0, 8, f"Vendas no período: {_n_vendas}", ln=True)
+                    _pdf.cell(0, 8, f"Pacotes no período: {_n_vendas}", ln=True)
                     _pdf.cell(0, 8, f"Receita no período: R$ {_val_vendas:,.2f}", ln=True)
                     
                     _pdf_bytes = bytes(_pdf.output())
@@ -5849,19 +5849,15 @@ def tela_ficha_cliente():
 
 
 # ====== TELA: VENDAS ======
-def tela_vendas():
-    header_titulo("Vendas", "Registro de vendas unitárias e pacotes")
+def tela_pacotes():
+    header_titulo("Pacotes", "Controle de pacotes de sessões por cliente")
 
     db = SessionLocal()
     try:
-        # ── Inicializa itens da venda na sessão ──
-        if "venda_itens" not in st.session_state:
-            st.session_state["venda_itens"] = []
+        # ── Formulário de novo pacote ──
+        st.markdown("### Novo Pacote")
 
-        st.markdown("### Nova Venda")
-
-        # Busca de cliente
-        def buscar_cli_venda(termo):
+        def buscar_cli_pacote(termo):
             if not termo or len(termo) < 2:
                 return []
             like = f"%{termo.lower()}%"
@@ -5870,266 +5866,298 @@ def tela_vendas():
             ).order_by(Client.nome).limit(20).all()
             return [f"{c.nome} | {c.cpf or c.telefone or ''}" for c in res]
 
-        sel_cli = st_searchbox(buscar_cli_venda, label="Cliente*", key="venda_cliente_search", placeholder="Digite o nome")
+        sel_cli = st_searchbox(buscar_cli_pacote, label="Cliente*", key="pacote_cliente_search", placeholder="Digite o nome")
 
-        # Resolve ID do cliente selecionado
-        venda_cliente_id = st.session_state.get("venda_cliente_id_selecionado", 0)
+        pacote_cliente_id = st.session_state.get("pacote_cliente_id_selecionado", 0)
         if sel_cli:
             nome_base = str(sel_cli).split("|")[0].strip()
             c_match = db.query(Client).filter(func.lower(Client.nome).like(f"%{nome_base.lower()}%")).first()
-            if c_match and c_match.id != venda_cliente_id:
-                st.session_state["venda_cliente_id_selecionado"] = c_match.id
-                venda_cliente_id = c_match.id
+            if c_match and c_match.id != pacote_cliente_id:
+                st.session_state["pacote_cliente_id_selecionado"] = c_match.id
+                pacote_cliente_id = c_match.id
 
-        col_v1, col_v2 = st.columns(2)
-        with col_v1:
-            data_venda = st.date_input("Data da venda", value=_hoje(), key="venda_data", format="DD/MM/YYYY")
-        with col_v2:
-            pagamento = st.selectbox("Forma de pagamento*", ["Cartão de Crédito", "Cartão de Débito", "Pix", "Dinheiro"], key="venda_pag")
+        # Procedimento
+        _procs_cadastrados = db.query(Tratamento).filter(Tratamento.ativo == True).order_by(Tratamento.nome).all()
+        _nomes_procs = ["— digitar manualmente —"] + [p.nome for p in _procs_cadastrados]
+        _mapa_procs = {p.nome: p for p in _procs_cadastrados}
 
-        obs_venda = st.text_input("Observações (opcional)", key="venda_obs")
+        col1, col2 = st.columns(2)
+        with col1:
+            proc_selecionado = st.selectbox("Procedimento cadastrado", _nomes_procs, key="pacote_proc_sel")
+        with col2:
+            data_compra = st.date_input("Data da compra", value=_hoje(), key="pacote_data", format="DD/MM/YYYY")
 
-        st.markdown("#### Itens da venda")
+        _val_default = 0.0
+        _sessoes_default = 1
+        if proc_selecionado != "— digitar manualmente —" and proc_selecionado in _mapa_procs:
+            _p_ref = _mapa_procs[proc_selecionado]
+            _val_default = _p_ref.valor_pacote or _p_ref.valor_unitario or 0.0
+            _sessoes_default = _p_ref.sessoes_pacote or 1
 
-        # ── Adicionar item ──
-        with st.expander("➕ Adicionar item", expanded=True):
-            # Buscar procedimentos cadastrados para auto-preencher
-            _procs_cadastrados = db.query(Tratamento).filter(Tratamento.ativo == True).order_by(Tratamento.nome).all()
-            _nomes_procs = ["— digitar manualmente —"] + [p.nome for p in _procs_cadastrados]
-            _mapa_procs = {p.nome: p for p in _procs_cadastrados}
+        col3, col4 = st.columns([3, 1])
+        with col3:
+            if proc_selecionado == "— digitar manualmente —":
+                procedimento = st.text_input("Procedimento*", key="pacote_proc")
+            else:
+                procedimento = proc_selecionado
+                st.text_input("Procedimento*", value=proc_selecionado, disabled=True, key="pacote_proc_show")
+        with col4:
+            valor_total = st.number_input("Valor total (R$)*", min_value=0.0, step=0.01, value=_val_default, key="pacote_valor")
 
-            col_i0, col_i1 = st.columns([2, 2])
-            with col_i0:
-                proc_selecionado = st.selectbox("Procedimento cadastrado", _nomes_procs, key="item_proc_sel")
-            with col_i1:
-                tipo_item = st.selectbox("Tipo", ["Unitário", "Pacote"], key="item_tipo")
+        col5, col6, col7 = st.columns(3)
+        with col5:
+            sessoes_total = st.number_input("Qtd. sessões do pacote*", min_value=1, step=1, value=_sessoes_default, key="pacote_sessoes")
+        with col6:
+            sessoes_usadas = st.number_input("Sessão atual (já realizadas)", min_value=0, step=1, value=0, key="pacote_usadas")
+        with col7:
+            pagamento = st.selectbox("Forma de pagamento*", ["Cartão de Crédito", "Cartão de Débito", "Pix", "Dinheiro"], key="pacote_pag")
 
-            # Auto-preencher valor se selecionou procedimento cadastrado
-            _val_default = 0.0
-            _sessoes_default = 2
-            if proc_selecionado != "— digitar manualmente —" and proc_selecionado in _mapa_procs:
-                _p_ref = _mapa_procs[proc_selecionado]
-                if tipo_item == "Pacote" and _p_ref.valor_pacote:
-                    _val_default = _p_ref.valor_pacote
-                    _sessoes_default = _p_ref.sessoes_pacote or 10
-                elif _p_ref.valor_unitario:
-                    _val_default = _p_ref.valor_unitario
+        col8, col9 = st.columns(2)
+        with col8:
+            data_inicio = st.date_input("Data de início", value=_hoje(), key="pacote_data_inicio", format="DD/MM/YYYY")
+        with col9:
+            st.date_input("Data de término", value=None, disabled=True, key="pacote_data_termino", format="DD/MM/YYYY")
+            st.caption("Calculada automaticamente pela última sessão agendada.")
 
-            col_i2, col_i3 = st.columns([3, 1])
-            with col_i2:
-                if proc_selecionado == "— digitar manualmente —":
-                    proc_item = st.text_input("Procedimento*", key="item_proc")
-                else:
-                    proc_item = proc_selecionado
-                    st.text_input("Procedimento*", value=proc_selecionado, disabled=True, key="item_proc_show")
-            with col_i3:
-                valor_item = st.number_input("Valor (R$)*", min_value=0.0, step=0.01, value=_val_default, key="item_valor")
+        obs_pacote = st.text_input("Observações (opcional)", key="pacote_obs")
 
-            sessoes_item = 1
-            if tipo_item == "Pacote":
-                sessoes_item = st.number_input("Nº de sessões*", min_value=2, step=1, value=_sessoes_default, key="item_sessoes")
+        if st.button("💾 Salvar Pacote", use_container_width=True, type="primary", key="btn_salvar_pacote"):
+            if not pacote_cliente_id:
+                st.error("Selecione a cliente.")
+            elif not procedimento.strip():
+                st.error("Informe o procedimento.")
+            elif valor_total <= 0:
+                st.error("Informe um valor maior que zero.")
+            elif sessoes_usadas > sessoes_total:
+                st.error("Sessões realizadas não pode ser maior que o total.")
+            else:
+                novo_sale = Sale(
+                    cliente_id=pacote_cliente_id,
+                    data_venda=data_compra,
+                    forma_pagamento=pagamento,
+                    valor_total=valor_total,
+                    observacoes=obs_pacote or None,
+                )
+                db.add(novo_sale)
+                db.flush()
+                db.add(SaleItem(
+                    sale_id=novo_sale.id,
+                    procedimento=procedimento.strip(),
+                    tipo="pacote",
+                    sessoes_total=int(sessoes_total),
+                    sessoes_usadas=int(sessoes_usadas),
+                    valor=valor_total,
+                    data_inicio=data_inicio,
+                ))
+                db.commit()
+                st.success("Pacote registrado com sucesso!")
+                st.session_state["pacote_cliente_id_selecionado"] = 0
+                st.session_state["pacote_cliente_search"] = None
+                st.rerun()
 
-            if st.button("Adicionar item", use_container_width=True):
-                if not proc_item.strip():
-                    st.error("Informe o procedimento.")
-                elif valor_item <= 0:
-                    st.error("Informe um valor maior que zero.")
-                else:
-                    st.session_state["venda_itens"].append({
-                        "procedimento": proc_item.strip(),
-                        "tipo": tipo_item.lower(),
-                        "sessoes_total": int(sessoes_item),
-                        "valor": valor_item,
-                    })
-                    st.rerun()
-
-        # ── Lista de itens adicionados ──
-        itens = st.session_state["venda_itens"]
-        if itens:
-            st.markdown("**Itens adicionados:**")
-            for i, it in enumerate(itens):
-                col_it, col_rm = st.columns([5, 1])
-                with col_it:
-                    tipo_label = "📦 Pacote" if it["tipo"] == "pacote" else "1️⃣ Unitário"
-                    sessoes_label = f" — {it['sessoes_total']} sessões" if it["tipo"] == "pacote" else ""
-                    st.write(f"**{it['procedimento']}** {tipo_label}{sessoes_label} — R$ {it['valor']:.2f}")
-                with col_rm:
-                    if st.button("✕", key=f"rm_item_{i}"):
-                        st.session_state["venda_itens"].pop(i)
-                        st.rerun()
-
-            total = sum(it["valor"] for it in itens)
-            st.markdown(f"**Total: R$ {total:.2f}**")
-
-            if st.button("💾 Salvar Venda", use_container_width=True, type="primary"):
-                if not venda_cliente_id:
-                    st.error("Selecione a cliente.")
-                else:
-                    nova_venda = Sale(
-                        cliente_id=venda_cliente_id,
-                        data_venda=data_venda,
-                        forma_pagamento=pagamento,
-                        valor_total=total,
-                        observacoes=obs_venda or None,
-                    )
-                    db.add(nova_venda)
-                    db.flush()
-                    for it in itens:
-                        db.add(SaleItem(
-                            sale_id=nova_venda.id,
-                            procedimento=it["procedimento"],
-                            tipo=it["tipo"],
-                            sessoes_total=it["sessoes_total"],
-                            sessoes_usadas=0,
-                            valor=it["valor"],
-                        ))
-                    db.commit()
-                    st.success("Venda registrada com sucesso!")
-                    st.session_state["venda_itens"] = []
-                    st.session_state["venda_cliente_id_selecionado"] = 0
-                    st.rerun()
-        else:
-            st.info("Nenhum item adicionado ainda.")
-
-        # ── Vendas recentes ──
+        # ── Lista de pacotes ──
         st.markdown("---")
-        st.markdown("### Vendas recentes")
+        st.markdown("### Pacotes cadastrados")
 
-        col_filtro_v, _ = st.columns([1, 3])
-        with col_filtro_v:
-            filtro_tipo_venda = st.selectbox("Filtrar por tipo", ["Todos", "Pacote", "Unitário"], key="venda_filtro_tipo")
+        col_filtro, _ = st.columns([1, 3])
+        with col_filtro:
+            filtro_status = st.selectbox("Status", ["Ativos", "Finalizados", "Todos"], key="pacote_filtro_status")
 
-        vendas_rec = db.query(Sale).order_by(Sale.data_venda.desc(), Sale.id.desc()).limit(50).all()
-        if vendas_rec:
-            dados_vendas = []
-            ids_vendas = []
-            for v in vendas_rec:
-                tipos_itens = set(it.tipo for it in v.itens)
-                if "pacote" in tipos_itens and "unitario" in tipos_itens:
-                    tipo_venda = "Misto"
-                elif "pacote" in tipos_itens:
-                    tipo_venda = "Pacote"
-                else:
-                    tipo_venda = "Unitário"
+        query = db.query(SaleItem).join(Sale).options(joinedload(SaleItem.venda).joinedload(Sale.cliente))
+        if filtro_status == "Ativos":
+            query = query.filter(SaleItem.tipo == "pacote", SaleItem.sessoes_usadas < SaleItem.sessoes_total)
+        elif filtro_status == "Finalizados":
+            query = query.filter(SaleItem.tipo == "pacote", SaleItem.sessoes_usadas >= SaleItem.sessoes_total)
+        else:
+            query = query.filter(SaleItem.tipo == "pacote")
 
-                if filtro_tipo_venda == "Pacote" and "pacote" not in tipos_itens:
-                    continue
-                if filtro_tipo_venda == "Unitário" and "unitario" not in tipos_itens:
-                    continue
+        pacotes = query.order_by(Sale.data_venda.desc(), SaleItem.id.desc()).limit(100).all()
 
-                procs = ", ".join(f"{it.procedimento}" for it in v.itens)
-                sessoes_info = []
-                for it in v.itens:
-                    if it.tipo == "pacote":
-                        sessoes_info.append(f"{it.procedimento}: {it.sessoes_total} sessões")
-                sessoes_str = "; ".join(sessoes_info) if sessoes_info else "—"
-                ids_vendas.append(v.id)
-                dados_vendas.append({
+        if pacotes:
+            dados = []
+            ids = []
+            for item in pacotes:
+                v = item.venda
+                c = v.cliente if v else None
+                restantes = item.sessoes_total - item.sessoes_usadas
+                status = "Finalizado" if restantes <= 0 else "Ativo"
+                ids.append(item.id)
+                termino_calc = item.data_termino_calculada
+                termino_str = termino_calc.strftime("%d/%m/%Y") if termino_calc else "—"
+                inicio_str = item.data_inicio.strftime("%d/%m/%Y") if item.data_inicio else "—"
+                dados.append({
                     "Selecionar": False,
-                    "Data": v.data_venda.strftime("%d/%m/%Y") if v.data_venda else "—",
-                    "Cliente": v.cliente.nome if v.cliente else "—",
-                    "Tipo": tipo_venda,
-                    "Procedimentos": procs or "—",
-                    "Sessões contratadas": sessoes_str,
-                    "Valor": f"R$ {v.valor_total:.2f}",
-                    "Pagamento": v.forma_pagamento or "—",
-                    "Observação": v.observacoes or "—",
+                    "Data": v.data_venda.strftime("%d/%m/%Y") if v and v.data_venda else "—",
+                    "Cliente": c.nome if c else "—",
+                    "Procedimento": item.procedimento or "—",
+                    "Qtd. sessões": item.sessoes_total,
+                    "Sessão atual": item.sessoes_usadas,
+                    "Sessões restantes": restantes,
+                    "Data de início": inicio_str,
+                    "Data de término": termino_str,
+                    "Status": status,
+                    "Valor": f"R$ {item.valor:.2f}" if item.valor else "R$ 0,00",
+                    "Pagamento": v.forma_pagamento or "—" if v else "—",
+                    "Observação": v.observacoes or "—" if v else "—",
                 })
 
-            if dados_vendas:
-                df_vendas = pd.DataFrame(dados_vendas)
-                edited_df_vendas = st.data_editor(
-                    df_vendas,
-                    use_container_width=True,
-                    hide_index=True,
-                    column_config={
-                        "Selecionar": st.column_config.CheckboxColumn("Selecionar", default=False),
-                    },
-                    disabled=["Data", "Cliente", "Tipo", "Procedimentos", "Valor", "Pagamento", "Observação"],
-                    key="vendas_recentes_editor",
-                )
+            df_pacotes = pd.DataFrame(dados)
+            edited_df = st.data_editor(
+                df_pacotes,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "Selecionar": st.column_config.CheckboxColumn("Selecionar", default=False),
+                },
+                disabled=["Data", "Cliente", "Procedimento", "Qtd. sessões", "Sessão atual", "Sessões restantes", "Data de início", "Data de término", "Status", "Valor", "Pagamento", "Observação"],
+                key="pacotes_editor",
+            )
 
-                selecionadas_venda = edited_df_vendas[edited_df_vendas["Selecionar"] == True]
-                if len(selecionadas_venda) > 1:
-                    st.warning("Selecione apenas 1 venda por vez.")
-                elif len(selecionadas_venda) == 1:
-                    idx_venda_sel = selecionadas_venda.index[0]
-                    venda_id_sel = ids_vendas[idx_venda_sel]
-                    col_acao_v1, col_acao_v2 = st.columns(2)
-                    with col_acao_v1:
-                        if st.button("✏️ Editar venda", use_container_width=True, key="btn_editar_venda_tabela"):
-                            st.session_state["venda_editando"] = venda_id_sel
-                            st.rerun()
-                    with col_acao_v2:
-                        if st.button("🗑️ Excluir venda", use_container_width=True, key="btn_excluir_venda_tabela"):
-                            _venda_del = db.get(Sale, venda_id_sel)
-                            if _venda_del:
-                                db.delete(_venda_del)
-                                db.commit()
-                                st.success("Venda excluída com sucesso!")
-                                st.rerun()
-            else:
-                st.info("Nenhuma venda encontrada para o filtro selecionado.")
+            selecionadas = edited_df[edited_df["Selecionar"] == True]
+            if len(selecionadas) > 1:
+                st.warning("Selecione apenas 1 pacote por vez.")
+            elif len(selecionadas) == 1:
+                idx_sel = selecionadas.index[0]
+                pacote_id_sel = ids[idx_sel]
+                col_acao1, col_acao2 = st.columns(2)
+                with col_acao1:
+                    if st.button("✏️ Editar pacote", use_container_width=True, key="btn_editar_pacote_tabela"):
+                        st.session_state["pacote_editando"] = pacote_id_sel
+                        st.rerun()
+                with col_acao2:
+                    if st.button("🗑️ Excluir pacote", use_container_width=True, key="btn_excluir_pacote_tabela"):
+                        st.session_state["pacote_excluindo"] = pacote_id_sel
+                        st.rerun()
         else:
-            st.info("Nenhuma venda registrada.")
+            st.info("Nenhum pacote encontrado para o filtro selecionado.")
 
-        # Popup de edição de venda
-        if st.session_state.get("venda_editando"):
-            _vid = st.session_state["venda_editando"]
-            _venda_ed = db.get(Sale, _vid)
-            if _venda_ed:
-                _cliente_nome_v = _venda_ed.cliente.nome if _venda_ed.cliente else "—"
+        # ── Popup de edição ──
+        if st.session_state.get("pacote_editando"):
+            _pid = st.session_state["pacote_editando"]
+            _item_ed = db.get(SaleItem, _pid)
+            if _item_ed and _item_ed.venda:
+                _cliente_nome = _item_ed.venda.cliente.nome if _item_ed.venda.cliente else "—"
 
-                @st.dialog(f"Editar Venda - {_cliente_nome_v}", width="large")
-                def _dialog_editar_venda():
+                @st.dialog(f"Editar Pacote - {_cliente_nome}", width="large")
+                def _dialog_editar_pacote():
                     db_ed = SessionLocal()
                     try:
-                        venda_ed = db_ed.get(Sale, _vid)
-                        if not venda_ed:
-                            st.error("Venda não encontrada.")
+                        item_ed = db_ed.get(SaleItem, _pid)
+                        if not item_ed or not item_ed.venda:
+                            st.error("Pacote não encontrado.")
                             return
 
+                        venda_ed = item_ed.venda
                         st.markdown(f"**Cliente:** {venda_ed.cliente.nome if venda_ed.cliente else '—'}")
 
-                        _ed_data_v = st.date_input("Data", value=venda_ed.data_venda, format="DD/MM/YYYY", key="dlg_ed_venda_data")
-                        _ed_pag_v = st.selectbox(
+                        _ed_data = st.date_input("Data da compra", value=venda_ed.data_venda, format="DD/MM/YYYY", key="dlg_ed_pacote_data")
+                        _ed_pag = st.selectbox(
                             "Forma de pagamento",
                             ["Cartão de Crédito", "Cartão de Débito", "Pix", "Dinheiro"],
                             index=["Cartão de Crédito", "Cartão de Débito", "Pix", "Dinheiro"].index(venda_ed.forma_pagamento)
                             if venda_ed.forma_pagamento in ["Cartão de Crédito", "Cartão de Débito", "Pix", "Dinheiro"] else 0,
-                            key="dlg_ed_venda_pag",
+                            key="dlg_ed_pacote_pag",
                         )
-                        _ed_obs_v = st.text_input("Observações", value=venda_ed.observacoes or "", key="dlg_ed_venda_obs")
+                        _ed_proc = st.text_input("Procedimento", value=item_ed.procedimento or "", key="dlg_ed_pacote_proc")
+                        col_a, col_b, col_c = st.columns(3)
+                        with col_a:
+                            _ed_total = st.number_input("Qtd. sessões do pacote", min_value=1, step=1, value=item_ed.sessoes_total, key="dlg_ed_pacote_total")
+                        with col_b:
+                            _ed_usadas = st.number_input("Sessão atual (já realizadas)", min_value=0, step=1, value=item_ed.sessoes_usadas, key="dlg_ed_pacote_usadas")
+                        with col_c:
+                            _ed_valor = st.number_input("Valor total (R$)", min_value=0.0, step=0.01, value=item_ed.valor, key="dlg_ed_pacote_valor")
 
-                        st.markdown("**Itens da venda**")
-                        for i, it in enumerate(venda_ed.itens):
-                            tipo_label = "📦 Pacote" if it.tipo == "pacote" else "1️⃣ Unitário"
-                            sessoes_label = f" — {it.sessoes_total} sessões" if it.tipo == "pacote" else ""
-                            st.write(f"{i+1}. **{it.procedimento}** {tipo_label}{sessoes_label} — R$ {it.valor:.2f}")
+                        col_d, col_e = st.columns(2)
+                        with col_d:
+                            _ed_data_inicio = st.date_input("Data de início", value=item_ed.data_inicio, format="DD/MM/YYYY", key="dlg_ed_pacote_inicio")
+                        with col_e:
+                            termino_calculado = item_ed.data_termino_calculada
+                            termino_display = termino_calculado if termino_calculado else item_ed.data_termino
+                            st.date_input("Data de término", value=termino_display, disabled=True, format="DD/MM/YYYY", key="dlg_ed_pacote_termino")
+                            st.caption("Calculada pela última sessão agendada.")
+
+                        _ed_obs = st.text_input("Observações", value=venda_ed.observacoes or "", key="dlg_ed_pacote_obs")
+
+                        # Histórico de usos
+                        usos = db_ed.query(SessionUsage).filter(SessionUsage.sale_item_id == item_ed.id).order_by(SessionUsage.data_uso.desc()).all()
+                        if usos:
+                            st.markdown("**Sessões já utilizadas no atendimento:**")
+                            for u in usos:
+                                data_uso = u.data_uso.strftime("%d/%m/%Y") if u.data_uso else "—"
+                                st.write(f"- {data_uso} (agendamento #{u.agendamento_id or '—'})")
 
                         col_salvar, col_cancelar = st.columns(2)
                         with col_salvar:
-                            if st.button("💾 Salvar", use_container_width=True, key="dlg_ed_venda_salvar"):
-                                venda_ed.data_venda = _ed_data_v
-                                venda_ed.forma_pagamento = _ed_pag_v
-                                venda_ed.observacoes = _ed_obs_v or None
-                                db_ed.commit()
-                                st.session_state.pop("venda_editando", None)
-                                st.success("Venda atualizada!")
-                                st.rerun()
+                            if st.button("💾 Salvar", use_container_width=True, key="dlg_ed_pacote_salvar"):
+                                if _ed_usadas > _ed_total:
+                                    st.error("Sessões realizadas não pode ser maior que o total.")
+                                elif _ed_usadas < item_ed.sessoes_usadas:
+                                    st.error(f"Não é possível reduzir sessões realizadas abaixo de {item_ed.sessoes_usadas} (já usadas no sistema).")
+                                else:
+                                    venda_ed.data_venda = _ed_data
+                                    venda_ed.forma_pagamento = _ed_pag
+                                    venda_ed.observacoes = _ed_obs or None
+                                    item_ed.procedimento = _ed_proc.strip()
+                                    item_ed.sessoes_total = int(_ed_total)
+                                    item_ed.sessoes_usadas = int(_ed_usadas)
+                                    item_ed.valor = float(_ed_valor)
+                                    item_ed.data_inicio = _ed_data_inicio
+                                    db_ed.commit()
+                                    st.session_state.pop("pacote_editando", None)
+                                    st.success("Pacote atualizado!")
+                                    st.rerun()
                         with col_cancelar:
-                            if st.button("Cancelar", use_container_width=True, key="dlg_ed_venda_cancel"):
-                                st.session_state.pop("venda_editando", None)
+                            if st.button("Cancelar", use_container_width=True, key="dlg_ed_pacote_cancel"):
+                                st.session_state.pop("pacote_editando", None)
                                 st.rerun()
                     finally:
                         db_ed.close()
 
-                _dialog_editar_venda()
+                _dialog_editar_pacote()
             else:
-                st.session_state.pop("venda_editando", None)
+                st.session_state.pop("pacote_editando", None)
+
+        # ── Popup de exclusão ──
+        if st.session_state.get("pacote_excluindo"):
+            _pid_del = st.session_state["pacote_excluindo"]
+            _item_del = db.get(SaleItem, _pid_del)
+            if _item_del and _item_del.venda:
+                _cliente_del = _item_del.venda.cliente.nome if _item_del.venda.cliente else "—"
+
+                @st.dialog("Excluir Pacote", width="small")
+                def _dialog_excluir_pacote():
+                    st.warning(f"Tem certeza que deseja excluir o pacote de **{_cliente_del}** — {_item_del.procedimento}?")
+
+                    usos_del = db.query(SessionUsage).filter(SessionUsage.sale_item_id == _item_del.id).count()
+                    if usos_del > 0:
+                        st.error(f"⚠️ Este pacote já tem {usos_del} sessão(ões) utilizada(s) em atendimentos. Excluir pode desvincular o histórico.")
+
+                    col_c, col_d = st.columns(2)
+                    with col_c:
+                        if st.button("Cancelar", use_container_width=True, key="dlg_del_pacote_cancel"):
+                            st.session_state.pop("pacote_excluindo", None)
+                            st.rerun()
+                    with col_d:
+                        if st.button("🗑️ Confirmar exclusão", use_container_width=True, key="dlg_del_pacote_confirm", type="primary"):
+                            _venda_del = _item_del.venda
+                            registrar_exclusao(db, "pacote", _item_del.id, f"Pacote {_item_del.procedimento} - {_cliente_del}", {
+                                "procedimento": _item_del.procedimento,
+                                "sessoes_total": _item_del.sessoes_total,
+                                "sessoes_usadas": _item_del.sessoes_usadas,
+                                "valor": _item_del.valor,
+                                "cliente": _cliente_del,
+                            })
+                            db.delete(_venda_del)
+                            db.commit()
+                            st.session_state.pop("pacote_excluindo", None)
+                            st.success("Pacote excluído com sucesso!")
+                            st.rerun()
+
+                _dialog_excluir_pacote()
+            else:
+                st.session_state.pop("pacote_excluindo", None)
     finally:
         db.close()
-
 
 # ====== TELA: USUÁRIOS ======
 def _modal_editar_usuario(uid: int):
@@ -6592,11 +6620,11 @@ def main():
         tela_atendimentos()
     elif rota == "Biometria":
         tela_biometria()
-    elif rota == "Vendas":
+    elif rota == "Pacotes":
         # Verificar permissão
         perfil = st.session_state.user.get("perfil", "") if st.session_state.user else ""
         if perfil in ["admin", "recepcao"]:
-            tela_vendas()
+            tela_pacotes()
         else:
             st.error("Você não tem permissão para acessar esta página.")
             st.info("Contate o administrador do sistema.")
