@@ -4467,6 +4467,9 @@ def tela_atendimentos():
     db = SessionLocal()
     try:
         # Mensagem de sucesso persistente após salvar
+        _msg_pac_at = st.session_state.pop("at_pacote_msg", None)
+        if _msg_pac_at:
+            st.info(f"📦 {_msg_pac_at}")
         if st.session_state.pop("at_salvo_ok", False):
             st.success("✅ Atendimento salvo com sucesso!")
 
@@ -4500,6 +4503,10 @@ def tela_atendimentos():
                 cliente_at_nome = cliente_selecionado.nome
                 st.session_state["atendimento_cliente_id"] = cliente_at_id
                 st.session_state["atendimento_cliente_nome"] = cliente_at_nome
+        else:
+            # Voltou para "— Selecione —": limpa para não ser reposta no rerun
+            st.session_state.pop("atendimento_cliente_id", None)
+            st.session_state.pop("atendimento_cliente_nome", None)
 
         if cliente_at_nome:
             st.info(f"Cliente selecionada: **{cliente_at_nome}**")
@@ -4519,226 +4526,244 @@ def tela_atendimentos():
         st.markdown("---")
 
         # Número de materiais fica fora do form para atualizar dinamicamente
-        linhas = st.number_input("Quantos produtos diferentes foram usados?", min_value=0, step=1, value=0, key="at_linhas")
+        linhas = st.number_input(
+            "Quantos produtos diferentes foram usados?",
+            min_value=0, step=1, key="at_linhas",
+        )
 
-        # ── Formulário principal (evita reset durante digitação) ──
-        with st.form("atendimento_form", clear_on_submit=True):
-            # ── Pacote ativo (opcional) ──────────────────────────────
-            pacote_sel_item_id = None
-            if cliente_at_id:
-                try:
-                    from models.sale import Sale, SaleItem
-                    _pacotes_at = (
-                        db.query(SaleItem).join(Sale).filter(
-                            Sale.cliente_id == cliente_at_id,
-                            SaleItem.tipo == "pacote",
-                            SaleItem.sessoes_usadas < SaleItem.sessoes_total,
-                        ).all()
+        # Campos fora de st.form: dentro do form o selectbox de Lote nao
+        # recarrega ao escolher o Material. As chaves fixas (at_*) ja
+        # preservam o que foi digitado entre as execucoes.
+        # ── Pacote ativo (opcional) ──────────────────────────────
+        pacote_sel_item_id = None
+        if cliente_at_id:
+            try:
+                from models.sale import Sale, SaleItem
+                _pacotes_at = (
+                    db.query(SaleItem).join(Sale).filter(
+                        Sale.cliente_id == cliente_at_id,
+                        SaleItem.tipo == "pacote",
+                        SaleItem.sessoes_usadas < SaleItem.sessoes_total,
+                    ).all()
+                )
+                if _pacotes_at:
+                    st.success(
+                        f"📦 Esta cliente tem **{len(_pacotes_at)}** pacote(s) ativo(s)."
                     )
-                    if _pacotes_at:
-                        st.success(
-                            f"📦 Esta cliente tem **{len(_pacotes_at)}** pacote(s) ativo(s)."
-                        )
-                        _mapa_pac = {"— nenhum —": None}
-                        for _p in _pacotes_at:
-                            _realizadas = _p.sessoes_usadas or 0
-                            _total = _p.sessoes_total or 0
-                            _mapa_pac[
-                                f"📦 {_p.procedimento} — {_realizadas + 1} de {_total}"
-                            ] = _p.id
-                        _sel_pac = st.selectbox(
-                            "Pacote ativo (descontar sessão ao salvar)",
-                            list(_mapa_pac.keys()),
-                            key="at_pacote_sel",
-                        )
-                        pacote_sel_item_id = _mapa_pac.get(_sel_pac)
-                        if pacote_sel_item_id:
-                            _p_sel = next((p for p in _pacotes_at if p.id == pacote_sel_item_id), None)
-                            if _p_sel:
-                                _realizadas_sel = _p_sel.sessoes_usadas or 0
-                                _total_sel = _p_sel.sessoes_total or 0
-                                _atual = _realizadas_sel + 1
-                                if _atual >= _total_sel:
-                                    st.warning(
-                                        f"⚠️ Esta é a **ÚLTIMA** sessão ({_atual} de {_total_sel}) "
-                                        f"do pacote **{_p_sel.procedimento}**. "
-                                        "Após salvar, a cliente entra na lista de renovação."
-                                    )
-                                else:
-                                    st.info(
-                                        f"Registrando a sessão **{_atual} de {_total_sel}** de "
-                                        f"**{_p_sel.procedimento}**."
-                                    )
-                    else:
-                        st.caption("Esta cliente não possui pacote ativo.")
-                except Exception:
-                    pass
-
-            col1, col2 = st.columns(2)
-            with col1:
-                data_at = st.date_input("Data", value=_hoje(), format="DD/MM/YYYY", key="at_data")
-                queixa = st.text_area("Queixa da consulta", key="at_queixa")
-            with col2:
-                # Lista suspensa de tratamentos cadastrados
-                tratamentos_lista = db.query(Tratamento).filter(Tratamento.ativo == True).order_by(Tratamento.nome.asc()).all()
-                opcoes_trat = ["— selecione —"] + [t.nome for t in tratamentos_lista]
-                tipo = st.selectbox("Tipo de tratamento realizado", opcoes_trat, key="at_tipo")
-                if tipo == "— selecione —":
-                    tipo = ""
-                protocolo = st.text_area("Protocolo de atendimento", key="at_protocolo")
-
-            obs = st.text_area("Observações", key="at_obs")
-
-            st.markdown("---")
-            st.markdown("#### Materiais usados")
-
-            # Buscar materiais cadastrados + produtos do estoque
-            mats_cadastrados = db.query(Material).filter(Material.ativo == True).order_by(Material.nome.asc()).all()
-            produtos = db.query(Product).order_by(Product.nome.asc()).all()
-            mapa_prod = {p.nome: p.id for p in produtos}
-            _vistos = {}
-            for _n in [p.nome for p in produtos] + [m.nome for m in mats_cadastrados]:
-                _k = (_n or "").strip().lower()
-                if _k and _k not in _vistos:
-                    _vistos[_k] = _n
-            nomes_materiais = sorted(_vistos.values(), key=lambda s: s.strip().lower())
-
-            materiais = []
-
-            for i in range(int(linhas)):
-                c1, c2, c3 = st.columns([3, 2, 1])
-                with c1:
-                    prod_nome = st.selectbox(
-                        f"Material {i + 1}",
-                        ["— selecione —"] + nomes_materiais,
-                        key=f"at_prod_{i}",
+                    _mapa_pac = {"— nenhum —": None}
+                    for _p in _pacotes_at:
+                        _realizadas = _p.sessoes_usadas or 0
+                        _total = _p.sessoes_total or 0
+                        _mapa_pac[
+                            f"📦 {_p.procedimento} — {_realizadas + 1} de {_total}"
+                        ] = _p.id
+                    _sel_pac = st.selectbox(
+                        "Pacote ativo (descontar sessão ao salvar)",
+                        list(_mapa_pac.keys()),
+                        key="at_pacote_sel",
                     )
-                with c2:
-                    lote_opcoes = ["— selecione —"]
-                    lote_map = {}
-                    if prod_nome and prod_nome != "— selecione —" and prod_nome in mapa_prod:
-                        lotes_disp = (
-                            db.query(StockLote)
-                            .filter(StockLote.produto_id == mapa_prod[prod_nome])
-                            .all()
-                        )
-                        for lt in lotes_disp:
-                            saldo_mov = db.query(
-                                func.coalesce(
-                                    func.sum(
-                                        case(
-                                            (StockMovement.tipo == "entrada", StockMovement.quantidade),
-                                            else_=-StockMovement.quantidade,
-                                        )
-                                    ),
-                                    0,
+                    pacote_sel_item_id = _mapa_pac.get(_sel_pac)
+                    if pacote_sel_item_id:
+                        _p_sel = next((p for p in _pacotes_at if p.id == pacote_sel_item_id), None)
+                        if _p_sel:
+                            _realizadas_sel = _p_sel.sessoes_usadas or 0
+                            _total_sel = _p_sel.sessoes_total or 0
+                            _atual = _realizadas_sel + 1
+                            if _atual >= _total_sel:
+                                st.warning(
+                                    f"⚠️ Esta é a **ÚLTIMA** sessão ({_atual} de {_total_sel}) "
+                                    f"do pacote **{_p_sel.procedimento}**. "
+                                    "Após salvar, a cliente entra na lista de renovação."
                                 )
-                            ).filter(StockMovement.lote_id == lt.id).scalar() or 0
-                            saldo_real = saldo_mov if saldo_mov > 0 else (lt.quantidade_atual or 0)
-                            if saldo_real <= 0:
-                                continue
-                            label = f"Lote: {lt.lote or 'S/N'} | Qtd: {saldo_real}"
-                            lote_opcoes.append(label)
-                            lote_map[label] = (lt.id, saldo_real)
-                    lote_sel = st.selectbox(f"Lote {i + 1}", lote_opcoes, key=f"at_lote_{i}")
-                with c3:
-                    qtd = st.number_input("Qtd", min_value=0, step=1, key=f"at_qtd_{i}")
-
-                if (
-                    prod_nome and prod_nome != "— selecione —"
-                    and lote_sel and lote_sel != "— selecione —"
-                    and lote_sel in lote_map
-                    and qtd > 0
-                ):
-                    lote_id_sel, saldo_disponivel = lote_map[lote_sel]
-                    materiais.append((lote_id_sel, mapa_prod[prod_nome], qtd, saldo_disponivel))
-
-            submitted = st.form_submit_button("Salvar atendimento", use_container_width=True)
-            if submitted:
-                if not cliente_at_id:
-                    st.error("Selecione uma cliente.")
+                            else:
+                                st.info(
+                                    f"Registrando a sessão **{_atual} de {_total_sel}** de "
+                                    f"**{_p_sel.procedimento}**."
+                                )
                 else:
-                    try:
-                        _user_logado = st.session_state.get("user") or {}
-                        ap = Appointment(
-                            data=data_at,
-                            mes=month_from_date(data_at),
-                            cliente_id=cliente_at_id,
-                            queixa_consulta=queixa,
-                            protocolo_atendimento=protocolo,
-                            tipo_tratamento=tipo,
-                            retorno_indicado=None,
-                            receituario=None,
-                            observacoes=obs,
-                            cadastrado_por=_user_logado.get("nome", ""),
-                            usuario_id=_user_logado.get("id"),
+                    st.caption("Esta cliente não possui pacote ativo.")
+            except Exception:
+                pass
+
+        col1, col2 = st.columns(2)
+        with col1:
+            data_at = st.date_input("Data", value=_hoje(), format="DD/MM/YYYY", key="at_data")
+            queixa = st.text_area("Queixa da consulta", key="at_queixa")
+        with col2:
+            # Lista suspensa de tratamentos cadastrados
+            tratamentos_lista = db.query(Tratamento).filter(Tratamento.ativo == True).order_by(Tratamento.nome.asc()).all()
+            opcoes_trat = ["— selecione —"] + [t.nome for t in tratamentos_lista]
+            tipo = st.selectbox("Tipo de tratamento realizado", opcoes_trat, key="at_tipo")
+            if tipo == "— selecione —":
+                tipo = ""
+            protocolo = st.text_area("Protocolo de atendimento", key="at_protocolo")
+
+        obs = st.text_area("Observações", key="at_obs")
+
+        st.markdown("---")
+        st.markdown("#### Materiais usados")
+
+        # Buscar materiais cadastrados + produtos do estoque
+        mats_cadastrados = db.query(Material).filter(Material.ativo == True).order_by(Material.nome.asc()).all()
+        produtos = db.query(Product).order_by(Product.nome.asc()).all()
+        mapa_prod = {p.nome: p.id for p in produtos}
+        _vistos = {}
+        for _n in [p.nome for p in produtos] + [m.nome for m in mats_cadastrados]:
+            _k = (_n or "").strip().lower()
+            if _k and _k not in _vistos:
+                _vistos[_k] = _n
+        nomes_materiais = sorted(_vistos.values(), key=lambda s: s.strip().lower())
+
+        materiais = []
+
+        for i in range(int(linhas)):
+            c1, c2, c3 = st.columns([3, 2, 1])
+            with c1:
+                prod_nome = st.selectbox(
+                    f"Material {i + 1}",
+                    ["— selecione —"] + nomes_materiais,
+                    key=f"at_prod_{i}",
+                )
+            with c2:
+                lote_opcoes = ["— selecione —"]
+                lote_map = {}
+                if prod_nome and prod_nome != "— selecione —" and prod_nome in mapa_prod:
+                    lotes_disp = (
+                        db.query(StockLote)
+                        .filter(StockLote.produto_id == mapa_prod[prod_nome])
+                        .all()
+                    )
+                    for lt in lotes_disp:
+                        saldo_mov = db.query(
+                            func.coalesce(
+                                func.sum(
+                                    case(
+                                        (StockMovement.tipo == "entrada", StockMovement.quantidade),
+                                        else_=-StockMovement.quantidade,
+                                    )
+                                ),
+                                0,
+                            )
+                        ).filter(StockMovement.lote_id == lt.id).scalar() or 0
+                        saldo_real = saldo_mov if saldo_mov > 0 else (lt.quantidade_atual or 0)
+                        if saldo_real <= 0:
+                            continue
+                        label = f"Lote: {lt.lote or 'S/N'} | Qtd: {saldo_real}"
+                        lote_opcoes.append(label)
+                        lote_map[label] = (lt.id, saldo_real)
+                lote_sel = st.selectbox(f"Lote {i + 1}", lote_opcoes, key=f"at_lote_{i}")
+            with c3:
+                qtd = st.number_input("Qtd", min_value=0, step=1, key=f"at_qtd_{i}")
+
+            if (
+                prod_nome and prod_nome != "— selecione —"
+                and lote_sel and lote_sel != "— selecione —"
+                and lote_sel in lote_map
+                and qtd > 0
+            ):
+                lote_id_sel, saldo_disponivel = lote_map[lote_sel]
+                materiais.append((lote_id_sel, mapa_prod[prod_nome], qtd, saldo_disponivel))
+
+        submitted = st.button(
+            "Salvar atendimento", use_container_width=True, type="primary",
+            key="btn_salvar_atendimento",
+        )
+        if submitted:
+            if not cliente_at_id:
+                st.error("Selecione uma cliente.")
+            else:
+                try:
+                    _user_logado = st.session_state.get("user") or {}
+                    ap = Appointment(
+                        data=data_at,
+                        mes=month_from_date(data_at),
+                        cliente_id=cliente_at_id,
+                        queixa_consulta=queixa,
+                        protocolo_atendimento=protocolo,
+                        tipo_tratamento=tipo,
+                        retorno_indicado=None,
+                        receituario=None,
+                        observacoes=obs,
+                        cadastrado_por=_user_logado.get("nome", ""),
+                        usuario_id=_user_logado.get("id"),
+                    )
+                    db.add(ap)
+                    db.commit()
+
+                    for (lote_id, prod_id, qtd, saldo_disp) in materiais:
+                        am = AppointmentMaterial(
+                            atendimento_id=ap.id,
+                            lote_id=lote_id,
+                            produto_id=prod_id,
+                            quantidade=float(qtd),
                         )
-                        db.add(ap)
-                        db.commit()
+                        db.add(am)
+                        movimentar(
+                            lote_id,
+                            "saida",
+                            float(qtd),
+                            motivo=f"Atendimento #{ap.id} - {cliente_at_nome or 'Cliente'}",
+                            db=db,
+                        )
+                    db.commit()
 
-                        for (lote_id, prod_id, qtd, saldo_disp) in materiais:
-                            am = AppointmentMaterial(
-                                atendimento_id=ap.id,
-                                lote_id=lote_id,
-                                produto_id=prod_id,
-                                quantidade=float(qtd),
+                    st.session_state.pop("atendimento_cliente_id", None)
+                    st.session_state.pop("atendimento_cliente_nome", None)
+                    # Descontar sessão de pacote (seleção manual tem prioridade)
+                    try:
+                        from models.sale import Sale, SaleItem, SessionUsage
+                        _pacote_item = None
+                        if pacote_sel_item_id:
+                            _pacote_item = db.query(SaleItem).filter(
+                                SaleItem.id == pacote_sel_item_id
+                            ).first()
+                        elif tipo and cliente_at_id:
+                            _pacote_item = db.query(SaleItem).join(Sale).filter(
+                                Sale.cliente_id == cliente_at_id,
+                                func.lower(SaleItem.procedimento) == (tipo or "").lower(),
+                                SaleItem.tipo == "pacote",
+                                SaleItem.sessoes_usadas < SaleItem.sessoes_total,
+                            ).first()
+                        if _pacote_item and (_pacote_item.sessoes_usadas or 0) < (_pacote_item.sessoes_total or 0):
+                            _pacote_item.sessoes_usadas = (_pacote_item.sessoes_usadas or 0) + 1
+                            db.add(SessionUsage(
+                                sale_item_id=_pacote_item.id,
+                                agendamento_id=None,
+                                data_uso=data_at,
+                            ))
+                            if not _pacote_item.data_inicio:
+                                _pacote_item.data_inicio = data_at
+                            if _pacote_item.sessoes_usadas >= (_pacote_item.sessoes_total or 0):
+                                _pacote_item.data_termino = data_at
+                            db.commit()
+                            st.session_state["at_pacote_msg"] = (
+                                f"Sessão {_pacote_item.sessoes_usadas} de "
+                                f"{_pacote_item.sessoes_total} do pacote "
+                                f"{_pacote_item.procedimento} registrada."
                             )
-                            db.add(am)
-                            movimentar(
-                                lote_id,
-                                "saida",
-                                float(qtd),
-                                motivo=f"Atendimento #{ap.id} - {cliente_at_nome or 'Cliente'}",
-                                db=db,
-                            )
-                        db.commit()
-
-                        st.session_state.pop("atendimento_cliente_id", None)
-                        st.session_state.pop("atendimento_cliente_nome", None)
-                        # Descontar sessão de pacote (seleção manual tem prioridade)
-                        try:
-                            from models.sale import Sale, SaleItem, SessionUsage
-                            _pacote_item = None
-                            if pacote_sel_item_id:
-                                _pacote_item = db.query(SaleItem).filter(
-                                    SaleItem.id == pacote_sel_item_id
-                                ).first()
-                            elif tipo and cliente_at_id:
-                                _pacote_item = db.query(SaleItem).join(Sale).filter(
-                                    Sale.cliente_id == cliente_at_id,
-                                    func.lower(SaleItem.procedimento) == (tipo or "").lower(),
-                                    SaleItem.tipo == "pacote",
-                                    SaleItem.sessoes_usadas < SaleItem.sessoes_total,
-                                ).first()
-                            if _pacote_item and (_pacote_item.sessoes_usadas or 0) < (_pacote_item.sessoes_total or 0):
-                                _pacote_item.sessoes_usadas = (_pacote_item.sessoes_usadas or 0) + 1
-                                db.add(SessionUsage(
-                                    sale_item_id=_pacote_item.id,
-                                    agendamento_id=None,
-                                    data_uso=data_at,
-                                ))
-                                if not _pacote_item.data_inicio:
-                                    _pacote_item.data_inicio = data_at
-                                if _pacote_item.sessoes_usadas >= (_pacote_item.sessoes_total or 0):
-                                    _pacote_item.data_termino = data_at
-                                db.commit()
-                                st.session_state["at_pacote_msg"] = (
-                                    f"Sessão {_pacote_item.sessoes_usadas} de "
-                                    f"{_pacote_item.sessoes_total} do pacote "
-                                    f"{_pacote_item.procedimento} registrada."
-                                )
-                        except Exception:
-                            db.rollback()
-                        # O form usa clear_on_submit=True, entao os campos de
-                        # dentro dele ja sao limpos pelo Streamlit. Remover essas
-                        # chaves na mao fazia o widget perder o estado e a tela
-                        # travar com os campos bloqueados.
-                        st.session_state.pop("at_linhas", None)
-                        st.session_state["at_salvo_ok"] = True
-                        st.rerun()
-                    except Exception as _save_err:
+                    except Exception as _err_pac:
                         db.rollback()
-                        st.error(f"Erro ao salvar atendimento: {_save_err}")
+                        st.warning(
+                            "Atendimento salvo, mas a sessão do pacote não foi "
+                            f"descontada: {_err_pac}"
+                        )
+                    # Limpa o formulario para o proximo atendimento
+                    _limpar = ["at_data", "at_queixa", "at_tipo", "at_protocolo",
+                               "at_obs", "at_pacote_sel", "at_linhas"]
+                    # Varre por prefixo: se a usuária reduziu o número de linhas,
+                    # as chaves antigas continuavam preenchidas e reapareciam no
+                    # atendimento seguinte.
+                    _limpar += [
+                        _k for _k in list(st.session_state)
+                        if _k.startswith(("at_prod_", "at_lote_", "at_qtd_"))
+                    ]
+                    for _k_lim in _limpar:
+                        st.session_state.pop(_k_lim, None)
+                    st.session_state["at_salvo_ok"] = True
+                    st.rerun()
+                except Exception as _save_err:
+                    db.rollback()
+                    st.error(f"Erro ao salvar atendimento: {_save_err}")
 
         st.markdown("---")
         st.markdown("### Histórico de Atendimentos")
