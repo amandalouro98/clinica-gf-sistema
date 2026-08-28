@@ -268,6 +268,7 @@ def render_fullcalendar(
         box-shadow: 0 1px 2px rgba(0,0,0,0.15);
     }}
     .fc .fc-event-title {{ font-weight: 600; white-space: normal !important; padding-right: 26px; }}
+    .fc .ag-pre {{ opacity: 0.45 !important; border-style: dashed !important; border-width: 2px !important; }}
     .fc .fc-event-time {{ font-size: 10px; opacity: 0.9; }}
     .fc .fc-col-header-cell-cushion {{ font-size: 12px; font-weight: 600; }}
     .fc .fc-timegrid-slot {{ height: 1.7em; }}
@@ -585,7 +586,12 @@ def agenda_to_events(agendamentos, nomes_prof=None, series_map=None, cores_prof=
 
             cor = _cor_final_agendamento(ag, cores_prof=cores_prof, cores_sala=cores_sala)
 
-            titulo_evento = ag.cliente_nome or ag.procedimento or "Sem titulo"
+            _nome_ev = (ag.cliente_nome or "").strip()
+            _proc_ev = (getattr(ag, "procedimento", "") or "").strip()
+            if _nome_ev and _proc_ev and _proc_ev.lower() not in _nome_ev.lower():
+                titulo_evento = f"{_nome_ev} | {_proc_ev}"
+            else:
+                titulo_evento = _nome_ev or _proc_ev or "Sem titulo"
             serie_label = ""
             posicao_total = series_map.get(ag.id)
             if posicao_total:
@@ -593,6 +599,10 @@ def agenda_to_events(agendamentos, nomes_prof=None, series_map=None, cores_prof=
                 if total > 1:
                     serie_label = f"{pos} de {total}"
                     titulo_evento = f"{titulo_evento} ({serie_label})"
+
+            _pre = bool(getattr(ag, "pre_agendamento", False))
+            if _pre:
+                titulo_evento = f"⏳ {titulo_evento}"
 
             events.append({
                 "id": str(ag.id),
@@ -602,12 +612,14 @@ def agenda_to_events(agendamentos, nomes_prof=None, series_map=None, cores_prof=
                 "backgroundColor": cor,
                 "borderColor": cor,
                 "textColor": "#ffffff",
+                "classNames": ["ag-pre"] if _pre else [],
                 "extendedProps": {
                     "profissional": ag.profissional or "",
                     "procedimento": ag.procedimento or "",
                     "sala": ag.sala or "",
                     "confirmado": bool(getattr(ag, "confirmado", False)),
                     "serie_label": serie_label,
+                    "pre_agendamento": _pre,
                 },
             })
         except Exception:

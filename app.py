@@ -802,14 +802,25 @@ def render_sugestoes_cliente(db, termo, contexto="cadastro"):
             for c in resultados
         ]
 
-    selecionado = st_searchbox(
-        search_function=buscar_opcoes,
-        label="Digite nome, CPF, telefone ou e-mail",
-        placeholder="Ex.: Amanda",
-        key=f"{contexto}_searchbox",
-        clear_on_submit=False,
-        default=None,
-    )
+    _sb_key = f"{contexto}_searchbox"
+    _sb_state = st.session_state.get(_sb_key)
+    if _sb_state is not None and not isinstance(_sb_state, dict):
+        # Estado interno do componente corrompido: remove para reinicializar
+        st.session_state.pop(_sb_key, None)
+
+    try:
+        selecionado = st_searchbox(
+            search_function=buscar_opcoes,
+            label="Digite nome, CPF, telefone ou e-mail",
+            placeholder="Ex.: Amanda",
+            key=_sb_key,
+            clear_on_submit=False,
+            default=None,
+        )
+    except (TypeError, KeyError):
+        st.session_state.pop(_sb_key, None)
+        st.warning("Campo de busca reiniciado. Digite o nome novamente.")
+        return
 
     if not selecionado:
         return
@@ -1334,6 +1345,18 @@ def tela_agenda():
         for k, v in st.session_state.pop("ag_pending_edit").items():
             st.session_state[k] = v
 
+    # Só um dialog pode abrir por execução. Se sobrar estado antigo de dois
+    # popups ao mesmo tempo, o Streamlit quebra e a tela trava com os campos
+    # bloqueados. A prioridade abaixo garante um único popup por vez.
+    _ordem_dialogs = ["ag_popup_edit_id", "ag_excluir_id", "ag_menu_id", "ag_abrir_novo_popup"]
+    _ja_tem = False
+    for _k_dlg in _ordem_dialogs:
+        if st.session_state.get(_k_dlg):
+            if _ja_tem:
+                st.session_state.pop(_k_dlg, None)
+            else:
+                _ja_tem = True
+
     db = SessionLocal()
     try:
         # Processa ações vindas do FullCalendar (clique, arraste, novo)
@@ -1455,27 +1478,43 @@ def tela_agenda():
                                 ).all()
                             )
                             if _pacotes:
-                                st.caption("📦 Pacotes ativos — selecione para vincular:")
-                                _pacote_atual = st.session_state.get("dlg_ag_pacote_item_id")
-                                for _p in _pacotes:
-                                    _realizadas = _p.sessoes_usadas
-                                    _total = _p.sessoes_total
-                                    _chave = f"dlg_pkg_{_p.id}"
-                                    _marcado = st.checkbox(
-                                        f"📦 {_p.procedimento} — {_realizadas}/{_total} realizadas",
-                                        key=_chave,
-                                        value=(_pacote_atual == _p.id),
-                                    )
-                                    if _marcado and _pacote_atual != _p.id:
-                                        st.session_state["dlg_ag_pacote_item_id"] = _p.id
-                                        st.session_state["dlg_ag_proc"] = _p.procedimento
-                                        st.rerun()
-                                    elif not _marcado and _pacote_atual == _p.id:
-                                        st.session_state["dlg_ag_pacote_item_id"] = None
-                                        st.session_state["dlg_ag_proc"] = ""
-                                        st.rerun()
+                                st.markdown("**📦 Pacotes ativos desta cliente**")
+                                _opts_pkg = ["— não vincular a pacote —"] + [
+                                    f"#{_p.id} · {_p.procedimento} — {_p.sessoes_usadas}/{_p.sessoes_total} realizadas "
+                                    f"(faltam {max(0, (_p.sessoes_total or 0) - (_p.sessoes_usadas or 0))})"
+                                    for _p in _pacotes
+                                ]
+                                _sel_pkg = st.selectbox(
+                                    "Vincular este agendamento a um pacote:",
+                                    _opts_pkg,
+                                    key="dlg_ag_pkg_sel",
+                                )
+                                if _sel_pkg and _sel_pkg.startswith("#"):
+                                    _pkg_id = int(_sel_pkg.split("·")[0].strip().lstrip("#"))
+                                    _pkg_obj = next((_x for _x in _pacotes if _x.id == _pkg_id), None)
+                                    st.session_state["dlg_ag_pacote_item_id"] = _pkg_id
+                                    if _pkg_obj:
+                                        _restam_pkg = max(
+                                            0,
+                                            (_pkg_obj.sessoes_total or 0) - (_pkg_obj.sessoes_usadas or 0),
+                                        )
+                                        st.info(
+                                            f"Procedimento do pacote: **{_pkg_obj.procedimento}** · "
+                                            f"faltam **{_restam_pkg}** sessão(ões)."
+                                        )
+                                        st.session_state["dlg_ag_pkg_proc"] = _pkg_obj.procedimento
+                                        st.session_state["dlg_ag_pkg_restam"] = _restam_pkg
+                                else:
+                                    st.session_state["dlg_ag_pacote_item_id"] = None
+                                    st.session_state.pop("dlg_ag_pkg_proc", None)
+                                    st.session_state.pop("dlg_ag_pkg_restam", None)
+                            else:
+                                st.caption("Esta cliente não possui pacote ativo.")
+                                st.session_state["dlg_ag_pacote_item_id"] = None
                         except Exception:
-                            pass
+                            st.session_state["dlg_ag_pacote_item_id"] = None
+                    else:
+                        st.session_state["dlg_ag_pacote_item_id"] = None
 
                     data_dlg = st.date_input("Data", value=_hoje(), format="DD/MM/YYYY", key="dlg_ag_data")
 
@@ -1486,7 +1525,13 @@ def tela_agenda():
                         st.info("Cadastre um profissional primeiro.")
                         prof_dlg = "— selecione —"
 
-                    proc_dlg = st.text_input("Procedimento", key="dlg_ag_proc")
+                    proc_dlg = st.text_input(
+                        "Procedimento",
+                        key="dlg_ag_proc",
+                        placeholder=st.session_state.get("dlg_ag_pkg_proc", "") or "Ex.: Drenagem",
+                    )
+                    if not (proc_dlg or "").strip() and st.session_state.get("dlg_ag_pkg_proc"):
+                        proc_dlg = st.session_state["dlg_ag_pkg_proc"]
 
                     sala_dlg = st.selectbox("Sala", OPCOES_SALA, key="dlg_ag_sala")
 
@@ -1498,6 +1543,19 @@ def tela_agenda():
                     obs_dlg = st.text_area("Observações", key="dlg_ag_obs", height=100)
 
                     recorrente_dlg = st.checkbox("Recorrência", key="dlg_ag_recorrente")
+                    pre_ag_dlg = 0
+                    if st.session_state.get("dlg_ag_pacote_item_id"):
+                        if st.checkbox(
+                            "Reservar horários extras para renovação (pré-agendamento)",
+                            key="dlg_ag_pre_renov",
+                            help="Mantém a mesma recorrência além do pacote atual. "
+                                 "Aparecem em transparência e não contam sessão.",
+                        ):
+                            pre_ag_dlg = int(st.number_input(
+                                "Quantos pré-agendamentos?",
+                                min_value=1, max_value=24, value=4, step=1,
+                                key="dlg_ag_pre_qtd",
+                            ))
                     if recorrente_dlg:
                         tipo_rec_dlg = st.selectbox(
                             "Tipo de recorrência",
@@ -1521,6 +1579,7 @@ def tela_agenda():
                                     db_dlg, data_dlg, hora_ini_dlg, hora_fim_dlg, duracao_dlg,
                                     cli_id_dlg, cli_nome_dlg, prof_dlg, proc_dlg, obs_dlg,
                                     sala_dlg, cor_por_prof, tipo_rec_dlg, num_rep_dlg,
+                                    pre_ag_dlg,
                                 )
                     with col_cancelar_cli:
                         if st.button("Cancelar", use_container_width=True, key="dlg_ag_cancel_cli"):
@@ -1578,67 +1637,112 @@ def tela_agenda():
 
         def _salvar_agendamento_dlg(db_save, data_ag, hora_inicio, hora_fim_calc, duracao,
                                     cli_id, cli_nome, prof_sel, procedimento, observacoes_ag,
-                                    sala_sel, cor_por_prof_map, tipo_recorrencia, num_repeticoes):
-            _pacote_item_id = st.session_state.pop("dlg_ag_pacote_item_id", None)
-            for _rep_i in range(int(num_repeticoes)):
-                if tipo_recorrencia == "Semanal":
-                    _data_sem = data_ag + timedelta(weeks=_rep_i)
-                elif tipo_recorrencia == "Quinzenal":
-                    _data_sem = data_ag + timedelta(weeks=_rep_i * 2)
-                elif tipo_recorrencia == "Mensal":
-                    _data_sem = data_ag + timedelta(days=_rep_i * 30)
-                elif tipo_recorrencia == "Bimestral":
-                    _data_sem = data_ag + timedelta(days=_rep_i * 60)
-                elif tipo_recorrencia == "Trimestral":
-                    _data_sem = data_ag + timedelta(days=_rep_i * 90)
-                elif tipo_recorrencia == "Semestral":
-                    _data_sem = data_ag + timedelta(days=_rep_i * 180)
-                else:
-                    _data_sem = data_ag + timedelta(weeks=_rep_i)
+                                    sala_sel, cor_por_prof_map, tipo_recorrencia, num_repeticoes,
+                                    qtd_pre_agendamentos=0):
+            _pacote_item_id = st.session_state.get("dlg_ag_pacote_item_id")
 
-                novo = ScheduledAppointment(
-                    data=_data_sem,
+            _passo = {
+                "Semanal": 7, "Quinzenal": 14, "Mensal": 30,
+                "Bimestral": 60, "Trimestral": 90, "Semestral": 180,
+            }.get(tipo_recorrencia, 7)
+
+            _proc = (procedimento or "").strip() or None
+            _sala = sala_sel if sala_sel != "— selecione —" else None
+            _cor = cor_por_prof_map.get(prof_sel, "#E3A5C7")
+            _total_rep = max(1, int(num_repeticoes or 1))
+            _criados = 0
+            _duplicados = 0
+
+            def _ja_existe(_dt, _hora):
+                """Evita gravar o mesmo horário duas vezes (cliques repetidos)."""
+                q = db_save.query(ScheduledAppointment).filter(
+                    ScheduledAppointment.data == _dt,
+                    ScheduledAppointment.hora_inicio == _hora,
+                    ScheduledAppointment.profissional == prof_sel,
+                )
+                if cli_id:
+                    q = q.filter(ScheduledAppointment.cliente_id == cli_id)
+                else:
+                    q = q.filter(func.lower(ScheduledAppointment.cliente_nome) == (cli_nome or "").lower())
+                return q.first() is not None
+
+            def _criar(_dt, _pre=False):
+                nonlocal _criados, _duplicados
+                if _ja_existe(_dt, hora_inicio):
+                    _duplicados += 1
+                    return None
+                _novo = ScheduledAppointment(
+                    data=_dt,
                     hora_inicio=hora_inicio,
                     hora_fim=hora_fim_calc,
                     duracao_min=duracao,
                     cliente_id=cli_id,
                     cliente_nome=cli_nome,
                     profissional=prof_sel,
-                    procedimento=procedimento.strip(),
+                    procedimento=_proc,
                     observacoes=observacoes_ag,
                     confirmado=False,
-                    sala=sala_sel if sala_sel != "— selecione —" else None,
-                    cor_profissional=cor_por_prof_map.get(prof_sel, "#E3A5C7"),
+                    sala=_sala,
+                    cor_profissional=_cor,
+                    sale_item_id=(_pacote_item_id if not _pre else None),
+                    pre_agendamento=_pre,
                 )
-                db_save.add(novo)
+                db_save.add(_novo)
                 db_save.flush()
-                if _pacote_item_id and _rep_i == 0:
-                    novo.sale_item_id = _pacote_item_id
+                _criados += 1
                 try:
-                    _ulog = st.session_state.get("user", {})
+                    _ulog = st.session_state.get("user", {}) or {}
                     db_save.add(AgendaLog(
-                        agendamento_id=novo.id,
-                        acao="criado",
+                        agendamento_id=_novo.id,
+                        acao="pre_agendado" if _pre else "criado",
                         usuario_id=_ulog.get("id"),
                         usuario_nome=_ulog.get("nome", ""),
                         dados_depois=__import__("json").dumps({
-                            "data": str(novo.data), "hora_inicio": novo.hora_inicio,
-                            "hora_fim": novo.hora_fim, "cliente": novo.cliente_nome,
-                            "profissional": novo.profissional, "procedimento": novo.procedimento,
-                            "sala": novo.sala, "duracao_min": novo.duracao_min,
+                            "data": str(_novo.data), "hora_inicio": _novo.hora_inicio,
+                            "hora_fim": _novo.hora_fim, "cliente": _novo.cliente_nome,
+                            "profissional": _novo.profissional, "procedimento": _novo.procedimento,
+                            "sala": _novo.sala, "duracao_min": _novo.duracao_min,
+                            "pre_agendamento": _pre,
                         }, ensure_ascii=False),
                     ))
                 except Exception:
                     pass
-            db_save.commit()
-            if int(num_repeticoes) > 1:
-                st.success(f"{int(num_repeticoes)} agendamentos criados!")
+                return _novo
+
+            try:
+                for _i in range(_total_rep):
+                    _criar(data_ag + timedelta(days=_passo * _i), _pre=False)
+
+                # Pré-agendamento: mantém a recorrência além do pacote, em
+                # transparência, para a cliente ter prioridade se renovar.
+                for _j in range(int(qtd_pre_agendamentos or 0)):
+                    _criar(data_ag + timedelta(days=_passo * (_total_rep + _j)), _pre=True)
+
+                db_save.commit()
+            except Exception as _err_save:
+                db_save.rollback()
+                st.error(f"Erro ao salvar agendamento: {_err_save}")
+                return
+
+            st.session_state.pop("dlg_ag_pacote_item_id", None)
+            st.session_state.pop("dlg_ag_pkg_proc", None)
+            st.session_state.pop("dlg_ag_pkg_restam", None)
+
+            if _criados == 0:
+                st.warning("Esse agendamento já existe na agenda.")
+            elif _duplicados:
+                st.success(f"{_criados} agendamento(s) criado(s). {_duplicados} já existia(m).")
+            elif _criados > 1:
+                st.success(f"{_criados} agendamentos criados!")
             else:
                 st.success("Agendamento salvo!")
             st.rerun()
 
         # Abre popup automaticamente quando vem de clique em slot vazio do calendário
-        if st.session_state.pop("ag_abrir_novo_popup", False):
+        _outro_popup = any(
+            st.session_state.get(_k) for _k in ("ag_popup_edit_id", "ag_excluir_id", "ag_menu_id")
+        )
+        if st.session_state.pop("ag_abrir_novo_popup", False) and not _outro_popup:
             _data_pre = st.session_state.pop("dlg_ag_data_pre", None)
             if _data_pre:
                 st.session_state["dlg_ag_data"] = _data_pre
@@ -1646,7 +1750,7 @@ def tela_agenda():
             _dialog_novo_agendamento()
 
         # Botão novo agendamento no topo
-        if st.button("➕ Novo agendamento", use_container_width=False, type="primary"):
+        if st.button("➕ Novo agendamento", use_container_width=False, type="primary") and not _outro_popup:
             # Limpa data prévia para não herdar de clique anterior
             st.session_state.pop("dlg_ag_data", None)
             st.session_state.pop("dlg_ag_data_sala", None)
@@ -2126,22 +2230,51 @@ def tela_agenda():
                     st.rerun()
 
                 _payload = st.text_input("agx-payload", value="", key="agx_payload")
-                if st.button("agx-move", key="agx_move"):
-                    try:
-                        _pid, _pdata, _phora = (_payload or "").split("|")
-                        _ag_mv = db.get(ScheduledAppointment, int(_pid))
-                        if _ag_mv:
-                            _ag_mv.data = datetime.strptime(_pdata, "%Y-%m-%d").date()
-                            _ag_mv.hora_inicio = _phora
-                            _ag_mv.hora_fim = calcular_hora_fim(_phora, _ag_mv.duracao_min or 60)
+                _btn_move = st.button("agx-move", key="agx_move")
+
+            # Aplica o arraste assim que o payload chega, sem depender do
+            # clique no botão oculto (que nem sempre acontecia a tempo).
+            _pay = (st.session_state.get("agx_payload") or "").strip()
+            if _pay and _pay != st.session_state.get("agx_payload_done"):
+                st.session_state["agx_payload_done"] = _pay
+                try:
+                    _pid, _pdata, _phora = _pay.split("|")
+                    _ag_mv = db.get(ScheduledAppointment, int(_pid))
+                    if _ag_mv:
+                        _antes_mv = {
+                            "data": str(_ag_mv.data),
+                            "hora_inicio": _ag_mv.hora_inicio,
+                        }
+                        _ag_mv.data = datetime.strptime(_pdata, "%Y-%m-%d").date()
+                        _ag_mv.hora_inicio = _phora
+                        _ag_mv.hora_fim = calcular_hora_fim(_phora, _ag_mv.duracao_min or 60)
+                        db.commit()
+                        try:
+                            _ulog = st.session_state.get("user", {}) or {}
+                            db.add(AgendaLog(
+                                agendamento_id=_ag_mv.id,
+                                acao="movido",
+                                usuario_id=_ulog.get("id"),
+                                usuario_nome=_ulog.get("nome", ""),
+                                dados_antes=__import__("json").dumps(_antes_mv, ensure_ascii=False),
+                                dados_depois=__import__("json").dumps({
+                                    "data": str(_ag_mv.data),
+                                    "hora_inicio": _ag_mv.hora_inicio,
+                                }, ensure_ascii=False),
+                            ))
                             db.commit()
-                            st.toast(
-                                f"{_ag_mv.cliente_nome or 'Agendamento'} movido para "
-                                f"{_ag_mv.data.strftime('%d/%m')} às {_phora}"
-                            )
-                    except Exception as _e:
-                        st.warning(f"Não foi possível mover o agendamento: {_e}")
-                    st.rerun()
+                        except Exception:
+                            db.rollback()
+                        st.toast(
+                            f"{_ag_mv.cliente_nome or 'Agendamento'} movido para "
+                            f"{_ag_mv.data.strftime('%d/%m')} às {_phora}"
+                        )
+                except Exception as _e:
+                    db.rollback()
+                    st.warning(f"Não foi possível mover o agendamento: {_e}")
+                st.rerun()
+            elif _btn_move:
+                st.rerun()
 
             # Um unico calendario com todos os profissionais/salas
             components.html(
@@ -2156,7 +2289,8 @@ def tela_agenda():
             )
 
         # ── Pop-up de edição rápida ──────────────────────────────────────────
-        elif "ag_popup_edit_id" in st.session_state:
+        # Fica fora do if/elif da visualização: antes só abria na Lista.
+        if "ag_popup_edit_id" in st.session_state:
             _popup_id = st.session_state["ag_popup_edit_id"]
             _ag_popup = db.get(ScheduledAppointment, _popup_id)
             if _ag_popup:
@@ -3778,12 +3912,20 @@ def _modal_tabela_doses():
                 ).order_by(Client.nome).limit(20).all()
                 return [f"{c.nome} | {c.cpf or c.telefone or ''}" for c in res]
 
-            sel_cli_dose = st_searchbox(
-                buscar_cli_dose,
-                label="Cliente",
-                key="dose_cliente_search",
-                placeholder="Digite o nome, CPF ou telefone",
-            )
+            _sbs = st.session_state.get("dose_cliente_search")
+            if _sbs is not None and not isinstance(_sbs, dict):
+                st.session_state.pop("dose_cliente_search", None)
+            try:
+                sel_cli_dose = st_searchbox(
+                    buscar_cli_dose,
+                    label="Cliente",
+                    key="dose_cliente_search",
+                    placeholder="Digite o nome, CPF ou telefone",
+                )
+            except (TypeError, KeyError):
+                st.session_state.pop("dose_cliente_search", None)
+                st.warning("Campo de busca reiniciado. Digite o nome novamente.")
+                return
 
             cliente_id = None
             cliente_nome_dose = ""
@@ -4090,12 +4232,20 @@ def _modal_medidas_biometricas():
                 ).order_by(Client.nome).limit(20).all()
                 return [f"{c.nome} | {c.cpf or c.telefone or ''}" for c in res]
 
-            sel_cli_med = st_searchbox(
-                buscar_cli_med,
-                label="Cliente",
-                key="med_cliente_search",
-                placeholder="Digite o nome, CPF ou telefone",
-            )
+            _sbs = st.session_state.get("med_cliente_search")
+            if _sbs is not None and not isinstance(_sbs, dict):
+                st.session_state.pop("med_cliente_search", None)
+            try:
+                sel_cli_med = st_searchbox(
+                    buscar_cli_med,
+                    label="Cliente",
+                    key="med_cliente_search",
+                    placeholder="Digite o nome, CPF ou telefone",
+                )
+            except (TypeError, KeyError):
+                st.session_state.pop("med_cliente_search", None)
+                st.warning("Campo de busca reiniciado. Digite o nome novamente.")
+                return
 
             cliente_med_id = None
             cliente_med_nome = ""
@@ -4263,13 +4413,19 @@ def tela_atendimentos():
                         ).all()
                     )
                     if _pacotes_at:
+                        st.success(
+                            f"📦 Esta cliente tem **{len(_pacotes_at)}** pacote(s) ativo(s)."
+                        )
                         _mapa_pac = {"— nenhum —": None}
                         for _p in _pacotes_at:
-                            _realizadas = _p.sessoes_usadas
-                            _total = _p.sessoes_total
-                            _mapa_pac[f"📦 {_p.procedimento} — {_realizadas}/{_total} realizadas"] = _p.id
+                            _realizadas = _p.sessoes_usadas or 0
+                            _total = _p.sessoes_total or 0
+                            _mapa_pac[
+                                f"📦 {_p.procedimento} — sessão {_realizadas + 1} de {_total} "
+                                f"(faltam {max(0, _total - _realizadas)})"
+                            ] = _p.id
                         _sel_pac = st.selectbox(
-                            "Pacote ativo (descontar sessão)",
+                            "Pacote ativo (descontar sessão ao salvar)",
                             list(_mapa_pac.keys()),
                             key="at_pacote_sel",
                         )
@@ -4277,12 +4433,24 @@ def tela_atendimentos():
                         if pacote_sel_item_id:
                             _p_sel = next((p for p in _pacotes_at if p.id == pacote_sel_item_id), None)
                             if _p_sel:
-                                _realizadas_sel = _p_sel.sessoes_usadas
-                                _total_sel = _p_sel.sessoes_total
-                                if _realizadas_sel + 1 >= _total_sel:
-                                    st.warning(f"⚠️ Esta é a ÚLTIMA sessão do pacote **{_p_sel.procedimento}**.")
+                                _realizadas_sel = _p_sel.sessoes_usadas or 0
+                                _total_sel = _p_sel.sessoes_total or 0
+                                _atual = _realizadas_sel + 1
+                                _faltam = max(0, _total_sel - _atual)
+                                if _atual >= _total_sel:
+                                    st.warning(
+                                        f"⚠️ Esta é a **ÚLTIMA** sessão ({_atual} de {_total_sel}) "
+                                        f"do pacote **{_p_sel.procedimento}**. "
+                                        "Após salvar, a cliente entra na lista de renovação."
+                                    )
                                 else:
-                                    st.caption(f"Já foram realizadas {_realizadas_sel} de {_total_sel} sessões.")
+                                    st.info(
+                                        f"Registrando a sessão **{_atual} de {_total_sel}** de "
+                                        f"**{_p_sel.procedimento}** · já realizadas: {_realizadas_sel} · "
+                                        f"restarão **{_faltam}**."
+                                    )
+                    else:
+                        st.caption("Esta cliente não possui pacote ativo.")
                 except Exception:
                     pass
 
@@ -4409,7 +4577,7 @@ def tela_atendimentos():
                         st.session_state.pop("atendimento_cliente_nome", None)
                         # Descontar sessão de pacote (seleção manual tem prioridade)
                         try:
-                            from models.sale import Sale, SaleItem
+                            from models.sale import Sale, SaleItem, SessionUsage
                             _pacote_item = None
                             if pacote_sel_item_id:
                                 _pacote_item = db.query(SaleItem).filter(
@@ -4418,19 +4586,34 @@ def tela_atendimentos():
                             elif tipo and cliente_at_id:
                                 _pacote_item = db.query(SaleItem).join(Sale).filter(
                                     Sale.cliente_id == cliente_at_id,
-                                    SaleItem.procedimento == tipo,
+                                    func.lower(SaleItem.procedimento) == (tipo or "").lower(),
                                     SaleItem.tipo == "pacote",
                                     SaleItem.sessoes_usadas < SaleItem.sessoes_total,
                                 ).first()
-                            if _pacote_item and _pacote_item.sessoes_usadas < _pacote_item.sessoes_total:
-                                _pacote_item.sessoes_usadas += 1
+                            if _pacote_item and (_pacote_item.sessoes_usadas or 0) < (_pacote_item.sessoes_total or 0):
+                                _pacote_item.sessoes_usadas = (_pacote_item.sessoes_usadas or 0) + 1
+                                db.add(SessionUsage(
+                                    sale_item_id=_pacote_item.id,
+                                    agendamento_id=None,
+                                    data_uso=data_at,
+                                ))
+                                if not _pacote_item.data_inicio:
+                                    _pacote_item.data_inicio = data_at
+                                if _pacote_item.sessoes_usadas >= (_pacote_item.sessoes_total or 0):
+                                    _pacote_item.data_termino = data_at
                                 db.commit()
+                                st.session_state["at_pacote_msg"] = (
+                                    f"Sessão {_pacote_item.sessoes_usadas} de "
+                                    f"{_pacote_item.sessoes_total} do pacote "
+                                    f"{_pacote_item.procedimento} registrada."
+                                )
                         except Exception:
-                            pass
-                        # Limpar campos do formulário
-                        for key in ["atendimento_selectbox", "at_data", "at_queixa", "at_tipo", "at_protocolo", "at_obs", "at_linhas", "at_pacote_sel"]:
-                            if key in st.session_state:
-                                st.session_state.pop(key, None)
+                            db.rollback()
+                        # O form usa clear_on_submit=True, entao os campos de
+                        # dentro dele ja sao limpos pelo Streamlit. Remover essas
+                        # chaves na mao fazia o widget perder o estado e a tela
+                        # travar com os campos bloqueados.
+                        st.session_state.pop("at_linhas", None)
                         st.session_state["at_salvo_ok"] = True
                         st.rerun()
                     except Exception as _save_err:
@@ -5867,20 +6050,40 @@ def tela_pacotes():
         # ── Formulário de novo pacote ──
         st.markdown("### Novo Pacote")
 
+        # O st_searchbox guarda um dict interno na propria chave. Se ficar com
+        # outro tipo (None/str), o componente quebra com
+        # "'NoneType' object is not subscriptable". Usamos uma chave versionada
+        # para reiniciar o campo sem nunca sobrescrever o estado interno.
+        _sb_ver = st.session_state.get("pacote_sb_ver", 0)
+        _sb_key = f"pacote_cliente_search_{_sb_ver}"
+        _sb_state = st.session_state.get(_sb_key)
+        if _sb_state is not None and not isinstance(_sb_state, dict):
+            st.session_state.pop(_sb_key, None)
+        st.session_state.pop("pacote_cliente_search", None)
+
         def buscar_cli_pacote(termo):
-            if not termo or len(termo) < 2:
+            if not termo or len(str(termo).strip()) < 2:
                 return []
-            like = f"%{termo.lower()}%"
+            termo_limpo = str(termo).strip().lower()
+            like = f"%{termo_limpo}%"
             res = db.query(Client).filter(
                 (func.lower(Client.nome).like(like)) | (func.lower(Client.cpf).like(like)) | (func.lower(Client.telefone).like(like))
             ).order_by(Client.nome).limit(20).all()
             return [f"{c.nome} | {c.cpf or c.telefone or ''}" for c in res]
 
-        sel_cli = st_searchbox(buscar_cli_pacote, label="Cliente*", key="pacote_cliente_search", placeholder="Digite o nome")
+        try:
+            sel_cli = st_searchbox(
+                buscar_cli_pacote, label="Cliente*", key=_sb_key, placeholder="Digite o nome"
+            )
+        except (TypeError, KeyError):
+            # Estado interno inconsistente: reinicia o campo em vez de quebrar a tela
+            st.session_state.pop(_sb_key, None)
+            st.session_state["pacote_sb_ver"] = _sb_ver + 1
+            st.rerun()
 
         pacote_cliente_id = st.session_state.get("pacote_cliente_id_selecionado", 0)
-        if sel_cli:
-            nome_base = str(sel_cli).split("|")[0].strip()
+        if sel_cli and isinstance(sel_cli, str):
+            nome_base = sel_cli.split("|")[0].strip()
             c_match = db.query(Client).filter(func.lower(Client.nome).like(f"%{nome_base.lower()}%")).first()
             if c_match and c_match.id != pacote_cliente_id:
                 st.session_state["pacote_cliente_id_selecionado"] = c_match.id
@@ -5945,7 +6148,7 @@ def tela_pacotes():
                 db.commit()
                 st.success("Pacote registrado com sucesso!")
                 st.session_state["pacote_cliente_id_selecionado"] = 0
-                st.session_state["pacote_cliente_search"] = None
+                st.session_state["pacote_sb_ver"] = _sb_ver + 1
                 st.rerun()
 
         # ── Lista de pacotes ──

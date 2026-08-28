@@ -19,6 +19,10 @@ class ScheduledAppointment(Base):
     confirmado = Column(Boolean, default=False)
     cor_profissional = Column(String, nullable=True, default="#E3A5C7")
     sala = Column(String, nullable=True)
+    # Liga o agendamento a um pacote (venda_itens) para descontar sessões
+    sale_item_id = Column(Integer, ForeignKey("venda_itens.id"), nullable=True, index=True)
+    # Pré-agendamento: reserva de horário para possível renovação de pacote
+    pre_agendamento = Column(Boolean, nullable=False, default=False)
     criado_em = Column(DateTime(timezone=True), server_default=func.now())
 
     cliente = relationship("Client", foreign_keys=[cliente_id])
