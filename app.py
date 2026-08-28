@@ -6573,6 +6573,18 @@ def main():
 
     rota = st.session_state.menu
 
+    # Garante que a rota atual ainda existe e é permitida para o perfil
+    perfil_atual = st.session_state.user.get("perfil", "") if st.session_state.user else ""
+    rotas_validas = {"Dashboard", "Agenda", "Clientes", "Pré-avaliação", "Atendimentos", "Biometria", "Estoque", "Contratos", "Cadastros"}
+    if perfil_atual in ["admin", "recepcao"]:
+        rotas_validas.add("Pacotes")
+    if perfil_atual == "admin":
+        rotas_validas.update({"Relatórios", "Usuários"})
+    if rota not in rotas_validas:
+        st.session_state.menu = "Dashboard"
+        rota = "Dashboard"
+        st.rerun()
+
     if rota == "Dashboard":
         tela_dashboard()
     elif rota == "Agenda":
