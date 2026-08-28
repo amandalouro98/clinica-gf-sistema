@@ -3231,7 +3231,7 @@ def tela_clientes():
                     finally:
                         db_edit.close()
 
-                abas = st.tabs(["📋 Atendimentos", "📐 Biometria", "📝 Pré-avaliações", "💳 Compras e Pacotes", "💉 Tabela de Doses"])
+                abas = st.tabs(["📋 Atendimentos", "📐 Biometria", "📝 Pré-avaliações", "📦 Pacotes", "💉 Tabela de Doses"])
 
                 with abas[0]:
                     _atendimentos_cli = (
@@ -3387,30 +3387,34 @@ def tela_clientes():
                         st.info("Nenhuma pré-avaliação encontrada.")
 
                 with abas[3]:
-                    vendas = (
-                        db.query(Sale)
-                        .filter(Sale.cliente_id == cliente_id)
-                        .order_by(Sale.data_venda.desc())
+                    # Mesma tabela da aba Pacotes, filtrada por esta cliente
+                    from models.sale import SaleItem as _SIcli
+                    _pacotes_cli = (
+                        db.query(_SIcli)
+                        .join(Sale)
+                        .filter(Sale.cliente_id == cliente_id, _SIcli.tipo == "pacote")
+                        .order_by(Sale.data_venda.desc(), _SIcli.id.desc())
                         .all()
                     )
-                    if not vendas:
-                        st.info("Nenhuma compra registrada para esta cliente.")
+                    if not _pacotes_cli:
+                        st.info("Nenhum pacote registrado para esta cliente.")
                     else:
-                        rows = []
-                        for v in vendas:
-                            for it in v.itens:
-                                saldo = it.sessoes_total - it.sessoes_usadas
-                                rows.append({
-                                    "Data": v.data_venda.strftime("%d/%m/%Y"),
-                                    "Procedimento": it.procedimento,
-                                    "Tipo": it.tipo.capitalize(),
-                                    "Total Sessões": it.sessoes_total,
-                                    "Usadas": it.sessoes_usadas,
-                                    "Saldo": saldo,
-                                    "Valor (R$)": f"{it.valor:.2f}",
-                                    "Pagamento": v.forma_pagamento,
-                                })
-                        st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+                        _rows_pac = []
+                        for _it in _pacotes_cli:
+                            _term = _it.data_termino_calculada
+                            _rows_pac.append({
+                                "Paciente": c.nome,
+                                "Procedimento": _it.procedimento or "—",
+                                "Pacote": _it.sessoes_total,
+                                "Sessão atual": _it.sessoes_usadas,
+                                "Data início": _it.data_inicio.strftime("%d/%m/%Y") if _it.data_inicio else "—",
+                                "Data fim": _term.strftime("%d/%m/%Y") if _term else "—",
+                            })
+                        st.dataframe(
+                            pd.DataFrame(_rows_pac),
+                            use_container_width=True,
+                            hide_index=True,
+                        )
 
                 with abas[4]:
                     doses = db.query(DoseTable).filter(
