@@ -4540,8 +4540,7 @@ def tela_atendimentos():
                             _realizadas = _p.sessoes_usadas or 0
                             _total = _p.sessoes_total or 0
                             _mapa_pac[
-                                f"📦 {_p.procedimento} — sessão {_realizadas + 1} de {_total} "
-                                f"(faltam {max(0, _total - _realizadas)})"
+                                f"📦 {_p.procedimento} — {_realizadas + 1} de {_total}"
                             ] = _p.id
                         _sel_pac = st.selectbox(
                             "Pacote ativo (descontar sessão ao salvar)",
@@ -4555,7 +4554,6 @@ def tela_atendimentos():
                                 _realizadas_sel = _p_sel.sessoes_usadas or 0
                                 _total_sel = _p_sel.sessoes_total or 0
                                 _atual = _realizadas_sel + 1
-                                _faltam = max(0, _total_sel - _atual)
                                 if _atual >= _total_sel:
                                     st.warning(
                                         f"⚠️ Esta é a **ÚLTIMA** sessão ({_atual} de {_total_sel}) "
@@ -4565,8 +4563,7 @@ def tela_atendimentos():
                                 else:
                                     st.info(
                                         f"Registrando a sessão **{_atual} de {_total_sel}** de "
-                                        f"**{_p_sel.procedimento}** · já realizadas: {_realizadas_sel} · "
-                                        f"restarão **{_faltam}**."
+                                        f"**{_p_sel.procedimento}**."
                                     )
                     else:
                         st.caption("Esta cliente não possui pacote ativo.")
