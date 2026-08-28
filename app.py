@@ -5894,15 +5894,11 @@ def tela_pacotes():
             _val_default = _p_ref.valor_pacote or _p_ref.valor_unitario or 0.0
             _sessoes_default = _p_ref.sessoes_pacote or 1
 
-        col3, col4 = st.columns([3, 1])
-        with col3:
-            if proc_selecionado == "— digitar manualmente —":
-                procedimento = st.text_input("Procedimento*", key="pacote_proc")
-            else:
-                procedimento = proc_selecionado
-                st.text_input("Procedimento*", value=proc_selecionado, disabled=True, key="pacote_proc_show")
-        with col4:
-            valor_total = st.number_input("Valor total (R$)", min_value=0.0, step=0.01, value=0.0, key="pacote_valor")
+        if proc_selecionado == "— digitar manualmente —":
+            procedimento = st.text_input("Procedimento*", key="pacote_proc")
+        else:
+            procedimento = proc_selecionado
+            st.text_input("Procedimento*", value=proc_selecionado, disabled=True, key="pacote_proc_show")
 
         col5, col6, col7 = st.columns(3)
         with col5:
@@ -5945,7 +5941,7 @@ def tela_pacotes():
                     tipo="pacote",
                     sessoes_total=int(sessoes_total),
                     sessoes_usadas=int(sessoes_usadas),
-                    valor=valor_total,
+                    valor=0.0,
                     data_inicio=data_inicio,
                 ))
                 db.commit()
@@ -5995,7 +5991,6 @@ def tela_pacotes():
                     "Data de início": inicio_str,
                     "Data de término": termino_str,
                     "Status": status,
-                    "Valor": f"R$ {item.valor:.2f}" if item.valor else "R$ 0,00",
                     "Pagamento": v.forma_pagamento or "—" if v else "—",
                     "Observação": v.observacoes or "—" if v else "—",
                 })
@@ -6008,7 +6003,7 @@ def tela_pacotes():
                 column_config={
                     "Selecionar": st.column_config.CheckboxColumn("Selecionar", default=False),
                 },
-                disabled=["Data", "Cliente", "Procedimento", "Qtd. sessões", "Sessão atual", "Sessões restantes", "Data de início", "Data de término", "Status", "Valor", "Pagamento", "Observação"],
+                disabled=["Data", "Cliente", "Procedimento", "Qtd. sessões", "Sessão atual", "Sessões restantes", "Data de início", "Data de término", "Status", "Pagamento", "Observação"],
                 key="pacotes_editor",
             )
 
@@ -6063,8 +6058,7 @@ def tela_pacotes():
                             _ed_total = st.number_input("Qtd. sessões do pacote", min_value=1, step=1, value=item_ed.sessoes_total, key="dlg_ed_pacote_total")
                         with col_b:
                             _ed_usadas = st.number_input("Sessão atual (já realizadas)", min_value=0, step=1, value=item_ed.sessoes_usadas, key="dlg_ed_pacote_usadas")
-                        with col_c:
-                            _ed_valor = st.number_input("Valor total (R$)", min_value=0.0, step=0.01, value=float(item_ed.valor or 0.0), key="dlg_ed_pacote_valor")
+                        # Valor não é exibido (sempre zero)
 
                         col_d, col_e = st.columns(2)
                         with col_d:
@@ -6099,7 +6093,7 @@ def tela_pacotes():
                                     item_ed.procedimento = _ed_proc.strip()
                                     item_ed.sessoes_total = int(_ed_total)
                                     item_ed.sessoes_usadas = int(_ed_usadas)
-                                    item_ed.valor = float(_ed_valor)
+                                    item_ed.valor = 0.0
                                     item_ed.data_inicio = _ed_data_inicio
                                     db_ed.commit()
                                     st.session_state.pop("pacote_editando", None)
