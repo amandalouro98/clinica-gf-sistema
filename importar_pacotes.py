@@ -45,7 +45,7 @@ def _parse_sessao_atual(valor, total):
         return 0
 
 
-def importar_pacotes(caminho_xlsx: str, data_compra: date = None, limpar_antigos: bool = True):
+def importar_pacotes(caminho_xlsx: str, data_compra: date = None, limpar_antigos: bool = True, dry_run: bool = False):
     data_compra = data_compra or date.today()
 
     df = pd.read_excel(caminho_xlsx)
@@ -55,13 +55,16 @@ def importar_pacotes(caminho_xlsx: str, data_compra: date = None, limpar_antigos
     try:
         if limpar_antigos:
             antigos = db.query(SaleItem).filter(SaleItem.tipo == "pacote").all()
-            for item in antigos:
-                if item.venda:
-                    db.delete(item.venda)
-                else:
-                    db.delete(item)
-            db.commit()
-            print(f"[LIMPO] {len(antigos)} pacote(s) antigo(s) removido(s).")
+            if dry_run:
+                print(f"[DRY-RUN] Limparia {len(antigos)} pacote(s) antigo(s).")
+            else:
+                for item in antigos:
+                    if item.venda:
+                        db.delete(item.venda)
+                    else:
+                        db.delete(item)
+                db.commit()
+                print(f"[LIMPO] {len(antigos)} pacote(s) antigo(s) removido(s).")
 
         clientes = db.query(Client).all()
         mapa_clientes = {}
@@ -117,7 +120,8 @@ def importar_pacotes(caminho_xlsx: str, data_compra: date = None, limpar_antigos
                 data_inicio=data_compra,
             )
             db.add(item)
-            db.commit()
+            if not dry_run:
+                db.commit()
 
             importados += 1
             print(f"[IMPORTADO] {cliente.nome} - {procedimento} | {usadas}/{total}")
@@ -129,10 +133,15 @@ def importar_pacotes(caminho_xlsx: str, data_compra: date = None, limpar_antigos
             print(f"Clientes não encontrados ({len(nao_encontrados)}):")
             for nome in nao_encontrados:
                 print(f"  - {nome}")
+    except Exception as e:
+        db.rollback()
+        print(f"\n[ERRO] Importação cancelada: {e}")
+        raise
     finally:
         db.close()
 
 
 if __name__ == "__main__":
     caminho = sys.argv[1] if len(sys.argv) > 1 else "/opt/Pacotes agosto26.xlsx"
-    importar_pacotes(caminho)
+    dry_run = "--dry-run" in sys.argv
+    importar_pacotes(caminho, limpar_antigos=True, dry_run=dry_run)
