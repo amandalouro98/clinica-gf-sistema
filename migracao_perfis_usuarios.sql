@@ -1,11 +1,5 @@
 -- ============================================================
--- 1) CONFERENCIA: veja quem esta cadastrado e com qual perfil
--- ============================================================
-SELECT id, nome, email, perfil, ativo FROM usuarios ORDER BY id;
-
--- ============================================================
--- 2) HIGIENE (seguro para todos): ninguem pode ficar sem perfil,
---    e o perfil precisa estar em minusculas sem espacos.
+-- 1) HIGIENE (seguro para todos)
 -- ============================================================
 UPDATE usuarios
 SET perfil = lower(btrim(perfil))
@@ -21,15 +15,31 @@ SET profissional = 'Sem profissional'
 WHERE profissional IS NULL OR btrim(profissional) = '';
 
 -- ============================================================
--- 3) PERFIS: rode DEPOIS de ver a lista do passo 1.
---    Troque os IDs pelos reais. Nao use nome, para nao confundir
---    as duas Gabis.
+-- 2) PERFIS
+--    Casamento pelo SOBRENOME, para nao confundir as duas Gabrielas.
 -- ============================================================
--- UPDATE usuarios SET perfil = 'admin'        WHERE id = 1;  -- Amanda
--- UPDATE usuarios SET perfil = 'admin'        WHERE id = 2;  -- Gabriela Franco
--- UPDATE usuarios SET perfil = 'profissional' WHERE id = 3;  -- Ju
--- UPDATE usuarios SET perfil = 'recepcao'     WHERE id = 4;  -- Gabi (recepcao)
--- UPDATE usuarios SET perfil = 'recepcao'     WHERE id = 5;  -- Marina
 
--- Conferencia final
+-- Gabriela Franco -> admin
+UPDATE usuarios
+SET perfil = 'admin'
+WHERE lower(nome) LIKE '%franco%';
+
+-- Gabriela Souza -> recepcao
+UPDATE usuarios
+SET perfil = 'recepcao'
+WHERE lower(nome) LIKE '%souza%';
+
+-- Marina -> recepcao
+UPDATE usuarios
+SET perfil = 'recepcao'
+WHERE lower(nome) LIKE '%marina%';
+
+-- Ju / Juliana -> profissional
+UPDATE usuarios
+SET perfil = 'profissional'
+WHERE lower(nome) LIKE '%juliana%' OR lower(nome) LIKE 'ju %' OR lower(btrim(nome)) = 'ju';
+
+-- ============================================================
+-- 3) CONFERENCIA
+-- ============================================================
 SELECT id, nome, email, perfil, ativo FROM usuarios ORDER BY perfil, nome;
