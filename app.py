@@ -586,27 +586,39 @@ def _mapa_series_recorrencia(db, agendamentos):
         serie = _agendamentos_mesma_recorrencia(db, ag_ref)
         # Pré-agendamento é apenas reserva de horário (não foi vendido),
         # então fica fora da contagem "1 de 5".
-        efetivos = [a for a in serie if not getattr(a, "pre_agendamento", False)]
+        efetivos = sorted(
+            [a for a in serie if not getattr(a, "pre_agendamento", False)],
+            key=lambda x: x.data,
+        )
         total = len(efetivos)
 
         # Quando a série está ligada a um pacote, o total é o que foi contratado
+        # e a posição começa após as sessões já realizadas.
         _item_id = next(
             (getattr(a, "sale_item_id", None) for a in efetivos
              if getattr(a, "sale_item_id", None)), None
         )
+        _usadas = 0
         if _item_id:
             try:
                 from models.sale import SaleItem
                 _item = db.get(SaleItem, _item_id)
                 if _item and (_item.sessoes_total or 0) > 0:
                     total = int(_item.sessoes_total)
+                    _usadas = _item.sessoes_usadas or 0
             except Exception:
                 pass
 
         if total <= 1:
             continue
         for posicao, item in enumerate(efetivos, start=1):
-            mapa[item.id] = (min(posicao, total), total)
+            # Se 9 sessões já foram realizadas, o próximo agendamento é o 10.
+            _pos_real = _usadas + posicao
+            if _item_id and _pos_real > total:
+                # Agendamentos além do pacote contratado não recebem numeração
+                # de sessão (aparecem sem o badge "X de Y").
+                continue
+            mapa[item.id] = (_pos_real, total)
     return mapa
 
 
@@ -2423,32 +2435,13 @@ def tela_agenda():
                                 "e não conta sessão."
                             )
                         elif _tem_serie:
-                            # A numeração usa o total do pacote contratado e ignora
-                            # as reservas de renovação (que ainda não foram vendidas).
-                            _efetivos_ed = [
-                                _it for _it in _serie_ed
-                                if not getattr(_it, "pre_agendamento", False)
-                            ]
-                            _total_ed = len(_efetivos_ed)
-                            _item_ed = getattr(_ag2, "sale_item_id", None) or next(
-                                (getattr(_it, "sale_item_id", None) for _it in _efetivos_ed
-                                 if getattr(_it, "sale_item_id", None)), None
-                            )
-                            if _item_ed:
-                                try:
-                                    from models.sale import SaleItem as _SI
-                                    _si = _db2.get(_SI, _item_ed)
-                                    if _si and (_si.sessoes_total or 0) > 0:
-                                        _total_ed = int(_si.sessoes_total)
-                                except Exception:
-                                    pass
-                            _pos_ed = next(
-                                (i for i, _it in enumerate(_efetivos_ed, start=1) if _it.id == _ag2.id),
-                                None,
-                            )
-                            if _pos_ed and _total_ed > 1:
+                            # Usa o mapa ja calculado para a grade: ele considera
+                            # sessoes_usadas do pacote, entao se 9 ja foram
+                            # realizadas o proximo agendamento aparece como 10 de 10.
+                            _pos_total_ed = series_map.get(_ag2.id)
+                            if _pos_total_ed and _pos_total_ed[1] > 1:
                                 st.info(
-                                    f"Recorrência — sessão **{min(_pos_ed, _total_ed)} de {_total_ed}**"
+                                    f"Recorrência — sessão **{_pos_total_ed[0]} de {_pos_total_ed[1]}**"
                                 )
                             _escopo = st.radio(
                                 "O que deseja alterar?",
