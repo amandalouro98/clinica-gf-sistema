@@ -984,10 +984,13 @@ def sidebar_menu():
                 ("🗂️", "Cadastros", "Cadastros"),
             ]
         else:
-            # Padrão (sem perfil definido) - acesso mínimo
+            # Perfil ausente/desconhecido: trata como "profissional" para que o
+            # menu nunca fique incompleto (Estoque, Materiais em Cadastros etc.).
+            # A governança continua: sem Pacotes, Relatórios e Usuários.
             gestao_itens = [
                 ("📦", "Estoque", "Estoque"),
                 ("📝", "Contratos", "Contratos"),
+                ("🗂️", "Cadastros", "Cadastros"),
             ]
         
         if gestao_itens:
@@ -1883,10 +1886,27 @@ def tela_agenda():
             tipo_visual = st.radio("Visualização", ["Grade", "Lista"], horizontal=True, key="ag_tipo_visual")
 
         # Aplica filtro de profissional
-        ags_periodo = (
-            ags_periodo_raw if filtro_prof == "Todos"
-            else [ag for ag in ags_periodo_raw if ag.profissional and filtro_prof and (ag.profissional == filtro_prof or (ag.profissional or "").split()[0].lower() == (filtro_prof or "").split()[0].lower())]
-        )
+        def _primeiro_nome(valor):
+            """Primeiro nome em minúsculas, tolerante a vazio/só espaços.
+
+            Antes usava .split()[0] direto: um agendamento com profissional em
+            branco estourava IndexError e derrubava a agenda inteira para quem
+            tem perfil profissional (que nunca cai no filtro "Todos").
+            """
+            partes = (valor or "").strip().lower().split()
+            return partes[0] if partes else ""
+
+        if filtro_prof == "Todos" or not (filtro_prof or "").strip():
+            ags_periodo = ags_periodo_raw
+        else:
+            _pn_filtro = _primeiro_nome(filtro_prof)
+            ags_periodo = [
+                ag for ag in ags_periodo_raw
+                if ag.profissional and (
+                    ag.profissional == filtro_prof
+                    or (_pn_filtro and _primeiro_nome(ag.profissional) == _pn_filtro)
+                )
+            ]
 
         ags_por_dia: dict = defaultdict(list)
         for ag in ags_periodo:
@@ -2691,62 +2711,65 @@ def tela_agenda():
         _data_hoje = _hoje()
         _ini_mes = _data_hoje.replace(day=1)
         st.markdown("---")
+        _u_hist = st.session_state.get("user", {}) or {}
+        _perfil_hist = (_u_hist.get("perfil") or "").strip().lower()
+        # Governança mantida: o histórico segue restrito ao perfil
+        # profissional. Antes usava st.stop(), que interrompia a página
+        # inteira e deixava a tela travada com os campos bloqueados.
         with st.expander("📋 Histórico de agendamentos", expanded=False):
-            _u_hist = st.session_state.get("user", {}) or {}
-            _perfil_hist = (_u_hist.get("perfil") or "").strip().lower()
             if _perfil_hist == "profissional":
                 st.info("Acesso restrito ao histórico.")
-                st.stop()
-            col_hi, col_hf, col_att = st.columns([1, 1, 1])
-            with col_hi:
-                _log_ini = st.date_input("De", value=_ini_mes, key="log_ini", format="DD/MM/YYYY")
-            with col_hf:
-                _log_fim = st.date_input("Até", value=_data_hoje, key="log_fim", format="DD/MM/YYYY")
-            with col_att:
-                st.markdown("&nbsp;", unsafe_allow_html=True)
-                if st.button("🔄 Atualizar", use_container_width=True, key="log_refresh"):
-                    st.rerun()
+            else:
+                col_hi, col_hf, col_att = st.columns([1, 1, 1])
+                with col_hi:
+                    _log_ini = st.date_input("De", value=_ini_mes, key="log_ini", format="DD/MM/YYYY")
+                with col_hf:
+                    _log_fim = st.date_input("Até", value=_data_hoje, key="log_fim", format="DD/MM/YYYY")
+                with col_att:
+                    st.markdown("&nbsp;", unsafe_allow_html=True)
+                    if st.button("🔄 Atualizar", use_container_width=True, key="log_refresh"):
+                        st.rerun()
 
-            try:
-                _logs = (
-                    db.query(AgendaLog)
-                    .filter(AgendaLog.criado_em >= _log_ini, AgendaLog.criado_em <= _log_fim)
-                    .order_by(AgendaLog.criado_em.desc())
-                    .all()
-                )
-                if not _logs:
-                    st.info("Nenhum registro no período.")
-                else:
-                    import json as _json
-                    _CORES_ACAO = {
-                        "criado": "🟢", "editado": "🟡",
-                        "confirmado": "🔵", "excluido": "🔴",
-                    }
-                    _rows = []
-                    for _l in _logs:
-                        _depois = _json.loads(_l.dados_depois or "{}") if _l.dados_depois else {}
-                        _antes = _json.loads(_l.dados_antes or "{}") if _l.dados_antes else {}
-                        _base = _depois if _depois else _antes
-                        _data_ag = _base.get("data", "—")
-                        try:
-                            from datetime import datetime as _dt
-                            _data_ag = _dt.strptime(_data_ag, "%Y-%m-%d").strftime("%d/%m/%Y") if _data_ag and _data_ag != "—" else "—"
-                        except Exception:
-                            pass
-                        _rows.append({
-                            "Data do Agendamento": _data_ag,
-                            "Data/Hora da Ação": _l.criado_em.strftime("%d/%m/%Y %H:%M") if _l.criado_em else "—",
-                            "Ação": f"{_CORES_ACAO.get(_l.acao, '')} {_l.acao}",
-                            "Paciente": _base.get("cliente", "—"),
-                            "Profissional": _base.get("profissional", "—"),
-                            "Procedimento": _base.get("procedimento", "—"),
-                            "Sala": _base.get("sala", "—"),
-                            "Usuário": _l.usuario_nome or "—",
-                        })
-                    import pandas as _pd
-                    st.dataframe(_pd.DataFrame(_rows), use_container_width=True, hide_index=True)
-            except Exception as _e:
-                st.warning(f"Não foi possível carregar o histórico: {_e}")
+                try:
+                    _logs = (
+                        db.query(AgendaLog)
+                        .filter(AgendaLog.criado_em >= _log_ini, AgendaLog.criado_em <= _log_fim)
+                        .order_by(AgendaLog.criado_em.desc())
+                        .all()
+                    )
+                    if not _logs:
+                        st.info("Nenhum registro no período.")
+                    else:
+                        import json as _json
+                        _CORES_ACAO = {
+                            "criado": "🟢", "editado": "🟡",
+                            "confirmado": "🔵", "excluido": "🔴",
+                        }
+                        _rows = []
+                        for _l in _logs:
+                            _depois = _json.loads(_l.dados_depois or "{}") if _l.dados_depois else {}
+                            _antes = _json.loads(_l.dados_antes or "{}") if _l.dados_antes else {}
+                            _base = _depois if _depois else _antes
+                            _data_ag = _base.get("data", "—")
+                            try:
+                                from datetime import datetime as _dt
+                                _data_ag = _dt.strptime(_data_ag, "%Y-%m-%d").strftime("%d/%m/%Y") if _data_ag and _data_ag != "—" else "—"
+                            except Exception:
+                                pass
+                            _rows.append({
+                                "Data do Agendamento": _data_ag,
+                                "Data/Hora da Ação": _l.criado_em.strftime("%d/%m/%Y %H:%M") if _l.criado_em else "—",
+                                "Ação": f"{_CORES_ACAO.get(_l.acao, '')} {_l.acao}",
+                                "Paciente": _base.get("cliente", "—"),
+                                "Profissional": _base.get("profissional", "—"),
+                                "Procedimento": _base.get("procedimento", "—"),
+                                "Sala": _base.get("sala", "—"),
+                                "Usuário": _l.usuario_nome or "—",
+                            })
+                        import pandas as _pd
+                        st.dataframe(_pd.DataFrame(_rows), use_container_width=True, hide_index=True)
+                except Exception as _e:
+                    st.warning(f"Não foi possível carregar o histórico: {_e}")
 
     finally:
         db.close()
@@ -6984,13 +7007,9 @@ def main():
             st.error("Você não tem permissão para acessar esta página.")
             st.info("Contate o administrador do sistema.")
     elif rota == "Cadastros":
-        # Verificar permissão
-        perfil = st.session_state.user.get("perfil", "") if st.session_state.user else ""
-        if perfil in ["admin", "recepcao", "profissional"]:
-            tela_cadastros()
-        else:
-            st.error("Você não tem permissão para acessar esta página.")
-            st.info("Contate o administrador do sistema.")
+        # Liberado para todos os usuários logados (materiais, produtos,
+        # profissionais e salas). Telas sensíveis seguem restritas acima.
+        tela_cadastros()
 
 
 if __name__ == "__main__":
