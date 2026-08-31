@@ -4765,7 +4765,12 @@ def tela_atendimentos():
                         )
                     # Limpa o formulario para o proximo atendimento
                     _limpar = ["at_data", "at_queixa", "at_tipo", "at_protocolo",
-                               "at_obs", "at_pacote_sel", "at_linhas"]
+                               "at_obs", "at_pacote_sel", "at_linhas",
+                               "atendimento_cliente_id", "atendimento_cliente_nome"]
+                    # Volta o selectbox de cliente para a opcao vazia, senao ele
+                    # reaparece preenchido com a paciente anterior no proximo
+                    # atendimento.
+                    st.session_state["atendimento_selectbox"] = "— Selecione —"
                     # Varre por prefixo: se a usuária reduziu o número de linhas,
                     # as chaves antigas continuavam preenchidas e reapareciam no
                     # atendimento seguinte.
