@@ -1576,8 +1576,11 @@ def tela_agenda():
                             if _encontrado:
                                 cli_nome_dlg = _encontrado.nome
                                 cli_id_dlg = _encontrado.id
-                                # Sincroniza o campo de nome livre com o cadastrado
-                                st.session_state["dlg_ag_nome_cli"] = _encontrado.nome
+                                # Nao sincronizamos st.session_state["dlg_ag_nome_cli"]
+                                # aqui porque o widget ja foi instanciado; tentar
+                                # alterar a chave apos a renderizacao estoura
+                                # StreamlitAPIException. A variavel local assume
+                                # o nome selecionado e e usada no salvamento.
 
                     if cli_id_dlg:
                         try:
