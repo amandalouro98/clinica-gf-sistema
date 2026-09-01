@@ -77,6 +77,7 @@ from services.importador import sincronizar_clientes
 from ui.components import header_titulo, month_from_date
 from ui.calendar_component import (
     render_fullcalendar,
+    render_fullcalendar_split,
     agenda_to_events,
     build_resources,
     _cor_final_agendamento,
@@ -2450,32 +2451,9 @@ def tela_agenda():
             elif _btn_move:
                 st.rerun()
 
-            # Controles globais de navegacao (controlam os dois calendarios)
-            _col_nav1, _col_nav2, _col_nav3, _col_nav4 = st.columns([0.6, 0.6, 0.6, 3])
-            with _col_nav1:
-                if st.button("◀", key="ag_cal_prev"):
-                    _delta = {"timeGridDay": 1, "timeGridWeek": 7, "dayGridMonth": 30}.get(st.session_state["ag_cal_view"], 1)
-                    st.session_state["ag_cal_date"] = (datetime.strptime(st.session_state["ag_cal_date"], "%Y-%m-%d").date() - timedelta(days=_delta)).strftime("%Y-%m-%d")
-                    st.rerun()
-            with _col_nav2:
-                if st.button("Hoje", key="ag_cal_today"):
-                    st.session_state["ag_cal_date"] = _hoje().strftime("%Y-%m-%d")
-                    st.rerun()
-            with _col_nav3:
-                if st.button("▶", key="ag_cal_next"):
-                    _delta = {"timeGridDay": 1, "timeGridWeek": 7, "dayGridMonth": 30}.get(st.session_state["ag_cal_view"], 1)
-                    st.session_state["ag_cal_date"] = (datetime.strptime(st.session_state["ag_cal_date"], "%Y-%m-%d").date() + timedelta(days=_delta)).strftime("%Y-%m-%d")
-                    st.rerun()
-            with _col_nav4:
-                _nova_view = st.selectbox("Visão", ["Dia", "Semana", "Mês"],
-                                          index=["timeGridDay", "timeGridWeek", "dayGridMonth"].index(st.session_state["ag_cal_view"]),
-                                          key="ag_cal_view_sel", label_visibility="collapsed")
-                _view_map = {"Dia": "timeGridDay", "Semana": "timeGridWeek", "Mês": "dayGridMonth"}
-                if _view_map[_nova_view] != st.session_state["ag_cal_view"]:
-                    st.session_state["ag_cal_view"] = _view_map[_nova_view]
-                    st.rerun()
-
             # Divide os eventos: esquerda (Ju/Kauane/Salas), direita (Gabi)
+            # e renderiza um unico calendario visualmente dividido, igual ao
+            # Google Calendar, usando apenas o bundle gratuito do FullCalendar.
             def _eh_gabi(nome_prof):
                 pn = _normalizar_nome(nome_prof)
                 return "gabi" in pn or "gabriela" in pn
@@ -2484,33 +2462,19 @@ def tela_agenda():
             _ev_esq = [e for e in _events if not _eh_gabi(e.get("extendedProps", {}).get("profissional", ""))]
             _ev_dir = [e for e in _events if _eh_gabi(e.get("extendedProps", {}).get("profissional", ""))]
 
-            _col_cal_esq, _col_cal_dir = st.columns(2)
-            with _col_cal_esq:
-                components.html(
-                    render_fullcalendar(
-                        agendamentos=_ev_esq,
-                        view=st.session_state["ag_cal_view"],
-                        date_str=st.session_state["ag_cal_date"],
-                        height="650px",
-                        titulo="Ju / Kauane / Salas",
-                        show_toolbar=False,
-                    ),
-                    height=690,
-                    scrolling=True,
-                )
-            with _col_cal_dir:
-                components.html(
-                    render_fullcalendar(
-                        agendamentos=_ev_dir,
-                        view=st.session_state["ag_cal_view"],
-                        date_str=st.session_state["ag_cal_date"],
-                        height="650px",
-                        titulo="Gabi",
-                        show_toolbar=False,
-                    ),
-                    height=690,
-                    scrolling=True,
-                )
+            components.html(
+                render_fullcalendar_split(
+                    groups=[
+                        {"title": "Ju / Kauane / Salas", "events": _ev_esq},
+                        {"title": "Gabi", "events": _ev_dir},
+                    ],
+                    view=st.session_state["ag_cal_view"],
+                    date_str=st.session_state["ag_cal_date"],
+                    height="700px",
+                ),
+                height=740,
+                scrolling=True,
+            )
 
         # ── Pop-up de edição rápida ──────────────────────────────────────────
         # Fica fora do if/elif da visualização: antes só abria na Lista.

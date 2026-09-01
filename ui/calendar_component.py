@@ -550,6 +550,454 @@ def render_fullcalendar(
     return html
 
 
+
+
+def render_fullcalendar_split(
+    groups: list,
+    view: str = "timeGridDay",
+    date_str: str = None,
+    height: str = "650px",
+) -> str:
+    """Gera um unico HTML com dois calendarios FullCalendar lado a lado.
+
+    Usado para reproduzir a grade do Google Calendar: recursos divididos
+    visualmente em colunas, mas ainda no bundle gratuito do FullCalendar.
+    A navegacao e a visualizacao sao compartilhadas entre os lados.
+    """
+    fc_view = view if view in _VIEWS_VALIDAS else "timeGridDay"
+    initial_date = date_str or datetime.now().strftime("%Y-%m-%d")
+    groups_json = json.dumps(groups or [], ensure_ascii=False, default=str)
+
+    html = f"""<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@fullcalendar/core@6.1.15/locales/pt-br.global.min.js"></script>
+<style>
+    html, body {{
+        margin: 0;
+        padding: 0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font-size: 13px;
+        background: transparent;
+        color: {COR_TEXTO};
+        height: 100%;
+    }}
+    .fc-split-wrap {{
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        background: #ffffff;
+        border-radius: 10px;
+        border: 1px solid {COR_BORDA};
+        box-sizing: border-box;
+        overflow: hidden;
+    }}
+    .fc-split-toolbar {{
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        border-bottom: 1px solid {COR_BORDA};
+    }}
+    .fc-split-toolbar button {{
+        background: {COR_PRIMARIA};
+        border: 1px solid {COR_PRIMARIA};
+        color: #fff;
+        border-radius: 7px;
+        padding: 4px 12px;
+        font-weight: 600;
+        cursor: pointer;
+        font-size: 12px;
+    }}
+    .fc-split-toolbar button:hover {{ background: {COR_PRIMARIA_ESCURA}; border-color: {COR_PRIMARIA_ESCURA}; }}
+    .fc-split-toolbar select {{
+        border: 1px solid {COR_BORDA};
+        border-radius: 7px;
+        padding: 4px 8px;
+        font-size: 12px;
+        color: {COR_TEXTO};
+    }}
+    .fc-split-toolbar .fc-title {{ font-weight: 700; color: {COR_TEXTO}; margin-left: auto; font-size: 14px; }}
+    .fc-split-panels {{
+        display: flex;
+        flex: 1;
+        min-height: 0;
+    }}
+    .fc-split-panel {{
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        border-right: 1px solid {COR_BORDA};
+    }}
+    .fc-split-panel:last-child {{ border-right: none; }}
+    .fc-split-header {{
+        padding: 8px;
+        text-align: center;
+        font-weight: 700;
+        font-size: 13px;
+        color: {COR_TEXTO};
+        border-bottom: 1px solid {COR_BORDA};
+        background: {COR_FUNDO_HOJE};
+    }}
+    .fc-split-cal {{
+        flex: 1;
+        min-height: 0;
+    }}
+    .fc {{ --fc-page-bg-color: #ffffff; }}
+    .fc .fc-scrollgrid,
+    .fc .fc-scrollgrid-section > * {{ background: #ffffff; }}
+    .fc .fc-timegrid-slot,
+    .fc .fc-daygrid-day {{ background: #ffffff; }}
+    .fc .fc-day-today {{ background: {COR_FUNDO_HOJE} !important; }}
+    .fc .fc-theme-standard td,
+    .fc .fc-theme-standard th,
+    .fc .fc-scrollgrid {{ border-color: {COR_BORDA} !important; }}
+    .fc .fc-timegrid-slot-label,
+    .fc .fc-col-header-cell-cushion,
+    .fc .fc-list-day-text,
+    .fc .fc-list-day-side-text {{ color: {COR_TEXTO}; }}
+    .fc .fc-event {{
+        cursor: pointer;
+        border: none !important;
+        border-radius: 6px !important;
+        font-size: 11px;
+        line-height: 1.2;
+        padding: 1px 3px;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.15);
+    }}
+    .fc .fc-event-title {{ font-weight: 600; white-space: normal !important; padding-right: 26px; }}
+    .fc .ag-pre {{ background: #D9D9D9 !important; border: 1px dashed #A6A6A6 !important; }}
+    .fc .ag-pre .fc-event-title, .fc .ag-pre .fc-event-time {{ color: #6B6B6B !important; }}
+    .fc .fc-event-time {{ font-size: 10px; opacity: 0.9; }}
+    .fc .fc-col-header-cell-cushion {{ font-size: 12px; font-weight: 600; }}
+    .fc .fc-timegrid-slot {{ height: 1.7em; }}
+    .fc .fc-timegrid-now-indicator-line {{ border-color: {COR_PRIMARIA_ESCURA}; }}
+    .event-menu {{
+        position: absolute;
+        top: 50%;
+        right: 2px;
+        transform: translateY(-50%);
+        z-index: 6;
+        cursor: pointer;
+        font-weight: 900;
+        color: #fff;
+        line-height: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 4px;
+        background: rgba(255,255,255,0.30);
+        text-shadow: 0 1px 1px rgba(0,0,0,0.35);
+        min-width: 22px;
+        min-height: 22px;
+        pointer-events: auto;
+    }}
+    .event-menu:hover {{ background: rgba(255,255,255,0.65); }}
+    #menu-flutuante {{
+        position: fixed;
+        display: none;
+        z-index: 9999;
+        background: #ffffff;
+        border: 1px solid {COR_BORDA};
+        border-radius: 8px;
+        box-shadow: 0 4px 14px rgba(74,48,48,0.22);
+        overflow: hidden;
+        min-width: 132px;
+    }}
+    #menu-flutuante button {{
+        display: block;
+        width: 100%;
+        text-align: left;
+        background: none;
+        border: none;
+        padding: 12px 16px;
+        font-size: 14px;
+        color: {COR_TEXTO};
+        cursor: pointer;
+        font-family: inherit;
+        min-height: 44px;
+    }}
+    #menu-flutuante button:hover {{ background: {COR_FUNDO_HOJE}; }}
+    .fc-erro {{
+        padding: 16px;
+        color: #b91c1c;
+        background: #fef2f2;
+        border-radius: 8px;
+        font-size: 13px;
+    }}
+</style>
+</head>
+<body>
+<div class="fc-split-wrap">
+  <div class="fc-split-toolbar">
+    <button id="nav-prev" type="button">◀</button>
+    <button id="nav-today" type="button">Hoje</button>
+    <button id="nav-next" type="button">▶</button>
+    <select id="nav-view">
+      <option value="timeGridDay" {'selected' if fc_view == 'timeGridDay' else ''}>Dia</option>
+      <option value="timeGridWeek" {'selected' if fc_view == 'timeGridWeek' else ''}>Semana</option>
+      <option value="dayGridMonth" {'selected' if fc_view == 'dayGridMonth' else ''}>Mês</option>
+    </select>
+    <div class="fc-title" id="nav-title"></div>
+  </div>
+  <div class="fc-split-panels" id="panels"></div>
+</div>
+<div id="menu-flutuante">
+    <button type="button" id="menu-editar">Editar</button>
+    <button type="button" id="menu-excluir">Excluir</button>
+</div>
+<script>
+(function() {{
+    var groups = {groups_json};
+    var currentView = '{fc_view}';
+    var currentDate = '{initial_date}';
+    var calendars = [];
+    var menuEl = document.getElementById('menu-flutuante');
+    var menuAlvoId = null;
+
+    function docPai() {{
+        try {{ return (window.parent && window.parent !== window) ? window.parent.document : document; }}
+        catch (e) {{ return null; }}
+    }}
+    function textoBotao(btn) {{ return ((btn.innerText || btn.textContent) || '').trim(); }}
+    function acharBotao(marcador) {{
+        var doc = docPai();
+        if (!doc) return null;
+        var botoes = doc.querySelectorAll('button');
+        for (var i = 0; i < botoes.length; i++) {{
+            if (textoBotao(botoes[i]) === marcador) return botoes[i];
+        }}
+        return null;
+    }}
+    function esconderPonte() {{
+        var doc = docPai();
+        if (!doc) return;
+        var botoes = doc.querySelectorAll('button');
+        for (var i = 0; i < botoes.length; i++) {{
+            var txt = textoBotao(botoes[i]);
+            if (txt.indexOf('agx-') === 0) {{
+                var caixa = botoes[i].closest('[data-testid="stElementContainer"]')
+                         || botoes[i].closest('[data-testid="element-container"]')
+                         || botoes[i].parentElement;
+                if (caixa) {{ caixa.style.display = 'none'; }}
+            }}
+        }}
+    }}
+    function acionar(action, id) {{
+        var btn = acharBotao('agx-' + action + '-' + id);
+        if (btn) {{ btn.click(); return true; }}
+        console.warn('Ponte nao encontrada para agx-' + action + '-' + id);
+        return false;
+    }}
+    function acionarMover(id, novaData, novaHora) {{
+        var doc = docPai();
+        var campo = doc ? doc.querySelector('input[aria-label="agx-payload"]') : null;
+        var btn = acharBotao('agx-move');
+        if (!campo || !btn) return false;
+        try {{
+            var proto = (window.parent || window).HTMLInputElement.prototype;
+            var setter = Object.getOwnPropertyDescriptor(proto, 'value').set;
+            setter.call(campo, id + '|' + novaData + '|' + novaHora);
+            campo.dispatchEvent(new Event('input', {{ bubbles: true }}));
+            campo.dispatchEvent(new Event('change', {{ bubbles: true }}));
+            campo.blur();
+        }} catch (e) {{
+            console.error('Falha ao preencher payload:', e);
+            return false;
+        }}
+        setTimeout(function() {{ btn.click(); }}, 120);
+        return true;
+    }}
+    function fecharMenu() {{ menuEl.style.display = 'none'; menuAlvoId = null; }}
+    function abrirMenu(x, y, eventoId) {{
+        menuAlvoId = eventoId;
+        menuEl.style.display = 'block';
+        var larg = menuEl.offsetWidth || 132;
+        var alt = menuEl.offsetHeight || 80;
+        var left = Math.min(x, window.innerWidth - larg - 6);
+        var top = Math.min(y, window.innerHeight - alt - 6);
+        menuEl.style.left = Math.max(4, left) + 'px';
+        menuEl.style.top = Math.max(4, top) + 'px';
+    }}
+    document.getElementById('menu-editar').onclick = function() {{
+        if (menuAlvoId) {{ acionar('edit', menuAlvoId); }}
+        fecharMenu();
+    }};
+    document.getElementById('menu-excluir').onclick = function() {{
+        if (menuAlvoId) {{ acionar('delete', menuAlvoId); }}
+        fecharMenu();
+    }};
+    document.addEventListener('click', fecharMenu);
+    document.addEventListener('scroll', fecharMenu, true);
+    window.addEventListener('resize', fecharMenu);
+
+    function mountCalendar(container, group) {{
+        var el = document.createElement('div');
+        el.className = 'fc-split-cal';
+        container.appendChild(el);
+        var cal = new FullCalendar.Calendar(el, {{
+            locale: 'pt-br',
+            initialView: currentView,
+            initialDate: currentDate,
+            headerToolbar: false,
+            buttonText: {{ today: 'Hoje', month: 'Mes', week: 'Semana', day: 'Dia', list: 'Lista' }},
+            slotMinTime: '07:00:00',
+            slotMaxTime: '21:00:00',
+            slotDuration: '00:30:00',
+            slotLabelInterval: '01:00',
+            allDaySlot: false,
+            nowIndicator: true,
+            editable: true,
+            eventStartEditable: true,
+            eventDurationEditable: false,
+            eventOverlap: true,
+            expandRows: true,
+            height: '100%',
+            events: group.events,
+            eventDidMount: function(info) {{
+                var p = info.event.extendedProps || {{}};
+                var partes = [];
+                if (p.serie_label) partes.push(p.serie_label);
+                if (p.procedimento) partes.push(p.procedimento);
+                if (p.profissional) partes.push(p.profissional);
+                if (p.sala) partes.push(p.sala);
+                info.el.title = info.event.title + (partes.length ? ' - ' + partes.join(' | ') : '');
+                var menu = document.createElement('div');
+                menu.className = 'event-menu';
+                menu.innerText = '\u22EE';
+                menu.title = 'Opcoes';
+                var altura = info.el.offsetHeight || 24;
+                var lado = Math.max(18, Math.min(30, Math.round(altura * 0.62)));
+                menu.style.fontSize = Math.round(lado * 0.85) + 'px';
+                menu.style.width = lado + 'px';
+                menu.style.height = lado + 'px';
+                menu.onclick = function(e) {{
+                    e.stopPropagation();
+                    e.preventDefault();
+                    var r = menu.getBoundingClientRect();
+                    abrirMenu(r.left, r.bottom + 2, info.event.id);
+                }};
+                info.el.style.position = 'relative';
+                info.el.appendChild(menu);
+            }},
+            eventClick: function(info) {{
+                if (info.jsEvent) {{ info.jsEvent.preventDefault(); }}
+                acionar('edit', info.event.id);
+            }},
+            eventDrop: function(info) {{
+                var s = info.event.start;
+                if (!s) {{ info.revert(); return; }}
+                var pad = function(n) {{ return (n < 10 ? '0' : '') + n; }};
+                var novaData = s.getFullYear() + '-' + pad(s.getMonth() + 1) + '-' + pad(s.getDate());
+                var novaHora = pad(s.getHours()) + ':' + pad(s.getMinutes());
+                if (!acionarMover(info.event.id, novaData, novaHora)) {{
+                    info.revert();
+                    alert('Nao foi possivel salvar o novo horario. Recarregue a pagina e tente de novo.');
+                }}
+            }},
+            dateClick: function(info) {{
+                acionar('new', '0');
+            }}
+        }});
+        cal.render();
+        return cal;
+    }}
+
+    function updateTitle() {{
+        if (!calendars.length) return;
+        var cal = calendars[0];
+        document.getElementById('nav-title').innerText = cal.view.title;
+    }}
+
+    function syncScroll(sourceIdx) {{
+        var source = calendars[sourceIdx];
+        if (!source) return;
+        var scroller = source.el.querySelector('.fc-scroller');
+        if (!scroller) return;
+        for (var i = 0; i < calendars.length; i++) {{
+            if (i === sourceIdx) continue;
+            var target = calendars[i].el.querySelector('.fc-scroller');
+            if (target) target.scrollTop = scroller.scrollTop;
+        }}
+    }}
+
+    function boot() {{
+        if (typeof FullCalendar === 'undefined' || !FullCalendar.Calendar) {{
+            document.getElementById('panels').innerHTML = '<div class="fc-erro">Nao foi possivel carregar o calendario. Verifique a conexao com a internet e recarregue a pagina.</div>';
+            return;
+        }}
+        try {{
+            var panels = document.getElementById('panels');
+            for (var i = 0; i < groups.length; i++) {{
+                var panel = document.createElement('div');
+                panel.className = 'fc-split-panel';
+                var header = document.createElement('div');
+                header.className = 'fc-split-header';
+                header.innerText = groups[i].title || '';
+                panel.appendChild(header);
+                panels.appendChild(panel);
+                var cal = mountCalendar(panel, groups[i]);
+                calendars.push(cal);
+                (function(idx) {{
+                    var scroller = cal.el.querySelector('.fc-scroller');
+                    if (scroller) {{
+                        scroller.addEventListener('scroll', function() {{ syncScroll(idx); }});
+                    }}
+                }})(calendars.length - 1);
+            }}
+            updateTitle();
+            esconderPonte();
+            setTimeout(esconderPonte, 400);
+            setTimeout(esconderPonte, 1200);
+        }} catch (err) {{
+            console.error(err);
+            document.getElementById('panels').innerHTML = '<div class="fc-erro">Erro ao montar o calendario: ' + (err && err.message ? err.message : err) + '</div>';
+        }}
+    }}
+
+    document.getElementById('nav-prev').onclick = function() {{
+        var delta = {{ timeGridDay: 1, timeGridWeek: 7, dayGridMonth: 30 }}[currentView] || 1;
+        var d = new Date(currentDate);
+        d.setDate(d.getDate() - delta);
+        currentDate = d.toISOString().split('T')[0];
+        for (var i = 0; i < calendars.length; i++) {{ calendars[i].gotoDate(currentDate); }}
+        updateTitle();
+    }};
+    document.getElementById('nav-today').onclick = function() {{
+        currentDate = new Date().toISOString().split('T')[0];
+        for (var i = 0; i < calendars.length; i++) {{ calendars[i].today(); }}
+        updateTitle();
+    }};
+    document.getElementById('nav-next').onclick = function() {{
+        var delta = {{ timeGridDay: 1, timeGridWeek: 7, dayGridMonth: 30 }}[currentView] || 1;
+        var d = new Date(currentDate);
+        d.setDate(d.getDate() + delta);
+        currentDate = d.toISOString().split('T')[0];
+        for (var i = 0; i < calendars.length; i++) {{ calendars[i].gotoDate(currentDate); }}
+        updateTitle();
+    }};
+    document.getElementById('nav-view').onchange = function(e) {{
+        currentView = e.target.value;
+        for (var i = 0; i < calendars.length; i++) {{ calendars[i].changeView(currentView); }}
+        updateTitle();
+    }};
+
+    if (document.readyState === 'loading') {{
+        document.addEventListener('DOMContentLoaded', boot);
+    }} else {{
+        boot();
+    }}
+}})();
+</script>
+</body>
+</html>"""
+    return html
+
+
 def agenda_to_events(agendamentos, nomes_prof=None, series_map=None, cores_prof=None, cores_sala=None):
     """Converte objetos ScheduledAppointment em eventos do FullCalendar.
 
