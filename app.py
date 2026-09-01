@@ -1528,50 +1528,56 @@ def tela_agenda():
                         placeholder="Digite o nome (não precisa estar cadastrado)",
                     )
 
-                    # Busca por cliente cadastrado, igual ao atendimento:
-                    # insensível a maiúsculas/minúsculas e busca por nome/CPF/telefone.
-                    def _buscar_cli_ag(searchterm: str):
-                        if not searchterm:
-                            return []
-                        like = f"%{searchterm.lower()}%"
-                        res = db_dlg.query(Client).filter(
-                            (func.lower(Client.nome).like(like)) |
-                            (func.lower(Client.cpf).like(like)) |
-                            (func.lower(Client.telefone).like(like))
-                        ).order_by(Client.nome).limit(10).all()
-                        return [f"{x.nome} | CPF: {x.cpf or '-'} | Tel: {x.telefone or '-'}" for x in res]
-
-                    _sb_key_ag = "dlg_ag_cliente_searchbox"
-                    _sb_state_ag = st.session_state.get(_sb_key_ag)
-                    if _sb_state_ag is not None and not isinstance(_sb_state_ag, dict):
-                        st.session_state.pop(_sb_key_ag, None)
-
-                    try:
-                        _sel_cli_ag = st_searchbox(
-                            search_function=_buscar_cli_ag,
-                            label="Ou busque um cliente cadastrado",
-                            placeholder="Ex.: Amanda",
-                            key=_sb_key_ag,
-                            clear_on_submit=False,
-                            default=None,
+                    # Busca por cliente cadastrado: usa text_input + botao dentro
+                    # do dialogo. O st_searchbox dispara rerun a cada tecla e fecha
+                    # o popup, entao usamos esse padrao estavel.
+                    _col_busca, _col_btn = st.columns([3, 1])
+                    with _col_busca:
+                        _termo_busca = st.text_input(
+                            "Buscar cliente cadastrado",
+                            placeholder="Nome, CPF ou telefone",
+                            key="dlg_ag_busca_termo",
+                            label_visibility="collapsed",
                         )
-                    except (TypeError, KeyError):
-                        st.session_state.pop(_sb_key_ag, None)
-                        _sel_cli_ag = None
+                    with _col_btn:
+                        _buscar_clicked = st.button("🔍 Buscar", key="dlg_ag_buscar_btn", use_container_width=True)
+
+                    _resultados_busca = st.session_state.get("dlg_ag_busca_resultados", [])
+                    if _buscar_clicked and _termo_busca:
+                        _like = f"%{_termo_busca.lower()}%"
+                        _resultados_busca = [
+                            (c.id, c.nome, c.cpf, c.telefone)
+                            for c in db_dlg.query(Client).filter(
+                                (func.lower(Client.nome).like(_like)) |
+                                (func.lower(Client.cpf).like(_like)) |
+                                (func.lower(Client.telefone).like(_like))
+                            ).order_by(Client.nome).limit(10).all()
+                        ]
+                        st.session_state["dlg_ag_busca_resultados"] = _resultados_busca
 
                     cli_id_dlg = None
                     cli_nome_dlg = nome_cli_dlg.strip() if nome_cli_dlg else None
 
-                    if _sel_cli_ag:
-                        _nome_busca = str(_sel_cli_ag).split("|")[0].strip()
-                        _encontrado = db_dlg.query(Client).filter(
-                            func.lower(Client.nome) == _nome_busca.lower()
-                        ).first()
-                        if _encontrado:
-                            cli_nome_dlg = _encontrado.nome
-                            cli_id_dlg = _encontrado.id
-                            # Sincroniza o campo de nome livre com o cadastrado
-                            st.session_state["dlg_ag_nome_cli"] = _encontrado.nome
+                    if _resultados_busca:
+                        _opts_busca = ["— selecione um resultado —"] + [
+                            f"{_nome} | CPF: {_cpf or '-'} | Tel: {_tel or '-'}"
+                            for (_id, _nome, _cpf, _tel) in _resultados_busca
+                        ]
+                        _sel_cli_ag = st.selectbox(
+                            "Cliente encontrado:",
+                            _opts_busca,
+                            key="dlg_ag_busca_sel",
+                        )
+                        if _sel_cli_ag and not _sel_cli_ag.startswith("—"):
+                            _nome_busca = _sel_cli_ag.split("|")[0].strip()
+                            _encontrado = db_dlg.query(Client).filter(
+                                func.lower(Client.nome) == _nome_busca.lower()
+                            ).first()
+                            if _encontrado:
+                                cli_nome_dlg = _encontrado.nome
+                                cli_id_dlg = _encontrado.id
+                                # Sincroniza o campo de nome livre com o cadastrado
+                                st.session_state["dlg_ag_nome_cli"] = _encontrado.nome
 
                     if cli_id_dlg:
                         try:
@@ -1852,6 +1858,7 @@ def tela_agenda():
             st.session_state.pop("dlg_ag_pacote_item_id", None)
             st.session_state.pop("dlg_ag_pkg_proc", None)
             st.session_state.pop("dlg_ag_pkg_restam", None)
+            st.session_state.pop("dlg_ag_busca_resultados", None)
 
             if _criados == 0:
                 st.warning("Esse agendamento já existe na agenda.")
@@ -1872,6 +1879,7 @@ def tela_agenda():
             if _data_pre:
                 st.session_state["dlg_ag_data"] = _data_pre
                 st.session_state["dlg_ag_data_sala"] = _data_pre
+            st.session_state.pop("dlg_ag_busca_resultados", None)
             _dialog_novo_agendamento()
 
         # Botão novo agendamento no topo
@@ -1879,6 +1887,7 @@ def tela_agenda():
             # Limpa data prévia para não herdar de clique anterior
             st.session_state.pop("dlg_ag_data", None)
             st.session_state.pop("dlg_ag_data_sala", None)
+            st.session_state.pop("dlg_ag_busca_resultados", None)
             _dialog_novo_agendamento()
 
         # ── Controles do calendário ─────────────────────────────────────────
