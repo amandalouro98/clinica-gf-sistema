@@ -579,6 +579,10 @@ def _mapa_series_recorrencia(db, agendamentos):
     for ag in agendamentos or []:
         if not ag.cliente_id or not ag.procedimento:
             continue
+        # Só numera "1 de 5" quando o agendamento está vinculado a um pacote.
+        # Sessões avulsas (sem sale_item_id) ficam sem badge, para não confundir.
+        if not getattr(ag, "sale_item_id", None):
+            continue
         chave = (ag.cliente_id, ag.profissional, ag.procedimento, ag.hora_inicio, ag.hora_fim)
         chaves.setdefault(chave, ag)
 
@@ -1383,6 +1387,8 @@ def _init_agenda_state():
         "ag_duracao": 60,
         "ag_obs": "",
         "ag_sala": "— selecione —",
+        "ag_cal_date": _hoje().strftime("%Y-%m-%d"),
+        "ag_cal_view": "timeGridDay",
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -1473,7 +1479,7 @@ def tela_agenda():
             st.query_params.clear()
 
         slots = gerar_slots_horario()
-        duracoes = [15, 30, 45, 60, 75, 90, 105, 120]
+        duracoes = [15, 30, 45, 60, 75, 90, 105, 120, 150, 180, 210, 240]
 
         profs_db = db.query(Professional).order_by(Professional.nome.asc()).all()
         nomes_prof = [p.nome for p in profs_db]
@@ -1515,24 +1521,56 @@ def tela_agenda():
                 aba_cli_dlg, aba_sala_dlg = st.tabs(["👤 Cliente", "🚪 Sala"])
 
                 with aba_cli_dlg:
-                    nome_cli_dlg = st.text_input("Cliente", key="dlg_ag_nome_cli", placeholder="Digite o nome (não precisa estar cadastrado)")
+                    nome_cli_dlg = st.text_input(
+                        "Cliente",
+                        key="dlg_ag_nome_cli",
+                        placeholder="Digite o nome (não precisa estar cadastrado)",
+                    )
+
+                    # Busca por cliente cadastrado, igual ao atendimento:
+                    # insensível a maiúsculas/minúsculas e busca por nome/CPF/telefone.
+                    def _buscar_cli_ag(searchterm: str):
+                        if not searchterm:
+                            return []
+                        like = f"%{searchterm.lower()}%"
+                        res = db_dlg.query(Client).filter(
+                            (func.lower(Client.nome).like(like)) |
+                            (func.lower(Client.cpf).like(like)) |
+                            (func.lower(Client.telefone).like(like))
+                        ).order_by(Client.nome).limit(10).all()
+                        return [f"{x.nome} | CPF: {x.cpf or '-'} | Tel: {x.telefone or '-'}" for x in res]
+
+                    _sb_key_ag = "dlg_ag_cliente_searchbox"
+                    _sb_state_ag = st.session_state.get(_sb_key_ag)
+                    if _sb_state_ag is not None and not isinstance(_sb_state_ag, dict):
+                        st.session_state.pop(_sb_key_ag, None)
+
+                    try:
+                        _sel_cli_ag = st_searchbox(
+                            search_function=_buscar_cli_ag,
+                            label="Ou busque um cliente cadastrado",
+                            placeholder="Ex.: Amanda",
+                            key=_sb_key_ag,
+                            clear_on_submit=False,
+                            default=None,
+                        )
+                    except (TypeError, KeyError):
+                        st.session_state.pop(_sb_key_ag, None)
+                        _sel_cli_ag = None
 
                     cli_id_dlg = None
                     cli_nome_dlg = nome_cli_dlg.strip() if nome_cli_dlg else None
-                    if cli_nome_dlg:
-                        _sugs = db_dlg.query(Client).filter(
-                            (func.lower(Client.nome).like(f"%{cli_nome_dlg.lower()}%")) |
-                            (func.lower(Client.cpf).like(f"%{cli_nome_dlg.lower()}%")) |
-                            (func.lower(Client.telefone).like(f"%{cli_nome_dlg.lower()}%"))
-                        ).order_by(Client.nome).limit(10).all()
-                        if _sugs:
-                            _opts = ["— usar nome digitado —"] + [f"{c.nome} | {c.cpf or c.telefone or ''}" for c in _sugs]
-                            _sel = st.selectbox("Cliente cadastrado encontrado:", _opts, key="dlg_ag_sug_cli")
-                            if _sel and _sel != "— usar nome digitado —":
-                                _nome_sug = _sel.split(" | ")[0]
-                                _encontrado = db_dlg.query(Client).filter(func.lower(Client.nome) == _nome_sug.lower()).first()
-                                cli_nome_dlg = _nome_sug
-                                cli_id_dlg = _encontrado.id if _encontrado else None
+
+                    if _sel_cli_ag:
+                        _nome_busca = str(_sel_cli_ag).split("|")[0].strip()
+                        _encontrado = db_dlg.query(Client).filter(
+                            func.lower(Client.nome) == _nome_busca.lower()
+                        ).first()
+                        if _encontrado:
+                            cli_nome_dlg = _encontrado.nome
+                            cli_id_dlg = _encontrado.id
+                            # Sincroniza o campo de nome livre com o cadastrado
+                            st.session_state["dlg_ag_nome_cli"] = _encontrado.nome
 
                     if cli_id_dlg:
                         try:
@@ -1885,8 +1923,8 @@ def tela_agenda():
                                    key=lambda x: x.lower())
         _opcoes_filt = ["Todos"] + sorted(set(nomes_prof + _nomes_no_periodo), key=lambda x: x.lower())
 
-        # Filtro por profissional + tipo de visualização
-        col_filt, col_visual = st.columns([1, 1])
+        # Filtro por profissional + tipo de visualização + busca por paciente
+        col_filt, col_visual, col_busca = st.columns([1.2, 1, 1.2])
         with col_filt:
             if prof_vinculado:
                 filtro_prof = prof_vinculado
@@ -1896,6 +1934,13 @@ def tela_agenda():
                                            key="ag_filtro_prof", label_visibility="visible")
         with col_visual:
             tipo_visual = st.radio("Visualização", ["Grade", "Lista"], horizontal=True, key="ag_tipo_visual")
+        with col_busca:
+            _busca_paciente = st.text_input(
+                "Buscar paciente",
+                placeholder="Nome (independe de maiúsculas)",
+                key="ag_busca_paciente",
+            )
+            _busca_paciente_norm = _normalizar_nome(_busca_paciente) if _busca_paciente else ""
 
         # Aplica filtro de profissional
         def _primeiro_nome(valor):
@@ -1918,6 +1963,13 @@ def tela_agenda():
                     ag.profissional == filtro_prof
                     or (_pn_filtro and _primeiro_nome(ag.profissional) == _pn_filtro)
                 )
+            ]
+
+        # Filtro por nome do paciente (insensível a acentos e maiúsculas)
+        if _busca_paciente_norm:
+            ags_periodo = [
+                ag for ag in ags_periodo
+                if _busca_paciente_norm in _normalizar_nome(ag.cliente_nome or "")
             ]
 
         ags_por_dia: dict = defaultdict(list)
@@ -2398,17 +2450,67 @@ def tela_agenda():
             elif _btn_move:
                 st.rerun()
 
-            # Um unico calendario com todos os profissionais/salas
-            components.html(
-                render_fullcalendar(
-                    agendamentos=agenda_to_events(ags_periodo, series_map=series_map, cores_prof=cores_prof_normalizado, cores_sala=cores_sala_normalizado),
-                    view=fc_view,
-                    date_str=data_inicial,
-                    height="700px",
-                ),
-                height=740,
-                scrolling=True,
-            )
+            # Controles globais de navegacao (controlam os dois calendarios)
+            _col_nav1, _col_nav2, _col_nav3, _col_nav4 = st.columns([0.6, 0.6, 0.6, 3])
+            with _col_nav1:
+                if st.button("◀", key="ag_cal_prev"):
+                    _delta = {"timeGridDay": 1, "timeGridWeek": 7, "dayGridMonth": 30}.get(st.session_state["ag_cal_view"], 1)
+                    st.session_state["ag_cal_date"] = (datetime.strptime(st.session_state["ag_cal_date"], "%Y-%m-%d").date() - timedelta(days=_delta)).strftime("%Y-%m-%d")
+                    st.rerun()
+            with _col_nav2:
+                if st.button("Hoje", key="ag_cal_today"):
+                    st.session_state["ag_cal_date"] = _hoje().strftime("%Y-%m-%d")
+                    st.rerun()
+            with _col_nav3:
+                if st.button("▶", key="ag_cal_next"):
+                    _delta = {"timeGridDay": 1, "timeGridWeek": 7, "dayGridMonth": 30}.get(st.session_state["ag_cal_view"], 1)
+                    st.session_state["ag_cal_date"] = (datetime.strptime(st.session_state["ag_cal_date"], "%Y-%m-%d").date() + timedelta(days=_delta)).strftime("%Y-%m-%d")
+                    st.rerun()
+            with _col_nav4:
+                _nova_view = st.selectbox("Visão", ["Dia", "Semana", "Mês"],
+                                          index=["timeGridDay", "timeGridWeek", "dayGridMonth"].index(st.session_state["ag_cal_view"]),
+                                          key="ag_cal_view_sel", label_visibility="collapsed")
+                _view_map = {"Dia": "timeGridDay", "Semana": "timeGridWeek", "Mês": "dayGridMonth"}
+                if _view_map[_nova_view] != st.session_state["ag_cal_view"]:
+                    st.session_state["ag_cal_view"] = _view_map[_nova_view]
+                    st.rerun()
+
+            # Divide os eventos: esquerda (Ju/Kauane/Salas), direita (Gabi)
+            def _eh_gabi(nome_prof):
+                pn = _normalizar_nome(nome_prof)
+                return "gabi" in pn or "gabriela" in pn
+
+            _events = agenda_to_events(ags_periodo, series_map=series_map, cores_prof=cores_prof_normalizado, cores_sala=cores_sala_normalizado)
+            _ev_esq = [e for e in _events if not _eh_gabi(e.get("extendedProps", {}).get("profissional", ""))]
+            _ev_dir = [e for e in _events if _eh_gabi(e.get("extendedProps", {}).get("profissional", ""))]
+
+            _col_cal_esq, _col_cal_dir = st.columns(2)
+            with _col_cal_esq:
+                components.html(
+                    render_fullcalendar(
+                        agendamentos=_ev_esq,
+                        view=st.session_state["ag_cal_view"],
+                        date_str=st.session_state["ag_cal_date"],
+                        height="650px",
+                        titulo="Ju / Kauane / Salas",
+                        show_toolbar=False,
+                    ),
+                    height=690,
+                    scrolling=True,
+                )
+            with _col_cal_dir:
+                components.html(
+                    render_fullcalendar(
+                        agendamentos=_ev_dir,
+                        view=st.session_state["ag_cal_view"],
+                        date_str=st.session_state["ag_cal_date"],
+                        height="650px",
+                        titulo="Gabi",
+                        show_toolbar=False,
+                    ),
+                    height=690,
+                    scrolling=True,
+                )
 
         # ── Pop-up de edição rápida ──────────────────────────────────────────
         # Fica fora do if/elif da visualização: antes só abria na Lista.
@@ -2479,7 +2581,7 @@ def tela_agenda():
                         _idx_hora = _slots_dlg.index(_ag2.hora_inicio) if _ag2.hora_inicio in _slots_dlg else 0
                         _ed_hora = st.selectbox("Hora início", _slots_dlg, index=_idx_hora, key="dlg_ag_hora")
 
-                        _duracoes_dlg = [15, 30, 45, 60, 75, 90, 105, 120]
+                        _duracoes_dlg = [15, 30, 45, 60, 75, 90, 105, 120, 150, 180, 210, 240]
                         _idx_dur = _duracoes_dlg.index(_ag2.duracao_min) if _ag2.duracao_min in _duracoes_dlg else 3
                         _ed_dur = st.selectbox("Duração (min)", _duracoes_dlg, index=_idx_dur, key="dlg_ag_dur")
 

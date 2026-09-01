@@ -306,6 +306,9 @@ def render_fullcalendar(
         border-radius: 4px;
         background: rgba(255,255,255,0.30);
         text-shadow: 0 1px 1px rgba(0,0,0,0.35);
+        min-width: 22px;
+        min-height: 22px;
+        pointer-events: auto;
     }}
     .event-menu:hover {{ background: rgba(255,255,255,0.65); }}
     #menu-flutuante {{
@@ -325,11 +328,12 @@ def render_fullcalendar(
         text-align: left;
         background: none;
         border: none;
-        padding: 9px 13px;
-        font-size: 13px;
+        padding: 12px 16px;
+        font-size: 14px;
         color: {COR_TEXTO};
         cursor: pointer;
         font-family: inherit;
+        min-height: 44px;
     }}
     #menu-flutuante button:hover {{ background: {COR_FUNDO_HOJE}; }}
 </style>
