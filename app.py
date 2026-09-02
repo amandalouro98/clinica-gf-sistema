@@ -1033,11 +1033,7 @@ def sidebar_menu():
         </div>
         """, unsafe_allow_html=True)
         if st.button("Sair", type="secondary", use_container_width=True):
-            # Limpa todo o session_state ao sair para evitar que restos de
-            # telas/pop-ups de um usuário afetem o próximo login no mesmo
-            # navegador (campos travados, valores antigos etc.).
-            for _k_logout in list(st.session_state.keys()):
-                st.session_state.pop(_k_logout, None)
+            st.session_state.user = None
             st.rerun()
 
 
