@@ -1033,7 +1033,11 @@ def sidebar_menu():
         </div>
         """, unsafe_allow_html=True)
         if st.button("Sair", type="secondary", use_container_width=True):
-            st.session_state.user = None
+            # Limpa todo o session_state ao sair para evitar que restos de
+            # telas/pop-ups de um usuário afetem o próximo login no mesmo
+            # navegador (campos travados, valores antigos etc.).
+            for _k_logout in list(st.session_state.keys()):
+                st.session_state.pop(_k_logout, None)
             st.rerun()
 
 
@@ -4845,10 +4849,6 @@ def tela_atendimentos():
                     _limpar = ["at_data", "at_queixa", "at_tipo", "at_protocolo",
                                "at_obs", "at_pacote_sel", "at_linhas",
                                "atendimento_cliente_id", "atendimento_cliente_nome"]
-                    # Volta o selectbox de cliente para a opcao vazia, senao ele
-                    # reaparece preenchido com a paciente anterior no proximo
-                    # atendimento.
-                    st.session_state["atendimento_selectbox"] = "— Selecione —"
                     # Varre por prefixo: se a usuária reduziu o número de linhas,
                     # as chaves antigas continuavam preenchidas e reapareciam no
                     # atendimento seguinte.
@@ -4858,6 +4858,11 @@ def tela_atendimentos():
                     ]
                     for _k_lim in _limpar:
                         st.session_state.pop(_k_lim, None)
+                    # Volta o selectbox de cliente para a opcao vazia, senao ele
+                    # reaparece preenchido com a paciente anterior no proximo
+                    # atendimento. Define DEPOIS do pop para garantir que fique
+                    # resetado no proximo rerun.
+                    st.session_state["atendimento_selectbox"] = "— Selecione —"
                     st.session_state["at_salvo_ok"] = True
                     st.rerun()
                 except Exception as _save_err:
