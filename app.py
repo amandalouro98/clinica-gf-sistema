@@ -4560,6 +4560,29 @@ def tela_atendimentos():
     header_titulo("Atendimentos", "Baixa automática no estoque")
     db = SessionLocal()
     try:
+        # Widgets do Streamlit não podem ter suas chaves alteradas depois de
+        # renderizados. A limpeza é feita no início do próximo rerun, antes
+        # de criar o selectbox e os demais campos do formulário.
+        if st.session_state.pop("atendimento_reset_pendente", False):
+            _chaves_atendimento = [
+                "atendimento_selectbox",
+                "atendimento_cliente_id",
+                "atendimento_cliente_nome",
+                "at_data",
+                "at_queixa",
+                "at_tipo",
+                "at_protocolo",
+                "at_obs",
+                "at_pacote_sel",
+                "at_linhas",
+            ]
+            _chaves_atendimento += [
+                _k for _k in list(st.session_state)
+                if _k.startswith(("at_prod_", "at_lote_", "at_qtd_"))
+            ]
+            for _k_atendimento in _chaves_atendimento:
+                st.session_state.pop(_k_atendimento, None)
+
         # Mensagem de sucesso persistente após salvar
         _msg_pac_at = st.session_state.pop("at_pacote_msg", None)
         if _msg_pac_at:
@@ -4841,24 +4864,9 @@ def tela_atendimentos():
                             "Atendimento salvo, mas a sessão do pacote não foi "
                             f"descontada: {_err_pac}"
                         )
-                    # Limpa o formulario para o proximo atendimento
-                    _limpar = ["at_data", "at_queixa", "at_tipo", "at_protocolo",
-                               "at_obs", "at_pacote_sel", "at_linhas",
-                               "atendimento_cliente_id", "atendimento_cliente_nome"]
-                    # Varre por prefixo: se a usuária reduziu o número de linhas,
-                    # as chaves antigas continuavam preenchidas e reapareciam no
-                    # atendimento seguinte.
-                    _limpar += [
-                        _k for _k in list(st.session_state)
-                        if _k.startswith(("at_prod_", "at_lote_", "at_qtd_"))
-                    ]
-                    for _k_lim in _limpar:
-                        st.session_state.pop(_k_lim, None)
-                    # Volta o selectbox de cliente para a opcao vazia, senao ele
-                    # reaparece preenchido com a paciente anterior no proximo
-                    # atendimento. Define DEPOIS do pop para garantir que fique
-                    # resetado no proximo rerun.
-                    st.session_state["atendimento_selectbox"] = "— Selecione —"
+                    # A limpeza precisa ocorrer no início do próximo rerun:
+                    # neste ponto todos esses widgets já foram instanciados.
+                    st.session_state["atendimento_reset_pendente"] = True
                     st.session_state["at_salvo_ok"] = True
                     st.rerun()
                 except Exception as _save_err:
