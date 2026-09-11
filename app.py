@@ -4642,12 +4642,6 @@ def tela_atendimentos():
 
         st.markdown("---")
 
-        # Número de materiais fica fora do form para atualizar dinamicamente
-        linhas = st.number_input(
-            "Quantos produtos diferentes foram usados?",
-            min_value=0, step=1, key="at_linhas",
-        )
-
         # Campos fora de st.form: dentro do form o selectbox de Lote nao
         # recarrega ao escolher o Material. As chaves fixas (at_*) ja
         # preservam o que foi digitado entre as execucoes.
@@ -4719,6 +4713,13 @@ def tela_atendimentos():
 
         st.markdown("---")
         st.markdown("#### Materiais usados")
+
+        # Número de materiais fica junto da seção de materiais e fora do form
+        # para atualizar dinamicamente as linhas de seleção.
+        linhas = st.number_input(
+            "Quantos produtos diferentes foram usados?",
+            min_value=0, step=1, key="at_linhas",
+        )
 
         # Buscar materiais cadastrados + produtos do estoque
         mats_cadastrados = db.query(Material).filter(Material.ativo == True).order_by(Material.nome.asc()).all()
