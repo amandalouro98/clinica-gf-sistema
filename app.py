@@ -1093,7 +1093,7 @@ def tela_formularios():
             .order_by(FormResposta.criado_em.desc())
             .all()
         )
-        m1.metric("⏳ Aguardando sincronização", len(pendentes))
+        st.metric("⏳ Aguardando sincronização", len(pendentes))
 
         if not pendentes:
             st.success(
