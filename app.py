@@ -799,6 +799,19 @@ def _fp_mascara_cpf():
     st.session_state["fp_cpf"] = f
 
 
+def _fp_mascara_data():
+    """Reformata a data de nascimento no padrão xx/xx/xxxx ao digitar."""
+    d = _fp_digitos(st.session_state.get("fp_data_nasc_txt")) or ""
+    d = d[:8]
+    if len(d) > 4:
+        f = f"{d[:2]}/{d[2:4]}/{d[4:]}"
+    elif len(d) > 2:
+        f = f"{d[:2]}/{d[2:]}"
+    else:
+        f = d
+    st.session_state["fp_data_nasc_txt"] = f
+
+
 def tela_form_publico():
     """Formulário de pré-avaliação acessível por link público, sem login."""
     # A limpeza pós-envio precisa ocorrer ANTES de instanciar os widgets
@@ -806,8 +819,6 @@ def tela_form_publico():
         for _k in list(st.session_state):
             if _k.startswith("fp_") and _k != "fp_enviado_ok":
                 st.session_state.pop(_k, None)
-
-    enviado_ok = st.session_state.pop("fp_enviado_ok", False)
 
     # Cabeçalho com a identidade da clínica
     st.markdown("<div style='padding-top:1.5rem'></div>", unsafe_allow_html=True)
@@ -820,6 +831,31 @@ def tela_form_publico():
                 "<h2 style='text-align:center;font-family:Cormorant Garamond,serif;color:#b87575'>Gabriela Franco</h2>",
                 unsafe_allow_html=True,
             )
+
+        # Após enviar, a cliente vê SOMENTE a página de agradecimento —
+        # o formulário não é renderizado de novo.
+        if st.session_state.get("fp_enviado_ok"):
+            st.markdown(
+                "<h3 style='text-align:center;font-family:Cormorant Garamond,serif;color:#4a3030;margin:0.3rem 0 0 0'>Pré-Avaliação de Saúde</h3>",
+                unsafe_allow_html=True,
+            )
+            st.markdown(
+                "<hr style='border:none;border-top:1px solid #f0d5ce;margin:0 0 1.6rem 0'>",
+                unsafe_allow_html=True,
+            )
+            st.markdown(
+                "<div style='background:#fdf6f4;border:1px solid #f0d5ce;"
+                "border-radius:14px;padding:2rem 1.4rem;text-align:center'>"
+                "<div style='font-size:2rem'>🌸</div>"
+                "<div style='font-family:Cormorant Garamond,serif;font-size:1.7rem;"
+                "color:#4a3030;margin-top:0.4rem'>Obrigada pelas informações!</div>"
+                "<div style='color:#9e7575;font-size:1rem;margin-top:0.6rem'>"
+                "Esse pré-cadastro melhora ainda mais a qualidade do seu atendimento!"
+                "</div></div>",
+                unsafe_allow_html=True,
+            )
+            return
+
         st.markdown(
             "<h3 style='text-align:center;font-family:Cormorant Garamond,serif;color:#4a3030;margin:0.3rem 0 0 0'>Pré-Avaliação de Saúde</h3>",
             unsafe_allow_html=True,
@@ -833,13 +869,6 @@ def tela_form_publico():
             unsafe_allow_html=True,
         )
 
-        if enviado_ok:
-            st.success(
-                "Obrigada pelas informações! Esse pré-cadastro melhora "
-                "ainda mais a qualidade do seu atendimento!"
-            )
-            st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
-
         st.markdown("**Dados pessoais**")
         nome = st.text_input("Nome completo *", key="fp_nome")
         cpf = st.text_input(
@@ -847,7 +876,8 @@ def tela_form_publico():
             on_change=_fp_mascara_cpf,
         )
         data_nasc_txt = st.text_input(
-            "Data de nascimento", key="fp_data_nasc_txt", placeholder="DD/MM/AAAA",
+            "Data de nascimento", key="fp_data_nasc_txt", placeholder="xx/xx/xxxx",
+            on_change=_fp_mascara_data,
         )
         telefone = st.text_input("Telefone (DDD)", key="fp_telefone")
         email = st.text_input("E-mail", key="fp_email")
