@@ -784,6 +784,21 @@ def _fp_digitos(valor):
     return "".join(ch for ch in str(valor or "") if ch.isdigit()) or None
 
 
+def _fp_mascara_cpf():
+    """Reformata o CPF no padrão xxx.xxx.xxx-xx enquanto a cliente digita."""
+    d = _fp_digitos(st.session_state.get("fp_cpf")) or ""
+    d = d[:11]
+    if len(d) > 9:
+        f = f"{d[:3]}.{d[3:6]}.{d[6:9]}-{d[9:]}"
+    elif len(d) > 6:
+        f = f"{d[:3]}.{d[3:6]}.{d[6:]}"
+    elif len(d) > 3:
+        f = f"{d[:3]}.{d[3:]}"
+    else:
+        f = d
+    st.session_state["fp_cpf"] = f
+
+
 def tela_form_publico():
     """Formulário de pré-avaliação acessível por link público, sem login."""
     # A limpeza pós-envio precisa ocorrer ANTES de instanciar os widgets
@@ -820,15 +835,20 @@ def tela_form_publico():
 
         if enviado_ok:
             st.success(
-                "Recebemos suas informações! A clínica entrará em contato "
-                "para agendar sua avaliação. 🌸"
+                "Obrigada pelas informações! Esse pré-cadastro melhora "
+                "ainda mais a qualidade do seu atendimento!"
             )
             st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
 
         st.markdown("**Dados pessoais**")
         nome = st.text_input("Nome completo *", key="fp_nome")
-        cpf = st.text_input("CPF", key="fp_cpf", help="Somente números")
-        data_nasc = st.date_input("Data de nascimento", value=None, format="DD/MM/YYYY", key="fp_data_nasc")
+        cpf = st.text_input(
+            "CPF", key="fp_cpf", placeholder="000.000.000-00",
+            on_change=_fp_mascara_cpf,
+        )
+        data_nasc_txt = st.text_input(
+            "Data de nascimento", key="fp_data_nasc_txt", placeholder="DD/MM/AAAA",
+        )
         telefone = st.text_input("Telefone (DDD)", key="fp_telefone")
         email = st.text_input("E-mail", key="fp_email")
         profissao = st.text_input("Profissão", key="fp_profissao")
@@ -889,6 +909,13 @@ def tela_form_publico():
                 erros.append("Informe seu nome completo.")
             if not termo:
                 erros.append("É necessário aceitar o termo de veracidade.")
+            data_nasc = None
+            if (data_nasc_txt or "").strip():
+                _dt_txt = data_nasc_txt.strip().replace("-", "/")
+                try:
+                    data_nasc = datetime.strptime(_dt_txt, "%d/%m/%Y").date()
+                except ValueError:
+                    erros.append("Data de nascimento inválida — use o formato DD/MM/AAAA.")
             if erros:
                 for e in erros:
                     st.error(e)
@@ -914,6 +941,29 @@ def tela_form_publico():
 
                 db = SessionLocal()
                 try:
+                    # Proteção contra duplicação: se a MESMA pessoa enviou uma
+                    # resposta com o mesmo nome nos últimos 10 minutos (ex.:
+                    # duplo clique no Enviar), não grava de novo.
+                    _nome_limpo = nome.strip()
+                    _duplicado = False
+                    for _dr in (
+                        db.query(FormResposta)
+                        .filter(FormResposta.nome == _nome_limpo)
+                        .all()
+                    ):
+                        if _dr.criado_em is None:
+                            continue
+                        _criado = _dr.criado_em
+                        if _criado.tzinfo is None:
+                            _criado = _criado.replace(tzinfo=BR_TZ)
+                        if _agora() - _criado <= timedelta(minutes=10):
+                            _duplicado = True
+                            break
+                    if _duplicado:
+                        st.session_state["fp_enviado_ok"] = True
+                        st.session_state["fp_reset_pendente"] = True
+                        st.rerun()
+
                     resposta = FormResposta(
                         nome=nome.strip(),
                         cpf=_fp_digitos(cpf),
@@ -950,9 +1000,65 @@ def tela_form_publico():
                     db.close()
 
 
+def _fp_importar_resposta(db, r):
+    """Cria/atualiza o cliente a partir de uma resposta do formulário.
+
+    Retorna (ok, mensagem). Dedup por CPF > e-mail > telefone — nunca duplica.
+    """
+    from services.importador import normalizar_cpf
+    _cpf_n = normalizar_cpf(r.cpf) if r.cpf else None
+    _email_n = (r.email or "").strip() or None
+    _tel_n = (r.telefone or "").strip() or None
+    cliente = None
+    if _cpf_n:
+        cliente = db.query(Client).filter(Client.cpf == _cpf_n).first()
+    if not cliente and _email_n:
+        cliente = db.query(Client).filter(Client.email == _email_n).first()
+    if not cliente and _tel_n:
+        cliente = db.query(Client).filter(Client.telefone == _tel_n).first()
+    _dados = dict(
+        nome=r.nome,
+        cpf=_cpf_n,
+        data_nascimento=r.data_nascimento,
+        telefone=_tel_n,
+        email=_email_n,
+        profissao=r.profissao,
+        endereco=r.endereco,
+        bairro=r.bairro,
+        cidade=r.cidade,
+        peso=r.peso,
+        altura=r.altura,
+        imc=calcular_imc(r.peso, r.altura),
+        exames_recentes=r.exames_recentes,
+        funcionamento_intestinal=r.funcionamento_intestinal,
+        uso_vitaminas=r.uso_vitaminas,
+        marcacao_corporal=r.marcacao_corporal,
+        neoplasia=bool(r.neoplasia),
+        epilepsia=bool(r.epilepsia),
+        outras_condicoes=r.outras_condicoes,
+        queixa_principal=r.queixa_principal,
+    )
+    if cliente:
+        for k, v in _dados.items():
+            if v is not None:
+                setattr(cliente, k, v)
+        cliente.termo_aceite = True
+        _msg = "atualizada"
+    else:
+        db.add(Client(**_dados, termo_aceite=True))
+        _msg = "cadastrada"
+    r.status = "importado"
+    db.commit()
+    return True, f"{r.nome} {_msg} em Clientes"
+
+
 def tela_formularios():
-    """Aba de Cadastro de Clientes: respostas do formulário público."""
-    header_titulo("Cadastro de Clientes", "Respostas do formulário de pré-avaliação")
+    """Aba Cadastro de Clientes: o que ainda NÃO foi sincronizado.
+
+    Assim que a resposta é enviada para Clientes, ela sai daqui — se aparecer
+    algo nesta aba é porque ainda falta sincronizar.
+    """
+    header_titulo("Cadastro de Clientes", "Pré-cadastros recebidos pelo formulário")
     db = SessionLocal()
     try:
         # Link público para copiar e enviar às clientes
@@ -973,131 +1079,98 @@ def tela_formularios():
                     "Ex.: `http://145.223.120.136:8501/?form=pre_avaliacao`"
                 )
 
-        novos = db.query(FormResposta).filter(FormResposta.status == "novo").count()
-        total = db.query(FormResposta).count()
+        # Mensagens do resultado da sincronização (persistem pelo rerun)
+        _sync_ok = st.session_state.pop("fp_sync_ok", None)
+        _sync_erro = st.session_state.pop("fp_sync_erro", None)
+        if _sync_ok:
+            st.success(_sync_ok)
+        if _sync_erro:
+            st.error(_sync_erro)
 
-        m1, m2 = st.columns(2)
-        m1.metric("🆕 Novos registros", novos)
-        m2.metric("Total recebido", total)
+        pendentes = (
+            db.query(FormResposta)
+            .filter(FormResposta.status == "novo")
+            .order_by(FormResposta.criado_em.desc())
+            .all()
+        )
+        m1.metric("⏳ Aguardando sincronização", len(pendentes))
 
-        aba_novos, aba_todos = st.tabs([f"Novos ({novos})", f"Todos ({total})"])
-
-        def _render_lista(respostas, prefixo_aba):
-            if not respostas:
-                st.info("Nenhuma resposta por aqui ainda.")
-                return
-            for r in respostas:
-                data_fmt = r.criado_em.strftime("%d/%m/%Y %H:%M") if r.criado_em else "-"
-                badge = "🆕 Novo" if r.status == "novo" else "✔ Importado"
-                titulo = f"{r.nome} — {r.telefone or r.email or 'sem contato'} — {data_fmt} — {badge}"
-                with st.expander(titulo):
-                    esq, dir = st.columns(2)
-                    with esq:
-                        st.markdown(
-                            f"**Nome:** {r.nome or '-'}\n\n"
-                            f"**CPF:** {r.cpf or '-'}\n\n"
-                            f"**Nascimento:** {r.data_nascimento.strftime('%d/%m/%Y') if r.data_nascimento else '-'}\n\n"
-                            f"**Telefone:** {r.telefone or '-'}\n\n"
-                            f"**E-mail:** {r.email or '-'}\n\n"
-                            f"**Profissão:** {r.profissao or '-'}\n\n"
-                            f"**Peso/Altura:** {r.peso or '-'} kg / {r.altura or '-'} m\n\n"
-                            f"**Endereço:** {r.endereco or '-'}, {r.bairro or '-'} — {r.cidade or '-'}"
-                        )
-                    with dir:
-                        st.markdown(
-                            f"**Queixa principal:** {r.queixa_principal or '-'}\n\n"
-                            f"**Exames recentes:** {r.exames_recentes or '-'}\n\n"
-                            f"**Intestino:** {r.funcionamento_intestinal or '-'}\n\n"
-                            f"**Vitaminas:** {r.uso_vitaminas or '-'}\n\n"
-                            f"**Neoplasia:** {'Sim' if r.neoplasia else 'Não'}\n\n"
-                            f"**Epilepsia:** {'Sim' if r.epilepsia else 'Não'}\n\n"
-                            f"**Marcações no corpo:** {r.marcacao_corporal or '-'}"
-                        )
-                    if r.outras_condicoes:
-                        st.markdown("**Outras condições:**")
-                        st.text(r.outras_condicoes)
-
-                    c_imp, c_exc = st.columns(2)
-                    with c_imp:
-                        if st.button("👤 Importar como cliente", key=f"{prefixo_aba}fpimp_{r.id}", use_container_width=True):
-                            from services.importador import normalizar_cpf
-                            _cpf_n = normalizar_cpf(r.cpf) if r.cpf else None
-                            _email_n = (r.email or "").strip() or None
-                            _tel_n = (r.telefone or "").strip() or None
-                            cliente = None
-                            if _cpf_n:
-                                cliente = db.query(Client).filter(Client.cpf == _cpf_n).first()
-                            if not cliente and _email_n:
-                                cliente = db.query(Client).filter(Client.email == _email_n).first()
-                            if not cliente and _tel_n:
-                                cliente = db.query(Client).filter(Client.telefone == _tel_n).first()
-                            _dados = dict(
-                                nome=r.nome,
-                                cpf=_cpf_n,
-                                data_nascimento=r.data_nascimento,
-                                telefone=_tel_n,
-                                email=_email_n,
-                                profissao=r.profissao,
-                                endereco=r.endereco,
-                                bairro=r.bairro,
-                                cidade=r.cidade,
-                                peso=r.peso,
-                                altura=r.altura,
-                                imc=calcular_imc(r.peso, r.altura),
-                                exames_recentes=r.exames_recentes,
-                                funcionamento_intestinal=r.funcionamento_intestinal,
-                                uso_vitaminas=r.uso_vitaminas,
-                                marcacao_corporal=r.marcacao_corporal,
-                                neoplasia=bool(r.neoplasia),
-                                epilepsia=bool(r.epilepsia),
-                                outras_condicoes=r.outras_condicoes,
-                                queixa_principal=r.queixa_principal,
-                            )
-                            try:
-                                if cliente:
-                                    for k, v in _dados.items():
-                                        setattr(cliente, k, v)
-                                    cliente.termo_aceite = True
-                                    _msg = "atualizada"
-                                else:
-                                    db.add(Client(**_dados, termo_aceite=True))
-                                    _msg = "cadastrada"
-                                r.status = "importado"
-                                db.commit()
-                                st.success(f"✅ {r.nome} {_msg} em Clientes com sucesso!")
-                                st.rerun()
-                            except Exception as ex:
-                                db.rollback()
-                                st.error(f"Erro ao importar: {ex}")
-                    with c_exc:
-                        if st.button("🗑 Excluir", key=f"{prefixo_aba}fpexc_{r.id}", use_container_width=True):
-                            st.session_state[f"fpexc_conf_{r.id}"] = True
-                    if st.session_state.get(f"fpexc_conf_{r.id}"):
-                        st.warning("Excluir esta resposta definitivamente?")
-                        c_s, c_n = st.columns(2)
-                        if c_s.button("Sim, excluir", key=f"{prefixo_aba}fpexc_s_{r.id}"):
-                            db.delete(r)
-                            db.commit()
-                            st.rerun()
-                        if c_n.button("Cancelar", key=f"{prefixo_aba}fpexc_n_{r.id}"):
-                            st.session_state.pop(f"fpexc_conf_{r.id}", None)
-                            st.rerun()
-
-        with aba_novos:
-            _render_lista(
-                db.query(FormResposta)
-                .filter(FormResposta.status == "novo")
-                .order_by(FormResposta.criado_em.desc())
-                .all(),
-                prefixo_aba="n_",
+        if not pendentes:
+            st.success(
+                "Tudo sincronizado! Nenhum pré-cadastro pendente — novos "
+                "envios das clientes aparecem aqui automaticamente."
             )
-        with aba_todos:
-            _render_lista(
-                db.query(FormResposta)
-                .order_by(FormResposta.criado_em.desc())
-                .all(),
-                prefixo_aba="t_",
-            )
+            return
+
+        if st.button(
+            "🔄 Sincronizar e enviar para Clientes",
+            type="primary", use_container_width=True,
+        ):
+            _ok, _erro = 0, []
+            for r in pendentes:
+                try:
+                    _success, _msg = _fp_importar_resposta(db, r)
+                    _ok += 1
+                except Exception as ex:
+                    db.rollback()
+                    _erro.append(f"{r.nome}: {ex}")
+            if _ok:
+                st.session_state["fp_sync_ok"] = (
+                    f"✅ {_ok} cliente(s) enviado(s) para a aba Clientes!"
+                )
+            if _erro:
+                st.session_state["fp_sync_erro"] = (
+                    "Falhou a sincronização de: " + "; ".join(_erro)
+                )
+            st.rerun()
+
+        st.caption(
+            "Ao sincronizar, cada resposta sai desta lista e vai para a aba "
+            "Clientes (criando ou atualizando o cadastro, sem duplicar)."
+        )
+
+        for r in pendentes:
+            data_fmt = r.criado_em.strftime("%d/%m/%Y %H:%M") if r.criado_em else "-"
+            titulo = f"{r.nome} — {r.telefone or r.email or 'sem contato'} — {data_fmt}"
+            with st.expander(titulo):
+                esq, _dir = st.columns(2)
+                with esq:
+                    st.markdown(
+                        f"**Nome:** {r.nome or '-'}\n\n"
+                        f"**CPF:** {r.cpf or '-'}\n\n"
+                        f"**Nascimento:** {r.data_nascimento.strftime('%d/%m/%Y') if r.data_nascimento else '-'}\n\n"
+                        f"**Telefone:** {r.telefone or '-'}\n\n"
+                        f"**E-mail:** {r.email or '-'}\n\n"
+                        f"**Profissão:** {r.profissao or '-'}\n\n"
+                        f"**Peso/Altura:** {r.peso or '-'} kg / {r.altura or '-'} m\n\n"
+                        f"**Endereço:** {r.endereco or '-'}, {r.bairro or '-'} — {r.cidade or '-'}"
+                    )
+                with _dir:
+                    st.markdown(
+                        f"**Queixa principal:** {r.queixa_principal or '-'}\n\n"
+                        f"**Exames recentes:** {r.exames_recentes or '-'}\n\n"
+                        f"**Intestino:** {r.funcionamento_intestinal or '-'}\n\n"
+                        f"**Vitaminas:** {r.uso_vitaminas or '-'}\n\n"
+                        f"**Neoplasia:** {'Sim' if r.neoplasia else 'Não'}\n\n"
+                        f"**Epilepsia:** {'Sim' if r.epilepsia else 'Não'}\n\n"
+                        f"**Marcações no corpo:** {r.marcacao_corporal or '-'}"
+                    )
+                if r.outras_condicoes:
+                    st.markdown("**Outras condições:**")
+                    st.text(r.outras_condicoes)
+
+                if st.button("🗑 Excluir", key=f"fpexc_{r.id}"):
+                    st.session_state[f"fpexc_conf_{r.id}"] = True
+                if st.session_state.get(f"fpexc_conf_{r.id}"):
+                    st.warning("Excluir esta resposta definitivamente?")
+                    c_s, c_n = st.columns(2)
+                    if c_s.button("Sim, excluir", key=f"fpexc_s_{r.id}"):
+                        db.delete(r)
+                        db.commit()
+                        st.rerun()
+                    if c_n.button("Cancelar", key=f"fpexc_n_{r.id}"):
+                        st.session_state.pop(f"fpexc_conf_{r.id}", None)
+                        st.rerun()
     finally:
         db.close()
 
