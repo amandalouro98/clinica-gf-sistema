@@ -68,6 +68,7 @@ from models.dose_table import DoseTable
 from models.material import Material
 from models.tratamento import Tratamento
 from models.deletion_log import RegistroExclusao
+from models.form_response import FormResposta
 from utils.security import hash_password
 from utils.helpers import calcular_imc
 from services.auth import authenticate, seed_admin
@@ -756,6 +757,351 @@ def require_login():
         st.stop()
 
 
+# ====== FORMULÁRIO PÚBLICO DE PRÉ-AVALIAÇÃO (link ?form=pre_avaliacao) ======
+# Rótulos mantidos iguais aos do Google Forms para que o texto de
+# "outras condições" fique no mesmo formato dos registros já sincronizados.
+_FP_PERGUNTAS_HISTORICO = [
+    ("RADIO/QUÍMIO", "radio_quimio", "Fez radioterapia ou quimioterapia?"),
+    ("ALERGIAS", "alergias", "Tem alergias?"),
+    ("TRATAMENTOS", "tratamentos", "Faz algum tratamento médico?"),
+    ("CIRURGIAS", "cirurgias", "Já realizou cirurgias?"),
+    ("PROBLEMAS CARDÍACOS", "cardiacos", "Tem problemas cardíacos?"),
+    ("MARCA PASSO", "marca_passo", "Usa marca passo?"),
+    ("DIABETES", "diabetes", "Tem diabetes?"),
+    ("HISTÓRICO FAMÍLIAR", "historico", "Algum histórico familiar relevante de doença?"),
+    ("GRAVIDEZ", "gravidez", "Está grávida ou há suspeita?"),
+    ("MENOPAUSA", "menopausa", "Está na menopausa?"),
+    ("MEDICAMENTOS EM USO", "medicamentos", "Faz uso de medicamentos?"),
+    ("POSSUI PLACA OU PINO (FACE)", "placa_pino", "Possui placa ou pino na face?"),
+    ("POSSUI PREENCHIMENTO", "preenchimento", "Possui preenchimento estético?"),
+    ("FUMA", "fuma", "Fuma?"),
+    ("CONSUMO DE ÁLCOOL", "alcool", "Consome álcool?"),
+    ("ATIVIDADE FÍSICA", "atividade", "Pratica atividade física?"),
+]
+
+
+def _fp_digitos(valor):
+    return "".join(ch for ch in str(valor or "") if ch.isdigit()) or None
+
+
+def tela_form_publico():
+    """Formulário de pré-avaliação acessível por link público, sem login."""
+    # A limpeza pós-envio precisa ocorrer ANTES de instanciar os widgets
+    if st.session_state.pop("fp_reset_pendente", False):
+        for _k in list(st.session_state):
+            if _k.startswith("fp_") and _k != "fp_enviado_ok":
+                st.session_state.pop(_k, None)
+
+    enviado_ok = st.session_state.pop("fp_enviado_ok", False)
+
+    # Cabeçalho com a identidade da clínica
+    st.markdown("<div style='padding-top:1.5rem'></div>", unsafe_allow_html=True)
+    col_l, col_c, col_r = st.columns([1, 1.6, 1])
+    with col_c:
+        try:
+            st.image("ui/logogf.png", use_container_width=True)
+        except Exception:
+            st.markdown(
+                "<h2 style='text-align:center;font-family:Cormorant Garamond,serif;color:#b87575'>Gabriela Franco</h2>",
+                unsafe_allow_html=True,
+            )
+        st.markdown(
+            "<h3 style='text-align:center;font-family:Cormorant Garamond,serif;color:#4a3030;margin:0.3rem 0 0 0'>Pré-Avaliação de Saúde</h3>",
+            unsafe_allow_html=True,
+        )
+        st.markdown(
+            "<p style='text-align:center;color:#9e7575;font-size:0.9rem'>Preencha com calma — leva cerca de 5 minutos.</p>",
+            unsafe_allow_html=True,
+        )
+        st.markdown(
+            "<hr style='border:none;border-top:1px solid #f0d5ce;margin:0 0 1.2rem 0'>",
+            unsafe_allow_html=True,
+        )
+
+        if enviado_ok:
+            st.success(
+                "Recebemos suas informações! A clínica entrará em contato "
+                "para agendar sua avaliação. 🌸"
+            )
+            st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
+
+        st.markdown("**Dados pessoais**")
+        nome = st.text_input("Nome completo *", key="fp_nome")
+        cpf = st.text_input("CPF", key="fp_cpf", help="Somente números")
+        data_nasc = st.date_input("Data de nascimento", value=None, format="DD/MM/YYYY", key="fp_data_nasc")
+        telefone = st.text_input("Telefone (DDD)", key="fp_telefone")
+        email = st.text_input("E-mail", key="fp_email")
+        profissao = st.text_input("Profissão", key="fp_profissao")
+        st.markdown("**Motivo e saúde**")
+        queixa = st.text_area("Qual sua queixa principal?", key="fp_queixa", height=90)
+        exames = st.text_area(
+            "Realizou exames recentemente? Se sim, quais?", key="fp_exames", height=80
+        )
+        func_int = st.text_input("Funcionamento intestinal (quantidade ao dia)", key="fp_func_int")
+        vitaminas = st.text_input("Usa vitaminas/suplementos? Qual?", key="fp_vitaminas")
+
+        st.markdown(
+            "<div style='height:0.6rem'></div>",
+            unsafe_allow_html=True,
+        )
+        peso = st.number_input("Peso (kg)", min_value=0.0, max_value=500.0, value=None, step=0.5, key="fp_peso")
+        altura = st.number_input("Altura (m)", min_value=0.0, max_value=2.5, value=None, step=0.01, format="%.2f", key="fp_altura")
+
+        st.markdown("**Endereço**")
+        endereco = st.text_input("Endereço (rua, complemento)", key="fp_endereco")
+        c_end1, c_end2 = st.columns(2)
+        with c_end1:
+            bairro = st.text_input("Bairro", key="fp_bairro")
+        with c_end2:
+            cidade = st.text_input("Cidade", key="fp_cidade")
+
+        st.markdown("<div style='height:0.8rem'></div>", unsafe_allow_html=True)
+        st.markdown("**Histórico de saúde** — responda Sim ou Não")
+        for _rotulo, _chave, _pergunta in _FP_PERGUNTAS_HISTORICO:
+            resp = st.radio(_pergunta, ["Não", "Sim"], horizontal=True, key=f"fp_hist_{_chave}")
+            if resp == "Sim":
+                st.text_input("Descreva", key=f"fp_histd_{_chave}")
+
+        neo = st.radio("Neoplasia (câncer)?", ["Não", "Sim"], horizontal=True, key="fp_neoplasia")
+        if neo == "Sim":
+            st.text_input("Descreva", key="fp_histd_neoplasia")
+        epi = st.radio("Epilepsia?", ["Não", "Sim"], horizontal=True, key="fp_epilepsia")
+        if epi == "Sim":
+            st.text_input("Descreva", key="fp_histd_epilepsia")
+
+        st.markdown("<div style='height:0.8rem'></div>", unsafe_allow_html=True)
+        st.markdown("**Hábitos e rotina**")
+        sono = st.text_input("Tempo de sono (horas por noite)", key="fp_sono")
+        alimentacao = st.text_input("Como é sua alimentação?", key="fp_alimentacao")
+        agua = st.text_input("Consumo de água (litros por dia)", key="fp_agua")
+        marcacao = st.text_area(
+            "Marcações no corpo (tatuagens, piercings, cicatrizes, áreas de dor…)",
+            key="fp_marcacao", height=80,
+        )
+
+        st.markdown("<div style='height:0.8rem'></div>", unsafe_allow_html=True)
+        termo = st.checkbox("Aceito o termo de veracidade das informações prestadas *", key="fp_termo")
+
+        enviar = st.button("Enviar", type="primary", use_container_width=True, key="fp_enviar")
+        if enviar:
+            erros = []
+            if not (nome or "").strip():
+                erros.append("Informe seu nome completo.")
+            if not termo:
+                erros.append("É necessário aceitar o termo de veracidade.")
+            if erros:
+                for e in erros:
+                    st.error(e)
+            else:
+                # Monta "outras condições" no mesmo formato da sincronização
+                linhas_outras = []
+                for _rotulo, _chave, _pergunta in _FP_PERGUNTAS_HISTORICO:
+                    _r = st.session_state.get(f"fp_hist_{_chave}", "Não")
+                    _d = (st.session_state.get(f"fp_histd_{_chave}") or "").strip()
+                    if _r == "Sim":
+                        linhas_outras.append(f"{_rotulo}: Sim" + (f" — {_d}" if _d else ""))
+                    else:
+                        linhas_outras.append(f"{_rotulo}: Não")
+                for _rotulo, _chave in (("TEMPO DE SONO", "sono"), ("ALIMENTAÇÃO", "alimentacao"), ("ÁGUA", "agua")):
+                    _v = (st.session_state.get(f"fp_{_chave}") or "").strip()
+                    if _v:
+                        linhas_outras.append(f"{_rotulo}: {_v}")
+                for _rotulo, _chave in (("NEOPLASIA (câncer)", "neoplasia"), ("EPILEPSIA", "epilepsia")):
+                    _r = st.session_state.get(f"fp_{_chave}", "Não")
+                    _d = (st.session_state.get(f"fp_histd_{_chave}") or "").strip()
+                    if _r == "Sim":
+                        linhas_outras.append(f"{_rotulo}: Sim" + (f" — {_d}" if _d else ""))
+
+                db = SessionLocal()
+                try:
+                    resposta = FormResposta(
+                        nome=nome.strip(),
+                        cpf=_fp_digitos(cpf),
+                        data_nascimento=data_nasc,
+                        telefone=(telefone or "").strip() or None,
+                        email=(email or "").strip() or None,
+                        profissao=(profissao or "").strip() or None,
+                        endereco=(endereco or "").strip() or None,
+                        bairro=(bairro or "").strip() or None,
+                        cidade=(cidade or "").strip() or None,
+                        peso=peso,
+                        altura=altura,
+                        queixa_principal=(queixa or "").strip() or None,
+                        exames_recentes=(exames or "").strip() or None,
+                        funcionamento_intestinal=(func_int or "").strip() or None,
+                        uso_vitaminas=(vitaminas or "").strip() or None,
+                        marcacao_corporal=(marcacao or "").strip() or None,
+                        neoplasia=(neo == "Sim"),
+                        epilepsia=(epi == "Sim"),
+                        outras_condicoes="\n".join(linhas_outras) or None,
+                        termo_aceite=True,
+                        status="novo",
+                        criado_em=_agora(),
+                    )
+                    db.add(resposta)
+                    db.commit()
+                    st.session_state["fp_enviado_ok"] = True
+                    st.session_state["fp_reset_pendente"] = True
+                    st.rerun()
+                except Exception as ex:
+                    db.rollback()
+                    st.error(f"Não foi possível enviar suas informações. Tente novamente. ({ex})")
+                finally:
+                    db.close()
+
+
+def tela_formularios():
+    """Aba de Cadastro de Clientes: respostas do formulário público."""
+    header_titulo("Cadastro de Clientes", "Respostas do formulário de pré-avaliação")
+    db = SessionLocal()
+    try:
+        # Link público para copiar e enviar às clientes
+        try:
+            _host = (st.context.headers.get("Host") or "").strip()
+        except Exception:
+            _host = ""
+        link_publico = f"http://{_host}/?form=pre_avaliacao" if _host else ""
+        c_link, _ = st.columns([2.2, 1])
+        with c_link:
+            st.markdown("**🔗 Link do formulário para enviar às clientes**")
+            if link_publico:
+                st.code(link_publico, language=None)
+                st.caption("Copie e envie por WhatsApp — a cliente preenche sem precisar de login.")
+            else:
+                st.info(
+                    "Use o endereço do sistema seguido de `?form=pre_avaliacao`. "
+                    "Ex.: `http://145.223.120.136:8501/?form=pre_avaliacao`"
+                )
+
+        novos = db.query(FormResposta).filter(FormResposta.status == "novo").count()
+        total = db.query(FormResposta).count()
+
+        m1, m2 = st.columns(2)
+        m1.metric("🆕 Novos registros", novos)
+        m2.metric("Total recebido", total)
+
+        aba_novos, aba_todos = st.tabs([f"Novos ({novos})", f"Todos ({total})"])
+
+        def _render_lista(respostas, prefixo_aba):
+            if not respostas:
+                st.info("Nenhuma resposta por aqui ainda.")
+                return
+            for r in respostas:
+                data_fmt = r.criado_em.strftime("%d/%m/%Y %H:%M") if r.criado_em else "-"
+                badge = "🆕 Novo" if r.status == "novo" else "✔ Importado"
+                titulo = f"{r.nome} — {r.telefone or r.email or 'sem contato'} — {data_fmt} — {badge}"
+                with st.expander(titulo):
+                    esq, dir = st.columns(2)
+                    with esq:
+                        st.markdown(
+                            f"**Nome:** {r.nome or '-'}\n\n"
+                            f"**CPF:** {r.cpf or '-'}\n\n"
+                            f"**Nascimento:** {r.data_nascimento.strftime('%d/%m/%Y') if r.data_nascimento else '-'}\n\n"
+                            f"**Telefone:** {r.telefone or '-'}\n\n"
+                            f"**E-mail:** {r.email or '-'}\n\n"
+                            f"**Profissão:** {r.profissao or '-'}\n\n"
+                            f"**Peso/Altura:** {r.peso or '-'} kg / {r.altura or '-'} m\n\n"
+                            f"**Endereço:** {r.endereco or '-'}, {r.bairro or '-'} — {r.cidade or '-'}"
+                        )
+                    with dir:
+                        st.markdown(
+                            f"**Queixa principal:** {r.queixa_principal or '-'}\n\n"
+                            f"**Exames recentes:** {r.exames_recentes or '-'}\n\n"
+                            f"**Intestino:** {r.funcionamento_intestinal or '-'}\n\n"
+                            f"**Vitaminas:** {r.uso_vitaminas or '-'}\n\n"
+                            f"**Neoplasia:** {'Sim' if r.neoplasia else 'Não'}\n\n"
+                            f"**Epilepsia:** {'Sim' if r.epilepsia else 'Não'}\n\n"
+                            f"**Marcações no corpo:** {r.marcacao_corporal or '-'}"
+                        )
+                    if r.outras_condicoes:
+                        st.markdown("**Outras condições:**")
+                        st.text(r.outras_condicoes)
+
+                    c_imp, c_exc = st.columns(2)
+                    with c_imp:
+                        if st.button("👤 Importar como cliente", key=f"{prefixo_aba}fpimp_{r.id}", use_container_width=True):
+                            from services.importador import normalizar_cpf
+                            _cpf_n = normalizar_cpf(r.cpf) if r.cpf else None
+                            _email_n = (r.email or "").strip() or None
+                            _tel_n = (r.telefone or "").strip() or None
+                            cliente = None
+                            if _cpf_n:
+                                cliente = db.query(Client).filter(Client.cpf == _cpf_n).first()
+                            if not cliente and _email_n:
+                                cliente = db.query(Client).filter(Client.email == _email_n).first()
+                            if not cliente and _tel_n:
+                                cliente = db.query(Client).filter(Client.telefone == _tel_n).first()
+                            _dados = dict(
+                                nome=r.nome,
+                                cpf=_cpf_n,
+                                data_nascimento=r.data_nascimento,
+                                telefone=_tel_n,
+                                email=_email_n,
+                                profissao=r.profissao,
+                                endereco=r.endereco,
+                                bairro=r.bairro,
+                                cidade=r.cidade,
+                                peso=r.peso,
+                                altura=r.altura,
+                                imc=calcular_imc(r.peso, r.altura),
+                                exames_recentes=r.exames_recentes,
+                                funcionamento_intestinal=r.funcionamento_intestinal,
+                                uso_vitaminas=r.uso_vitaminas,
+                                marcacao_corporal=r.marcacao_corporal,
+                                neoplasia=bool(r.neoplasia),
+                                epilepsia=bool(r.epilepsia),
+                                outras_condicoes=r.outras_condicoes,
+                                queixa_principal=r.queixa_principal,
+                            )
+                            try:
+                                if cliente:
+                                    for k, v in _dados.items():
+                                        setattr(cliente, k, v)
+                                    cliente.termo_aceite = True
+                                    _msg = "atualizada"
+                                else:
+                                    db.add(Client(**_dados, termo_aceite=True))
+                                    _msg = "cadastrada"
+                                r.status = "importado"
+                                db.commit()
+                                st.success(f"✅ {r.nome} {_msg} em Clientes com sucesso!")
+                                st.rerun()
+                            except Exception as ex:
+                                db.rollback()
+                                st.error(f"Erro ao importar: {ex}")
+                    with c_exc:
+                        if st.button("🗑 Excluir", key=f"{prefixo_aba}fpexc_{r.id}", use_container_width=True):
+                            st.session_state[f"fpexc_conf_{r.id}"] = True
+                    if st.session_state.get(f"fpexc_conf_{r.id}"):
+                        st.warning("Excluir esta resposta definitivamente?")
+                        c_s, c_n = st.columns(2)
+                        if c_s.button("Sim, excluir", key=f"{prefixo_aba}fpexc_s_{r.id}"):
+                            db.delete(r)
+                            db.commit()
+                            st.rerun()
+                        if c_n.button("Cancelar", key=f"{prefixo_aba}fpexc_n_{r.id}"):
+                            st.session_state.pop(f"fpexc_conf_{r.id}", None)
+                            st.rerun()
+
+        with aba_novos:
+            _render_lista(
+                db.query(FormResposta)
+                .filter(FormResposta.status == "novo")
+                .order_by(FormResposta.criado_em.desc())
+                .all(),
+                prefixo_aba="n_",
+            )
+        with aba_todos:
+            _render_lista(
+                db.query(FormResposta)
+                .order_by(FormResposta.criado_em.desc())
+                .all(),
+                prefixo_aba="t_",
+            )
+    finally:
+        db.close()
+
+
 # ====== HELPERS DE CLIENTE ======
 def inicializar_state_cliente():
     defaults = {
@@ -978,6 +1324,7 @@ def sidebar_menu():
         if perfil == "admin":
             # Admin vê tudo
             gestao_itens = [
+                ("📝", "Cadastro de Clientes", "Cadastro de Clientes"),
                 ("📦", "Pacotes", "Pacotes"),
                 ("📦", "Estoque", "Estoque"),
                 ("📊", "Relatórios", "Relatórios"),
@@ -988,6 +1335,7 @@ def sidebar_menu():
         elif perfil == "recepcao":
             # Recepção não vê Relatórios
             gestao_itens = [
+                ("📝", "Cadastro de Clientes", "Cadastro de Clientes"),
                 ("📦", "Pacotes", "Pacotes"),
                 ("📦", "Estoque", "Estoque"),
                 ("📝", "Contratos", "Contratos"),
@@ -1011,6 +1359,29 @@ def sidebar_menu():
             ]
         
         if gestao_itens:
+            # Badge com o número de novas respostas do formulário público
+            try:
+                _db_menu = SessionLocal()
+                try:
+                    _novos_form = (
+                        _db_menu.query(FormResposta)
+                        .filter(FormResposta.status == "novo")
+                        .count()
+                    )
+                finally:
+                    _db_menu.close()
+            except Exception:
+                _novos_form = 0
+            if _novos_form > 0:
+                gestao_itens = [
+                    (
+                        icone,
+                        f"{label} · {_novos_form} novo{'s' if _novos_form > 1 else ''}"
+                        if rota == "Cadastro de Clientes" else label,
+                        rota,
+                    )
+                    for icone, label, rota in gestao_itens
+                ]
             grupos["Gestão"] = gestao_itens
 
         for secao, itens in grupos.items():
@@ -7012,6 +7383,12 @@ def tela_usuarios():
 
 # ====== ROTEAMENTO ======
 def main():
+    # Rota pública do formulário de pré-avaliação (link ?form=pre_avaliacao).
+    # Mostra apenas o formulário — nenhum dado do sistema é exposto.
+    if st.query_params.get("form") == "pre_avaliacao":
+        tela_form_publico()
+        return
+
     if not st.session_state.user:
         login_screen()
         return
@@ -7045,6 +7422,7 @@ def main():
     rotas_validas = {"Dashboard", "Agenda", "Clientes", "Pré-avaliação", "Atendimentos", "Biometria", "Estoque", "Contratos", "Cadastros"}
     if perfil_atual in ["admin", "recepcao"]:
         rotas_validas.add("Pacotes")
+        rotas_validas.add("Cadastro de Clientes")
     if perfil_atual == "admin":
         rotas_validas.update({"Relatórios", "Usuários"})
     if rota not in rotas_validas:
@@ -7064,6 +7442,14 @@ def main():
         tela_atendimentos()
     elif rota == "Biometria":
         tela_biometria()
+    elif rota == "Cadastro de Clientes":
+        # Verificar permissão - admin e recepcao
+        perfil = st.session_state.user.get("perfil", "") if st.session_state.user else ""
+        if perfil in ["admin", "recepcao"]:
+            tela_formularios()
+        else:
+            st.error("Você não tem permissão para acessar esta página.")
+            st.info("Contate o administrador do sistema.")
     elif rota == "Pacotes":
         # Verificar permissão
         perfil = st.session_state.user.get("perfil", "") if st.session_state.user else ""
