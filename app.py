@@ -924,10 +924,6 @@ def tela_form_publico():
         sono = st.text_input("Tempo de sono (horas por noite)", key="fp_sono")
         alimentacao = st.text_input("Como é sua alimentação?", key="fp_alimentacao")
         agua = st.text_input("Consumo de água (litros por dia)", key="fp_agua")
-        marcacao = st.text_area(
-            "Marcações no corpo (tatuagens, piercings, cicatrizes, áreas de dor…)",
-            key="fp_marcacao", height=80,
-        )
 
         st.markdown("<div style='height:0.8rem'></div>", unsafe_allow_html=True)
         termo = st.checkbox("Aceito o termo de veracidade das informações prestadas *", key="fp_termo")
@@ -1010,7 +1006,6 @@ def tela_form_publico():
                         exames_recentes=(exames or "").strip() or None,
                         funcionamento_intestinal=(func_int or "").strip() or None,
                         uso_vitaminas=(vitaminas or "").strip() or None,
-                        marcacao_corporal=(marcacao or "").strip() or None,
                         neoplasia=(neo == "Sim"),
                         epilepsia=(epi == "Sim"),
                         outras_condicoes="\n".join(linhas_outras) or None,
@@ -1182,8 +1177,7 @@ def tela_formularios():
                         f"**Intestino:** {r.funcionamento_intestinal or '-'}\n\n"
                         f"**Vitaminas:** {r.uso_vitaminas or '-'}\n\n"
                         f"**Neoplasia:** {'Sim' if r.neoplasia else 'Não'}\n\n"
-                        f"**Epilepsia:** {'Sim' if r.epilepsia else 'Não'}\n\n"
-                        f"**Marcações no corpo:** {r.marcacao_corporal or '-'}"
+                        f"**Epilepsia:** {'Sim' if r.epilepsia else 'Não'}"
                     )
                 if r.outras_condicoes:
                     st.markdown("**Outras condições:**")
