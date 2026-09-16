@@ -69,6 +69,8 @@ from models.material import Material
 from models.tratamento import Tratamento
 from models.deletion_log import RegistroExclusao
 from models.form_response import FormResposta
+from models.google_sync import GoogleToken, GoogleEvento, GoogleSyncState
+import services.google_calendar as gcal
 from utils.security import hash_password
 from utils.helpers import calcular_imc
 from services.auth import authenticate, seed_admin
@@ -1956,6 +1958,72 @@ def tela_agenda():
             # Limpa query params para não repetir a ação
             st.query_params.clear()
 
+        # ── Google Calendar: sincronização bidirecional ────────────────────
+        _user_gc = st.session_state.get("user", {}) or {}
+        _perfil_gc = (_user_gc.get("perfil") or "").strip().lower()
+        # Sincroniza sozinho ao abrir a agenda (com intervalo mínimo de 3 min)
+        if _perfil_gc in ("admin", "recepcao"):
+            try:
+                gcal.sincronizar(db)
+            except Exception:
+                pass  # nunca pode travar a agenda por causa da sincronização
+
+        if _perfil_gc == "admin":
+            with st.expander("🔗 Google Calendar"):
+                _gc_st = gcal.status_conexao(db)
+                if not _gc_st["configurado"]:
+                    st.info(
+                        "Integração com o Google Calendar ainda não configurada "
+                        "no servidor (arquivo de credenciais ausente)."
+                    )
+                elif not _gc_st["conectado"]:
+                    st.markdown(
+                        "Conecte a conta **gabi.saudeintegrativa@gmail.com** para que "
+                        "a agenda do sistema e o Google Calendar fiquem sempre iguais "
+                        "— mudou num, mudou no outro."
+                    )
+                    st.link_button(
+                        "🔗 Conectar Google Calendar",
+                        gcal.url_autorizacao(),
+                        use_container_width=True,
+                    )
+                else:
+                    _ultimo = _gc_st["ultimo_sync"]
+                    _ultimo_txt = (
+                        _ultimo.strftime("%d/%m/%Y %H:%M")
+                        if _ultimo else "ainda não sincronizado"
+                    )
+                    st.success(
+                        f"Conectado à conta **{_gc_st['email'] or 'Google'}** — "
+                        f"última sincronização: {_ultimo_txt}"
+                    )
+                    _gc_c1, _gc_c2 = st.columns(2)
+                    with _gc_c1:
+                        if st.button("🔄 Sincronizar agora", use_container_width=True):
+                            _r_gc = gcal.sincronizar(db, forcar=True)
+                            if _r_gc is None:
+                                st.warning("Nada a sincronizar.")
+                            elif _r_gc.get("erros"):
+                                for _e_gc in _r_gc["erros"][:5]:
+                                    st.error(_e_gc)
+                            else:
+                                st.toast(
+                                    "Google Calendar sincronizado: "
+                                    f"{_r_gc['enviados']} enviado(s), "
+                                    f"{_r_gc['criados']} puxado(s), "
+                                    f"{_r_gc['atualizados']} atualizado(s), "
+                                    f"{_r_gc['excluidos']} excluído(s)"
+                                )
+                                st.rerun()
+                    with _gc_c2:
+                        if st.button("Desconectar", use_container_width=True):
+                            gcal.desconectar(db)
+                            st.rerun()
+                    st.caption(
+                        "A sincronização também roda sozinha ao abrir a Agenda "
+                        "(no máximo uma vez a cada 3 minutos)."
+                    )
+
         slots = gerar_slots_horario()
         duracoes = [15, 30, 45, 60, 75, 90, 105, 120, 150, 180, 210, 240]
 
@@ -3131,6 +3199,13 @@ def tela_agenda():
                             if _prof_ed.cor in CORES_PROFISSIONAIS.values() else 0,
                             key="ed_prof_cor",
                         )
+                        _ed_prof_gcal = st.text_input(
+                            "Google Calendar ID (opcional)",
+                            value=getattr(_prof_ed, "google_calendar_id", "") or "",
+                            key="ed_prof_gcal",
+                            help="Endereço do calendário desta profissional no Google "
+                                 "Calendar, para a sincronização automática.",
+                        )
                         col_psv, col_pcn = st.columns(2)
                         with col_psv:
                             _salvar_prof = st.form_submit_button("💾 Salvar", use_container_width=True)
@@ -3142,6 +3217,7 @@ def tela_agenda():
                         else:
                             _prof_ed.nome = _ed_prof_nome.strip()
                             _prof_ed.cor = CORES_PROFISSIONAIS[_ed_prof_cor]
+                            _prof_ed.google_calendar_id = _ed_prof_gcal.strip() or None
                             db.commit()
                             st.success("Profissional atualizado!")
                             st.session_state.pop("prof_editando", None)
@@ -3212,6 +3288,13 @@ def tela_agenda():
                             if _room_ed.cor in CORES_PROFISSIONAIS.values() else 0,
                             key="ed_room_cor",
                         )
+                        _ed_room_gcal = st.text_input(
+                            "Google Calendar ID (opcional)",
+                            value=getattr(_room_ed, "google_calendar_id", "") or "",
+                            key="ed_room_gcal",
+                            help="Endereço do calendário desta sala no Google "
+                                 "Calendar, para a sincronização automática.",
+                        )
                         col_rsv, col_rcn = st.columns(2)
                         with col_rsv:
                             _salvar_room = st.form_submit_button("💾 Salvar", use_container_width=True)
@@ -3223,6 +3306,7 @@ def tela_agenda():
                         else:
                             _room_ed.nome = _ed_room_nome.strip()
                             _room_ed.cor = CORES_PROFISSIONAIS[_ed_room_cor]
+                            _room_ed.google_calendar_id = _ed_room_gcal.strip() or None
                             db.commit()
                             st.success("Sala atualizada!")
                             st.session_state.pop("room_editando", None)
@@ -7488,11 +7572,61 @@ def tela_usuarios():
 
 
 # ====== ROTEAMENTO ======
+def tela_gc_callback():
+    """Retorno da autorização do Google Calendar (?gc_auth=callback&code=...)."""
+    _code = st.query_params.get("code")
+    _erro_gc = st.query_params.get("error")
+    st.query_params.clear()
+    st.markdown(
+        """
+        <div style="display:flex;flex-direction:column;align-items:center;
+                    justify-content:center;min-height:70vh;text-align:center;
+                    font-family:'Cormorant Garamond',serif;">
+            <div style="font-size:56px;">✦</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    if _erro_gc:
+        st.error("A autorização do Google foi recusada. Tente conectar novamente.")
+        return
+    if not _code:
+        st.error("Autorização incompleta — volte ao sistema e conecte novamente.")
+        return
+    db_gc = SessionLocal()
+    try:
+        gcal.processar_callback(db_gc, _code)
+    except Exception as ex:
+        st.error(f"Não foi possível concluir a conexão com o Google: {ex}")
+        return
+    finally:
+        db_gc.close()
+    st.markdown(
+        """
+        <div style="background:#fdf6f4;border:1px solid #f0d5ce;border-radius:16px;
+                    padding:40px;max-width:620px;margin:0 auto;">
+            <h2 style="color:#7a4a42;margin:0 0 12px;">Google Calendar conectado! 🎉</h2>
+            <p style="color:#5a4038;font-size:18px;margin:0;">
+                A agenda do sistema e o Google Calendar agora ficam sempre iguais.<br><br>
+                Entre no sistema normalmente — a sincronização acontece sozinha
+                ao abrir a Agenda.
+            </p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def main():
     # Rota pública do formulário de pré-avaliação (link ?form=pre_avaliacao).
     # Mostra apenas o formulário — nenhum dado do sistema é exposto.
     if st.query_params.get("form") == "pre_avaliacao":
         tela_form_publico()
+        return
+
+    # Retorno da autorização do Google Calendar
+    if st.query_params.get("gc_auth") == "callback":
+        tela_gc_callback()
         return
 
     if not st.session_state.user:

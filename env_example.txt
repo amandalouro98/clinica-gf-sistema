@@ -20,6 +20,15 @@ GOOGLE_CREDENTIALS_PATH=service_account.json
 GOOGLE_FORM_LINK=https://forms.gle/mBuxyP37Ysk5KtMHA
 
 # =========================================
+# GOOGLE CALENDAR (OAuth)
+# =========================================
+# Preferir o arquivo privado em secrets/google_oauth_client.json.
+# Alternativamente, configurar os dois valores abaixo no .env:
+# GOOGLE_CLIENT_ID=
+# GOOGLE_CLIENT_SECRET=
+# GOOGLE_OAUTH_CLIENT_PATH=/app/secrets/google_oauth_client.json
+
+# =========================================
 #  SEGURANCA
 # =========================================
 SECRET_KEY=troque-por-uma-chave-segura-aleatoria
