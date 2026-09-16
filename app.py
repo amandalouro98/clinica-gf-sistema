@@ -1031,16 +1031,25 @@ def _fp_importar_resposta(db, r):
     Retorna (ok, mensagem). Dedup por CPF > e-mail > telefone — nunca duplica.
     """
     from services.importador import normalizar_cpf
+    def _digitos(valor):
+        return "".join(ch for ch in str(valor or "") if ch.isdigit())
+
     _cpf_n = normalizar_cpf(r.cpf) if r.cpf else None
-    _email_n = (r.email or "").strip() or None
+    _email_n = (r.email or "").strip().lower() or None
     _tel_n = (r.telefone or "").strip() or None
     cliente = None
-    if _cpf_n:
-        cliente = db.query(Client).filter(Client.cpf == _cpf_n).first()
-    if not cliente and _email_n:
-        cliente = db.query(Client).filter(Client.email == _email_n).first()
-    if not cliente and _tel_n:
-        cliente = db.query(Client).filter(Client.telefone == _tel_n).first()
+    # Compara também registros antigos que foram gravados com máscara,
+    # espaços ou e-mail em letras maiúsculas.
+    for _existente in db.query(Client).all():
+        if _cpf_n and normalizar_cpf(_existente.cpf) == _cpf_n:
+            cliente = _existente
+            break
+        if _email_n and (_existente.email or "").strip().lower() == _email_n:
+            cliente = _existente
+            break
+        if _tel_n and _digitos(_existente.telefone) == _digitos(_tel_n):
+            cliente = _existente
+            break
     _dados = dict(
         nome=r.nome,
         cpf=_cpf_n,
