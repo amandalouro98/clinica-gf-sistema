@@ -771,7 +771,6 @@ _FP_PERGUNTAS_HISTORICO = [
     ("HISTÓRICO FAMÍLIAR", "historico", "Algum histórico familiar relevante de doença?"),
     ("GRAVIDEZ", "gravidez", "Está grávida ou há suspeita?"),
     ("MENOPAUSA", "menopausa", "Está na menopausa?"),
-    ("MEDICAMENTOS EM USO", "medicamentos", "Faz uso de medicamentos?"),
     ("POSSUI PLACA OU PINO (FACE)", "placa_pino", "Possui placa ou pino na face?"),
     ("POSSUI PREENCHIMENTO", "preenchimento", "Possui preenchimento estético?"),
     ("FUMA", "fuma", "Fuma?"),
@@ -889,6 +888,7 @@ def tela_form_publico():
         )
         func_int = st.text_input("Funcionamento intestinal (quantidade ao dia)", key="fp_func_int")
         vitaminas = st.text_input("Usa vitaminas/suplementos? Qual?", key="fp_vitaminas")
+        medicamentos = st.text_input("Faz uso de algum medicamento? Qual?", key="fp_medicamentos")
 
         st.markdown(
             "<div style='height:0.6rem'></div>",
@@ -959,7 +959,7 @@ def tela_form_publico():
                         linhas_outras.append(f"{_rotulo}: Sim" + (f" — {_d}" if _d else ""))
                     else:
                         linhas_outras.append(f"{_rotulo}: Não")
-                for _rotulo, _chave in (("TEMPO DE SONO", "sono"), ("ALIMENTAÇÃO", "alimentacao"), ("ÁGUA", "agua")):
+                for _rotulo, _chave in (("MEDICAMENTOS EM USO", "medicamentos"), ("TEMPO DE SONO", "sono"), ("ALIMENTAÇÃO", "alimentacao"), ("ÁGUA", "agua")):
                     _v = (st.session_state.get(f"fp_{_chave}") or "").strip()
                     if _v:
                         linhas_outras.append(f"{_rotulo}: {_v}")
