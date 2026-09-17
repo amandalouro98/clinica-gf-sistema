@@ -7,6 +7,9 @@ linha vermelha no horário atual. Mostra SOMENTE eventos vindos do Google
 """
 import html
 from datetime import datetime, timedelta, timezone
+from urllib.parse import urlencode
+
+import streamlit as st
 
 BR_TZ = timezone(timedelta(hours=-3))
 
@@ -70,7 +73,7 @@ def render_espelho_google(db, data):
         elif ag.confirmado:
             dica += " · confirmado"
         blocos_por_col[link.calendar_id].append({
-            "ini": ini_m, "dur": dur,
+            "ini": ini_m, "dur": dur, "ag_id": ag.id,
             "titulo": html.escape(titulo),
             "sub": html.escape(sub),
             "dica": html.escape(dica),
@@ -111,24 +114,33 @@ def render_espelho_google(db, data):
             f'background:#fff;z-index:2;">{h:02d}:00</div>'
         )
 
-    # ── colunas com blocos ──
+    # ── colunas com blocos (cada bloco é clicável -> abre edição) ──
     total = (HORA_FIM - HORA_INI) * 60
+    try:
+        _params_base = dict(st.query_params)
+    except Exception:
+        _params_base = {}
     html_cols = []
     for cal_id, nome, cor, _tipo in colunas:
         blocos_html = []
         for b in blocos_por_col[cal_id]:
             top_pct = max(0.0, (b["ini"] - HORA_INI * 60) / total * 100)
             alt_pct = b["dur"] / total * 100
+            _params = dict(_params_base)
+            _params["esp_editar"] = str(b["ag_id"])
+            _href = "?" + urlencode(_params)
             blocos_html.append(
-                f'<div title="{b["dica"]}" style="position:absolute;'
+                f'<a href="{_href}" title="{b["dica"]} — clique para editar" '
+                f'style="position:absolute;'
                 f'top:calc({top_pct:.3f}% + 1px);height:calc({alt_pct:.3f}% - 2px);'
-                f'left:2px;right:2px;background:{cor};border-radius:6px;'
-                'padding:3px 5px;overflow:hidden;color:#fff;z-index:3;'
-                'box-shadow:0 1px 2px rgba(0,0,0,.25);cursor:default;">'
+                f'left:2px;right:2px;text-decoration:none;display:block;z-index:3;">'
+                f'<div style="height:100%;background:{cor};border-radius:6px;'
+                'padding:3px 5px;overflow:hidden;color:#fff;'
+                'box-shadow:0 1px 2px rgba(0,0,0,.25);cursor:pointer;">'
                 f'<div style="font-size:11px;font-weight:600;line-height:1.2;'
                 f'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{b["titulo"]}</div>'
                 f'<div style="font-size:10px;opacity:.9;">{b["sub"]}</div>'
-                '</div>'
+                '</div></a>'
             )
         html_cols.append(
             f'<div style="flex:1;min-width:130px;position:relative;'
