@@ -2047,20 +2047,7 @@ def tela_agenda():
 
         # ── Espelho do Google Calendar (visual estilo Google) ───────────────
         if _perfil_gc in ("admin", "recepcao") and gcal.conectado(db):
-            from ui.google_mirror import render_espelho_google
-
-            # Clique em um bloco do espelho (?esp_editar=<id>) -> abrir edição
-            _esp_editar_param = st.query_params.get("esp_editar")
-            if _esp_editar_param:
-                try:
-                    st.session_state["espelho_editar_id"] = int(_esp_editar_param)
-                    st.session_state["espelho_editar"] = True
-                except (TypeError, ValueError):
-                    pass
-                try:
-                    del st.query_params["esp_editar"]
-                except Exception:
-                    pass
+            from ui.google_mirror import render_espelho_google, listar_blocos_editaveis, altura_px_grade
 
             # Aplica a navegação ANTES do widget de data existir
             if "espelho_data_pendente" in st.session_state:
@@ -2093,7 +2080,31 @@ def tela_agenda():
             _esp = render_espelho_google(db, _esp_data)
             if _esp:
                 _grid_html, _n_blocos = _esp
-                st.markdown(_grid_html, unsafe_allow_html=True)
+
+                # ── ponte de cliques: botões ocultos acionados pelo iframe ──
+                # Clicar num bloco da grade clica no botão correspondente
+                # aqui — navegar por URL derrubaria o login.
+                _blocos_ponte = listar_blocos_editaveis(db, _esp_data)
+                try:
+                    _ponte_esp = st.container(key="esp_ponte")
+                except TypeError:
+                    _ponte_esp = st.container()
+                st.markdown(
+                    "<style>.st-key-esp_ponte { display:none !important; }</style>",
+                    unsafe_allow_html=True,
+                )
+                with _ponte_esp:
+                    for _aid_esp, _rotulo_esp in _blocos_ponte:
+                        if st.button(f"agx-esp-{_aid_esp}", key=f"agx_esp_{_aid_esp}"):
+                            st.session_state["espelho_editar_id"] = _aid_esp
+                            st.session_state["espelho_editar"] = True
+                            st.rerun()
+
+                components.html(
+                    _grid_html,
+                    height=altura_px_grade(),
+                    scrolling=False,
+                )
                 if _n_blocos == 0:
                     st.caption(
                         "Nenhum evento do Google neste dia. Os eventos aparecem aqui "
@@ -2101,8 +2112,7 @@ def tela_agenda():
                     )
 
                 # ── edição direta no espelho (clique no bloco ou popover) ────
-                from ui.google_mirror import listar_blocos_editaveis
-                _blocos_ed = listar_blocos_editaveis(db, _esp_data)
+                _blocos_ed = _blocos_ponte
                 _labels_ed = [lbl for _i, lbl in _blocos_ed]
 
                 @st.dialog("Editar agendamento")
