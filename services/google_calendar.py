@@ -284,6 +284,48 @@ def _mapa_calendarios(db):
     return mapa
 
 
+def _descobrir_calendarios(db, access):
+    """Preenche IDs ausentes usando os nomes exibidos no Google Calendar."""
+    from models.professional import Professional
+    from models.room import Room
+
+    try:
+        itens = _api_get(access, "/users/me/calendarList", {"maxResults": 250}).get("items", [])
+    except Exception:
+        return
+
+    por_nome = {}
+    for item in itens:
+        cal_id = item.get("id")
+        if not cal_id:
+            continue
+        for valor in (item.get("summary"), item.get("summaryOverride"), cal_id):
+            chave = _norm(valor)
+            if chave:
+                por_nome.setdefault(chave, cal_id)
+
+    def procurar(nome):
+        alvo = _norm(nome)
+        if not alvo:
+            return None
+        if alvo in por_nome:
+            return por_nome[alvo]
+        for chave, cal_id in por_nome.items():
+            if alvo in chave or chave in alvo:
+                return cal_id
+        return None
+
+    alterou = False
+    for objeto in db.query(Professional).all() + db.query(Room).all():
+        if not objeto.google_calendar_id:
+            cal_id = procurar(objeto.nome)
+            if cal_id:
+                objeto.google_calendar_id = cal_id
+                alterou = True
+    if alterou:
+        db.commit()
+
+
 # ───────────────────────────── conteúdo ────────────────────────────────
 
 def _parse_hora(texto):
@@ -666,6 +708,9 @@ def sincronizar(db, forcar=False):
         return {"erros": ["Não foi possível renovar o acesso ao Google — conecte novamente."]}
 
     stats = {"criados": 0, "atualizados": 0, "excluidos": 0, "enviados": 0, "erros": []}
+    # Os IDs podem não ter sido cadastrados manualmente. O Google fornece
+    # summary/summaryOverride, então conseguimos localizar pelo nome.
+    _descobrir_calendarios(db, access)
     for cal_id, (tipo_cal, nome_cal) in _mapa_calendarios(db).items():
         try:
             _pull_calendario(db, access, cal_id, tipo_cal, nome_cal, stats)

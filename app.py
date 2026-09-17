@@ -1962,11 +1962,16 @@ def tela_agenda():
         _user_gc = st.session_state.get("user", {}) or {}
         _perfil_gc = (_user_gc.get("perfil") or "").strip().lower()
         # Sincroniza sozinho ao abrir a agenda (com intervalo mínimo de 3 min)
+        _gc_resultado_auto = None
         if _perfil_gc in ("admin", "recepcao"):
             try:
-                gcal.sincronizar(db)
-            except Exception:
-                pass  # nunca pode travar a agenda por causa da sincronização
+                _gc_resultado_auto = gcal.sincronizar(db)
+                if _gc_resultado_auto:
+                    st.session_state["gc_ultimo_resultado"] = _gc_resultado_auto
+            except Exception as _gc_ex:
+                st.session_state["gc_ultimo_resultado"] = {
+                    "erros": [str(_gc_ex)]
+                }
 
         if _perfil_gc == "admin":
             with st.expander("🔗 Google Calendar"):
@@ -1997,6 +2002,20 @@ def tela_agenda():
                         f"Conectado à conta **{_gc_st['email'] or 'Google'}** — "
                         f"última sincronização: {_ultimo_txt}"
                     )
+                    _gc_info = st.session_state.get("gc_ultimo_resultado")
+                    if _gc_info:
+                        if _gc_info.get("erros"):
+                            st.error("A sincronização encontrou um problema:")
+                            for _gc_erro in _gc_info["erros"][:5]:
+                                st.caption(str(_gc_erro))
+                        else:
+                            st.info(
+                                "Último resultado: "
+                                f"{_gc_info.get('criados', 0)} criado(s), "
+                                f"{_gc_info.get('atualizados', 0)} atualizado(s), "
+                                f"{_gc_info.get('enviados', 0)} enviado(s), "
+                                f"{_gc_info.get('excluidos', 0)} excluído(s)."
+                            )
                     _gc_c1, _gc_c2 = st.columns(2)
                     with _gc_c1:
                         if st.button("🔄 Sincronizar agora", use_container_width=True):
@@ -2004,9 +2023,11 @@ def tela_agenda():
                             if _r_gc is None:
                                 st.warning("Nada a sincronizar.")
                             elif _r_gc.get("erros"):
+                                st.session_state["gc_ultimo_resultado"] = _r_gc
                                 for _e_gc in _r_gc["erros"][:5]:
                                     st.error(_e_gc)
                             else:
+                                st.session_state["gc_ultimo_resultado"] = _r_gc
                                 st.toast(
                                     "Google Calendar sincronizado: "
                                     f"{_r_gc['enviados']} enviado(s), "
