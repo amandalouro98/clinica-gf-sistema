@@ -903,24 +903,24 @@ def sincronizar_agendamento(db, ag):
 def excluir_agendamento(db, ag):
     """Apaga do Google os eventos vinculados a um agendamento.
 
-    Deve ser chamado ANTES de db.delete(ag): o vínculo é apagado em
-    cascata pelo banco e, sem isso, o evento ficaria órfão no Google.
+    Deve ser chamado ANTES de db.delete(ag). Os vínculos locais são
+    sempre removidos aqui — o ON DELETE CASCADE do banco não é aplicado
+    pelo SQLite e o evento ficaria órfão no Google.
     """
     if ag is None:
         return
-    if not configurado() or not conectado(db):
-        return
     from models.google_sync import GoogleEvento
-    access = _access_token(db)
-    if not access:
-        return
     links = db.query(GoogleEvento).filter_by(agendamento_id=ag.id).all()
     if not links:
         return
+    if configurado() and conectado(db):
+        access = _access_token(db)
+        if access:
+            for l in links:
+                try:
+                    _api_delete(access, l.calendar_id, l.event_id)
+                except Exception:
+                    pass  # não bloqueia a exclusão local
     for l in links:
-        try:
-            _api_delete(access, l.calendar_id, l.event_id)
-        except Exception:
-            pass  # não bloqueia a exclusão local
         db.delete(l)
     db.commit()

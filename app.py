@@ -2102,6 +2102,7 @@ def tela_agenda():
                         if st.button(f"agx-esp-{_aid_esp}", key=f"agx_esp_{_aid_esp}"):
                             st.session_state["espelho_editar_id"] = _aid_esp
                             st.session_state["espelho_editar"] = True
+                            st.session_state.pop("espm_del_confirma", None)
                             st.rerun()
                     # clique em espaço vazio da grade: um botão oculto por
                     # horário (07:00–20:00, de 15 em 15 min). O JS do espelho
@@ -2173,11 +2174,42 @@ def tela_agenda():
                             _sala_idx = _sala_nomes.index(_ag.sala) if _ag.sala in _sala_nomes else 0
                             _ed_sala = st.selectbox("Sala", _sala_nomes, index=_sala_idx, key="espm_sala")
                         _ed_obs = st.text_area("Observações", value=_ag.observacoes or "", key="espm_obs")
-                        _b1, _b2 = st.columns(2)
+                        _b1, _b2, _b3 = st.columns([1.2, 1, 1])
                         with _b1:
-                            _salvar_esp = st.button("💾 Salvar", use_container_width=True, key="espm_salvar")
+                            _salvar_esp = st.button("💾 Salvar", use_container_width=True, type="primary", key="espm_salvar")
                         with _b2:
                             _cancel_esp = st.button("Cancelar", use_container_width=True, key="espm_cancelar")
+                        with _b3:
+                            _excluir_esp = st.button("🗑️ Excluir", use_container_width=True, key="espm_excluir")
+                        if _excluir_esp:
+                            st.session_state["espm_del_confirma"] = True
+                        if st.session_state.get("espm_del_confirma"):
+                            st.warning(
+                                f"Excluir **{_ag.cliente_nome or '(sem título)'}** "
+                                f"de {_ag.data.strftime('%d/%m/%Y')} às {_ag.hora_inicio}?"
+                            )
+                            st.caption("O evento correspondente também será apagado do Google Calendar.")
+                            _bd1, _bd2 = st.columns(2)
+                            with _bd1:
+                                _confirma_del = st.button("🗑️ Sim, excluir", use_container_width=True, key="espm_del_conf_ok")
+                            with _bd2:
+                                # on_click roda ANTES do rerun: a confirmação
+                                # some na hora, sem precisar de outro clique
+                                _nao_del = st.button(
+                                    "Não, manter", use_container_width=True, key="espm_del_conf_nao",
+                                    on_click=lambda: st.session_state.pop("espm_del_confirma", None),
+                                )
+                            if _confirma_del:
+                                try:
+                                    gcal.excluir_agendamento(db_esp, _ag)
+                                except Exception:
+                                    db_esp.rollback()
+                                db_esp.delete(_ag)
+                                db_esp.commit()
+                                st.session_state.pop("espelho_editar", None)
+                                st.session_state.pop("espelho_editar_id", None)
+                                st.session_state.pop("espm_del_confirma", None)
+                                st.rerun()
                         if _salvar_esp:
                             if not _ed_nome.strip():
                                 st.error("Informe o nome do paciente.")
@@ -2203,10 +2235,12 @@ def tela_agenda():
                                     db_esp.rollback()
                                 st.session_state.pop("espelho_editar", None)
                                 st.session_state.pop("espelho_editar_id", None)
+                                st.session_state.pop("espm_del_confirma", None)
                                 st.rerun()
                         if _cancel_esp:
                             st.session_state.pop("espelho_editar", None)
                             st.session_state.pop("espelho_editar_id", None)
+                            st.session_state.pop("espm_del_confirma", None)
                             st.rerun()
                     finally:
                         db_esp.close()
@@ -2266,6 +2300,7 @@ def tela_agenda():
                                     st.session_state.get("espelho_sel_idx", 0)
                                 ][0]
                                 st.session_state["espelho_editar"] = True
+                                st.session_state.pop("espm_del_confirma", None)
                                 st.rerun()
                         with _be2:
                             if st.button("🗑️ Excluir", use_container_width=True, key="espelho_btn_excluir"):
