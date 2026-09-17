@@ -4,7 +4,7 @@ import pandas as pd
 import altair as alt
 import json
 import unicodedata
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone, time
 
 # Fuso horário de Brasília (GMT-3)
 BR_TZ = timezone(timedelta(hours=-3))
@@ -2086,6 +2086,139 @@ def tela_agenda():
                         "Nenhum evento do Google neste dia. Os eventos aparecem aqui "
                         "depois da sincronização (automática ao abrir a Agenda)."
                     )
+
+                # ── edição direta no espelho ────────────────────────────────
+                from ui.google_mirror import listar_blocos_editaveis
+                _blocos_ed = listar_blocos_editaveis(db, _esp_data)
+                if _blocos_ed:
+                    _labels_ed = [lbl for _i, lbl in _blocos_ed]
+
+                    @st.dialog("Editar agendamento")
+                    def _dialog_espelho_editar():
+                        _idx = st.session_state.get("espelho_sel_idx", 0)
+                        _aid = _blocos_ed[_idx][0]
+                        _ag = db.get(ScheduledAppointment, _aid)
+                        if _ag is None:
+                            st.warning("Este agendamento não existe mais. Sincronize novamente.")
+                            if st.button("Fechar", use_container_width=True):
+                                st.session_state.pop("espelho_editar", None)
+                                st.rerun()
+                            return
+                        st.caption(
+                            "Editando evento do Google Calendar — ao salvar, "
+                            "sincroniza automaticamente."
+                        )
+                        _ed_nome = st.text_input("Paciente", value=_ag.cliente_nome or "", key="espm_nome")
+                        _ed_proc = st.text_input("Procedimento", value=_ag.procedimento or "", key="espm_proc")
+                        _c1, _c2, _c3 = st.columns(3)
+                        with _c1:
+                            _ed_data = st.date_input("Data", value=_ag.data, format="DD/MM/YYYY", key="espm_data")
+                        with _c2:
+                            _ed_ini = st.time_input("Início", value=time.fromisoformat(_ag.hora_inicio or "08:00"), step=900, key="espm_ini")
+                        with _c3:
+                            _dur_opts = [15, 30, 45, 60, 75, 90, 105, 120, 150, 180, 210, 240]
+                            _dur_val = _ag.duracao_min or 60
+                            _dur_idx = _dur_opts.index(_dur_val) if _dur_val in _dur_opts else 3
+                            _ed_dur = st.selectbox("Duração", _dur_opts, index=_dur_idx, format_func=lambda v: f"{v//60}h{v%60:02d}" if v >= 60 else f"{v} min", key="espm_dur")
+                        _profs_esp = db.query(Professional).order_by(Professional.nome.asc()).all()
+                        _salas_esp = db.query(Room).order_by(Room.nome.asc()).all()
+                        _cp1, _cp2 = st.columns(2)
+                        with _cp1:
+                            _prof_nomes = [p.nome for p in _profs_esp]
+                            _prof_idx = _prof_nomes.index(_ag.profissional) if _ag.profissional in _prof_nomes else 0
+                            _ed_prof = st.selectbox("Profissional", _prof_nomes, index=_prof_idx, key="espm_prof") if _prof_nomes else None
+                        with _cp2:
+                            _sala_nomes = ["—"] + [r.nome for r in _salas_esp]
+                            _sala_idx = _sala_nomes.index(_ag.sala) if _ag.sala in _sala_nomes else 0
+                            _ed_sala = st.selectbox("Sala", _sala_nomes, index=_sala_idx, key="espm_sala")
+                        _ed_obs = st.text_area("Observações", value=_ag.observacoes or "", key="espm_obs")
+                        _b1, _b2 = st.columns(2)
+                        with _b1:
+                            _salvar_esp = st.button("💾 Salvar", use_container_width=True, key="espm_salvar")
+                        with _b2:
+                            _cancel_esp = st.button("Cancelar", use_container_width=True, key="espm_cancelar")
+                        if _salvar_esp:
+                            if not _ed_nome.strip():
+                                st.error("Informe o nome do paciente.")
+                            else:
+                                _ag.cliente_nome = _ed_nome.strip()
+                                _ag.procedimento = _ed_proc.strip() or None
+                                _ag.data = _ed_data
+                                _ag.hora_inicio = _ed_ini.strftime("%H:%M")
+                                _ag.duracao_min = _ed_dur
+                                _min_ini = _ed_ini.hour * 60 + _ed_ini.minute
+                                _min_fim = _min_ini + _ed_dur
+                                _ag.hora_fim = f"{(_min_fim // 60) % 24:02d}:{_min_fim % 60:02d}"
+                                if _ed_prof:
+                                    _ag.profissional = _ed_prof
+                                _ag.sala = None if _ed_sala == "—" else _ed_sala
+                                _ag.observacoes = _ed_obs.strip() or None
+                                db.commit()
+                                try:
+                                    gcal.sincronizar(db, forcar=True)
+                                except Exception:
+                                    pass
+                                st.session_state.pop("espelho_editar", None)
+                                st.rerun()
+                        if _cancel_esp:
+                            st.session_state.pop("espelho_editar", None)
+                            st.rerun()
+
+                    @st.dialog("Excluir agendamento")
+                    def _dialog_espelho_excluir():
+                        _idx = st.session_state.get("espelho_sel_idx", 0)
+                        _aid = _blocos_ed[_idx][0]
+                        _ag = db.get(ScheduledAppointment, _aid)
+                        if _ag is None:
+                            st.warning("Este agendamento não existe mais.")
+                            if st.button("Fechar", use_container_width=True):
+                                st.session_state.pop("espelho_excluir", None)
+                                st.rerun()
+                            return
+                        st.warning(
+                            f"Excluir **{_ag.cliente_nome or '(sem título)'}** "
+                            f"de {_ag.data.strftime('%d/%m/%Y')} às {_ag.hora_inicio}?"
+                        )
+                        st.caption("O evento correspondente será apagado do Google Calendar também.")
+                        _b1, _b2 = st.columns(2)
+                        with _b1:
+                            _confirma = st.button("🗑️ Sim, excluir", use_container_width=True, key="espm_del_ok")
+                        with _b2:
+                            _nao = st.button("Cancelar", use_container_width=True, key="espm_del_nao")
+                        if _confirma:
+                            db.delete(_ag)
+                            db.commit()
+                            try:
+                                gcal.sincronizar(db, forcar=True)
+                            except Exception:
+                                pass
+                            st.session_state.pop("espelho_excluir", None)
+                            st.rerun()
+                        if _nao:
+                            st.session_state.pop("espelho_excluir", None)
+                            st.rerun()
+
+                    with st.popover("✏️ Editar evento", use_container_width=True):
+                        st.selectbox(
+                            "Selecione o agendamento",
+                            options=list(range(len(_blocos_ed))),
+                            format_func=lambda i: _labels_ed[i],
+                            key="espelho_sel_idx",
+                        )
+                        _be1, _be2 = st.columns(2)
+                        with _be1:
+                            if st.button("✏️ Editar", use_container_width=True, key="espelho_btn_editar"):
+                                st.session_state["espelho_editar"] = True
+                                st.rerun()
+                        with _be2:
+                            if st.button("🗑️ Excluir", use_container_width=True, key="espelho_btn_excluir"):
+                                st.session_state["espelho_excluir"] = True
+                                st.rerun()
+
+                    if st.session_state.get("espelho_editar"):
+                        _dialog_espelho_editar()
+                    if st.session_state.get("espelho_excluir"):
+                        _dialog_espelho_excluir()
             else:
                 st.info(
                     "Nenhum calendário do Google vinculado ainda. Cadastre o "

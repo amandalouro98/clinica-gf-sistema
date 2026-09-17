@@ -93,17 +93,22 @@ def render_espelho_google(db, data):
                 'height:2px;background:#d93025;z-index:5;"></div>'
             )
 
-    # ── eixo de horas ──
+    # ── eixo de horas (coluna própria, à esquerda da grade) ──
     altura = (HORA_FIM - HORA_INI) * PX_POR_HORA
     marcas = []
     for h in range(HORA_INI, HORA_FIM + 1):
         top = (h - HORA_INI) * PX_POR_HORA
         marcas.append(
             f'<div style="position:absolute;top:{top}px;left:0;width:100%;'
-            'border-top:1px solid #eee;z-index:1;"></div>'
-            f'<div style="position:absolute;top:{top - 7}px;left:0;width:52px;'
-            'text-align:right;font-size:11px;color:#999;padding-right:6px;">'
-            f'{h:02d}:00</div>'
+            'border-top:1px solid #eee;"></div>'
+        )
+    eixo = []
+    for h in range(HORA_INI, HORA_FIM + 1):
+        top = (h - HORA_INI) * PX_POR_HORA
+        eixo.append(
+            f'<div style="position:absolute;top:{top - 7}px;left:0;width:46px;'
+            'text-align:right;font-size:11px;color:#999;padding-right:4px;'
+            f'background:#fff;z-index:2;">{h:02d}:00</div>'
         )
 
     # ── colunas com blocos ──
@@ -146,11 +151,49 @@ def render_espelho_google(db, data):
         f'<div style="display:flex;border-bottom:1px solid #f0d5ce;background:#fdf6f4;">'
         f'<div style="width:52px;flex:none;"></div>{cabecalhos}</div>'
         '<div style="overflow-x:auto;">'
-        f'<div style="display:flex;position:relative;min-width:100%;">'
-        f'<div style="width:52px;flex:none;position:relative;height:{altura}px;"></div>'
-        f'<div style="position:absolute;left:52px;right:0;top:0;height:{altura}px;">'
-        f'{"".join(marcas)}</div>'
+        f'<div style="display:flex;min-width:100%;">'
+        # coluna fixa do eixo de horas (com fundo branco, nunca atrás dos blocos)
+        f'<div style="width:52px;flex:none;position:relative;height:{altura}px;'
+        f'background:#fff;z-index:4;border-right:1px solid #eee;">{"".join(eixo)}</div>'
+        # grade: linhas de hora por trás, colunas por cima
+        f'<div style="flex:1;position:relative;height:{altura}px;">'
+        f'<div style="position:absolute;inset:0;z-index:1;">{"".join(marcas)}</div>'
+        f'<div style="display:flex;position:absolute;inset:0;z-index:2;">'
         f'{"".join(html_cols)}'
+        '</div>'
+        '</div>'
         '</div></div></div>'
     )
     return grid, total_blocos
+
+
+def listar_blocos_editaveis(db, data):
+    """Blocos do dia (com vínculo no Google) para edição via popover.
+
+    Ordenados por horário; retorna [(id_do_agendamento, rotulo)].
+    """
+    from models.schedule import ScheduledAppointment
+    from models.google_sync import GoogleEvento
+
+    links = (
+        db.query(GoogleEvento.agendamento_id)
+        .join(ScheduledAppointment, GoogleEvento.agendamento_id == ScheduledAppointment.id)
+        .filter(ScheduledAppointment.data == data)
+        .all()
+    )
+    ids = {l[0] for l in links}
+    if not ids:
+        return []
+    ags = (
+        db.query(ScheduledAppointment)
+        .filter(ScheduledAppointment.id.in_(ids))
+        .order_by(ScheduledAppointment.hora_inicio.asc(), ScheduledAppointment.cliente_nome.asc())
+        .all()
+    )
+    saida = []
+    for a in ags:
+        partes = [a.hora_inicio or "", (a.cliente_nome or "").strip() or "(sem título)"]
+        if a.procedimento:
+            partes.append(a.procedimento)
+        saida.append((a.id, " · ".join(p for p in partes if p)))
+    return saida
