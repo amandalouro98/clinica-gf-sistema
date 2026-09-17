@@ -624,8 +624,13 @@ def _push(db, access, stats):
             db.delete(l)
     db.commit()
 
-    # 2) cada agendamento da janela
+    # 2) cada agendamento da janela.
+    # O Google Calendar é a fonte da verdade: agendamentos antigos do sistema
+    # (sem vínculo com um evento do Google) NÃO são enviados, para não lotar
+    # os calendários da clínica com eventos duplicados.
     for ag in ags:
+        if not por_ag.get(ag.id):
+            continue  # agendamento que não veio do Google: não envia
         hash_atual = _hash_ag(ag)
         desejados = set()
         if prof_para_cal.get(ag.profissional):
