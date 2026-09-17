@@ -2045,6 +2045,49 @@ def tela_agenda():
                         "(no máximo uma vez a cada 3 minutos)."
                     )
 
+        # ── Espelho do Google Calendar (visual estilo Google) ───────────────
+        if _perfil_gc in ("admin", "recepcao") and gcal.conectado(db):
+            from ui.google_mirror import render_espelho_google
+
+            _esp_data = st.session_state.get("espelho_data") or _hoje()
+            _em_c1, _em_c2, _em_c3, _em_c4 = st.columns([1, 1, 2.4, 1])
+            with _em_c1:
+                if st.button("◀", key="espelho_prev", help="Dia anterior"):
+                    st.session_state["espelho_data"] = _esp_data - timedelta(days=1)
+                    st.rerun()
+            with _em_c2:
+                if st.button("Hoje", key="espelho_hoje"):
+                    st.session_state["espelho_data"] = _hoje()
+                    st.rerun()
+            with _em_c3:
+                st.date_input(
+                    "Dia",
+                    key="espelho_data",
+                    format="DD/MM/YYYY",
+                    label_visibility="collapsed",
+                )
+            with _em_c4:
+                if st.button("▶", key="espelho_next", help="Próximo dia"):
+                    st.session_state["espelho_data"] = _esp_data + timedelta(days=1)
+                    st.rerun()
+
+            _esp_data = st.session_state.get("espelho_data") or _hoje()
+            _esp = render_espelho_google(db, _esp_data)
+            if _esp:
+                _grid_html, _n_blocos = _esp
+                st.markdown(_grid_html, unsafe_allow_html=True)
+                if _n_blocos == 0:
+                    st.caption(
+                        "Nenhum evento do Google neste dia. Os eventos aparecem aqui "
+                        "depois da sincronização (automática ao abrir a Agenda)."
+                    )
+            else:
+                st.info(
+                    "Nenhum calendário do Google vinculado ainda. Cadastre o "
+                    "Google Calendar ID em Profissionais e Salas, ou aguarde a "
+                    "descoberta automática na próxima sincronização."
+                )
+
         slots = gerar_slots_horario()
         duracoes = [15, 30, 45, 60, 75, 90, 105, 120, 150, 180, 210, 240]
 
