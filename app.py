@@ -2049,15 +2049,20 @@ def tela_agenda():
         if _perfil_gc in ("admin", "recepcao") and gcal.conectado(db):
             from ui.google_mirror import render_espelho_google
 
+            # Aplica a navegação ANTES do widget de data existir
+            if "espelho_data_pendente" in st.session_state:
+                st.session_state["espelho_data"] = st.session_state.pop(
+                    "espelho_data_pendente"
+                )
             _esp_data = st.session_state.get("espelho_data") or _hoje()
             _em_c1, _em_c2, _em_c3, _em_c4 = st.columns([1, 1, 2.4, 1])
             with _em_c1:
                 if st.button("◀", key="espelho_prev", help="Dia anterior"):
-                    st.session_state["espelho_data"] = _esp_data - timedelta(days=1)
+                    st.session_state["espelho_data_pendente"] = _esp_data - timedelta(days=1)
                     st.rerun()
             with _em_c2:
                 if st.button("Hoje", key="espelho_hoje"):
-                    st.session_state["espelho_data"] = _hoje()
+                    st.session_state["espelho_data_pendente"] = _hoje()
                     st.rerun()
             with _em_c3:
                 st.date_input(
@@ -2068,7 +2073,7 @@ def tela_agenda():
                 )
             with _em_c4:
                 if st.button("▶", key="espelho_next", help="Próximo dia"):
-                    st.session_state["espelho_data"] = _esp_data + timedelta(days=1)
+                    st.session_state["espelho_data_pendente"] = _esp_data + timedelta(days=1)
                     st.rerun()
 
             _esp_data = st.session_state.get("espelho_data") or _hoje()
