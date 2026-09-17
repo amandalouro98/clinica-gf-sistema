@@ -842,6 +842,64 @@ def enviar_agendamentos(db, ag_ids):
     return {"erros": erros} if erros else None
 
 
+def sincronizar_agendamento(db, ag):
+    """Envia ao Google, na hora, as mudanças de UM agendamento.
+
+    Usado ao salvar a edição no espelho: atualiza o evento do profissional
+    e da sala (1-2 chamadas, instantâneo), em vez de rodar a sincronização
+    completa de todos os calendários.
+    """
+    if ag is None or not configurado() or not conectado(db):
+        return
+    access = _access_token(db)
+    if not access:
+        return
+    from models.google_sync import GoogleEvento
+
+    prof_para_cal, sala_para_cal = _mapas(db)
+    desejados = set()
+    if prof_para_cal.get(ag.profissional):
+        desejados.add(prof_para_cal[ag.profissional])
+    if ag.sala and sala_para_cal.get(ag.sala):
+        desejados.add(sala_para_cal[ag.sala])
+
+    links = db.query(GoogleEvento).filter_by(agendamento_id=ag.id).all()
+    hash_atual = _hash_ag(ag)
+    atuais = set()
+    for l in links:
+        if l.calendar_id in desejados:
+            atuais.add(l.calendar_id)
+            try:
+                try:
+                    _api_put(access, l.calendar_id, l.event_id, _corpo_evento(ag))
+                except _EventoNaoEncontrado:
+                    ev = _api_post(access, l.calendar_id, _corpo_evento(ag))
+                    l.event_id = ev.get("id")
+            except Exception:
+                pass  # não bloqueia o fechamento do popup
+            l.hash_conteudo = hash_atual
+        else:
+            # mudou de profissional/sala: apaga do calendário antigo
+            try:
+                _api_delete(access, l.calendar_id, l.event_id)
+            except Exception:
+                pass
+            db.delete(l)
+    # calendário que ainda não tinha evento (ex.: ganhou sala agora)
+    for cal_id in desejados - atuais:
+        try:
+            ev = _api_post(access, cal_id, _corpo_evento(ag))
+            db.add(GoogleEvento(
+                agendamento_id=ag.id,
+                calendar_id=cal_id,
+                event_id=ev.get("id"),
+                hash_conteudo=hash_atual,
+            ))
+        except Exception:
+            pass
+    db.commit()
+
+
 def excluir_agendamento(db, ag):
     """Apaga do Google os eventos vinculados a um agendamento.
 

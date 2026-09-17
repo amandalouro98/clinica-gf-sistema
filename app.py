@@ -1903,7 +1903,10 @@ def tela_agenda():
     # Só um dialog pode abrir por execução. Se sobrar estado antigo de dois
     # popups ao mesmo tempo, o Streamlit quebra e a tela trava com os campos
     # bloqueados. A prioridade abaixo garante um único popup por vez.
-    _ordem_dialogs = ["ag_popup_edit_id", "ag_excluir_id", "ag_menu_id", "ag_abrir_novo_popup"]
+    _ordem_dialogs = [
+        "ag_popup_edit_id", "ag_excluir_id", "ag_menu_id",
+        "espelho_editar", "espelho_excluir", "ag_abrir_novo_popup",
+    ]
     _ja_tem = False
     for _k_dlg in _ordem_dialogs:
         if st.session_state.get(_k_dlg):
@@ -2078,26 +2081,6 @@ def tela_agenda():
 
             _esp_data = st.session_state.get("espelho_data") or _hoje()
 
-            # Clique em espaço vazio da grade -> novo agendamento com a hora
-            # clicada pré-preenchida (chega pelo campo oculto esp-novo-payload).
-            _pay_esp = (st.session_state.get("esp_novo_payload") or "").strip()
-            if _pay_esp:
-                # limpa ANTES de renderizar o widget oculto mais abaixo
-                st.session_state["esp_novo_payload"] = ""
-                try:
-                    _h_e, _m_e = _pay_esp.split(":")
-                    _hora_esp = f"{int(_h_e):02d}:{int(_m_e):02d}"
-                except Exception:
-                    _hora_esp = None
-                if _hora_esp:
-                    _slots_esp = gerar_slots_horario()
-                    if _hora_esp not in _slots_esp:
-                        _menores = [s for s in _slots_esp if s <= _hora_esp]
-                        _hora_esp = _menores[-1] if _menores else _slots_esp[0]
-                    st.session_state["dlg_ag_hora_ini"] = _hora_esp
-                st.session_state["dlg_ag_data_pre"] = _esp_data
-                st.session_state["ag_abrir_novo_popup"] = True
-
             _esp = render_espelho_google(db, _esp_data)
             if _esp:
                 _grid_html, _n_blocos = _esp
@@ -2120,10 +2103,16 @@ def tela_agenda():
                             st.session_state["espelho_editar_id"] = _aid_esp
                             st.session_state["espelho_editar"] = True
                             st.rerun()
-                    # clique em espaço vazio da grade do espelho
-                    st.text_input("esp-novo-payload", value="", key="esp_novo_payload")
-                    if st.button("agx-espnovo", key="agx_espnovo"):
-                        st.rerun()  # payload já é processado acima
+                    # clique em espaço vazio da grade: um botão oculto por
+                    # horário (07:00–20:00, de 15 em 15 min). O JS do espelho
+                    # calcula o horário clicado e aciona o botão — mesmo
+                    # mecanismo comprovado dos blocos.
+                    for _slot_esp in gerar_slots_horario():
+                        if st.button(f"agx-esp-novo-{_slot_esp}", key=f"agx_esp_novo_{_slot_esp.replace(':', '_')}"):
+                            st.session_state["dlg_ag_hora_ini"] = _slot_esp
+                            st.session_state["dlg_ag_data_pre"] = _esp_data
+                            st.session_state["ag_abrir_novo_popup"] = True
+                            st.rerun()
 
                 components.html(
                     _grid_html,
@@ -2142,110 +2131,124 @@ def tela_agenda():
 
                 @st.dialog("Editar agendamento")
                 def _dialog_espelho_editar():
-                    _aid = st.session_state.get("espelho_editar_id")
-                    _ag = db.get(ScheduledAppointment, _aid) if _aid else None
-                    if _ag is None:
-                        st.warning("Este agendamento não existe mais. Sincronize novamente.")
-                        if st.button("Fechar", use_container_width=True):
+                    # Sessão própria: o dialog roda como fragmento e a sessão
+                    # da tela fica com transação pendente entre reruns — usar
+                    # a sessão externa travava o popup ao salvar.
+                    db_esp = SessionLocal()
+                    try:
+                        _aid = st.session_state.get("espelho_editar_id")
+                        _ag = db_esp.get(ScheduledAppointment, _aid) if _aid else None
+                        if _ag is None:
+                            st.warning("Este agendamento não existe mais. Sincronize novamente.")
+                            if st.button("Fechar", use_container_width=True):
+                                st.session_state.pop("espelho_editar", None)
+                                st.session_state.pop("espelho_editar_id", None)
+                                st.rerun()
+                            return
+                        st.caption(
+                            "Editando evento do Google Calendar — ao salvar, "
+                            "sincroniza automaticamente."
+                        )
+                        _ed_nome = st.text_input("Paciente", value=_ag.cliente_nome or "", key="espm_nome")
+                        _ed_proc = st.text_input("Procedimento", value=_ag.procedimento or "", key="espm_proc")
+                        _c1, _c2, _c3 = st.columns(3)
+                        with _c1:
+                            _ed_data = st.date_input("Data", value=_ag.data, format="DD/MM/YYYY", key="espm_data")
+                        with _c2:
+                            _ed_ini = st.time_input("Início", value=time.fromisoformat(_ag.hora_inicio or "08:00"), step=900, key="espm_ini")
+                        with _c3:
+                            _dur_opts = [15, 30, 45, 60, 75, 90, 105, 120, 150, 180, 210, 240]
+                            _dur_val = _ag.duracao_min or 60
+                            _dur_idx = _dur_opts.index(_dur_val) if _dur_val in _dur_opts else 3
+                            _ed_dur = st.selectbox("Duração", _dur_opts, index=_dur_idx, format_func=lambda v: f"{v//60}h{v%60:02d}" if v >= 60 else f"{v} min", key="espm_dur")
+                        _profs_esp = db_esp.query(Professional).order_by(Professional.nome.asc()).all()
+                        _salas_esp = db_esp.query(Room).order_by(Room.nome.asc()).all()
+                        _cp1, _cp2 = st.columns(2)
+                        with _cp1:
+                            _prof_nomes = [p.nome for p in _profs_esp]
+                            _prof_idx = _prof_nomes.index(_ag.profissional) if _ag.profissional in _prof_nomes else 0
+                            _ed_prof = st.selectbox("Profissional", _prof_nomes, index=_prof_idx, key="espm_prof") if _prof_nomes else None
+                        with _cp2:
+                            _sala_nomes = ["—"] + [r.nome for r in _salas_esp]
+                            _sala_idx = _sala_nomes.index(_ag.sala) if _ag.sala in _sala_nomes else 0
+                            _ed_sala = st.selectbox("Sala", _sala_nomes, index=_sala_idx, key="espm_sala")
+                        _ed_obs = st.text_area("Observações", value=_ag.observacoes or "", key="espm_obs")
+                        _b1, _b2 = st.columns(2)
+                        with _b1:
+                            _salvar_esp = st.button("💾 Salvar", use_container_width=True, key="espm_salvar")
+                        with _b2:
+                            _cancel_esp = st.button("Cancelar", use_container_width=True, key="espm_cancelar")
+                        if _salvar_esp:
+                            if not _ed_nome.strip():
+                                st.error("Informe o nome do paciente.")
+                            else:
+                                _ag.cliente_nome = _ed_nome.strip()
+                                _ag.procedimento = _ed_proc.strip() or None
+                                _ag.data = _ed_data
+                                _ag.hora_inicio = _ed_ini.strftime("%H:%M")
+                                _ag.duracao_min = _ed_dur
+                                _min_ini = _ed_ini.hour * 60 + _ed_ini.minute
+                                _min_fim = _min_ini + _ed_dur
+                                _ag.hora_fim = f"{(_min_fim // 60) % 24:02d}:{_min_fim % 60:02d}"
+                                if _ed_prof:
+                                    _ag.profissional = _ed_prof
+                                _ag.sala = None if _ed_sala == "—" else _ed_sala
+                                _ag.observacoes = _ed_obs.strip() or None
+                                db_esp.commit()
+                                # Sincronização instantânea SOMENTE deste evento
+                                # (1-2 chamadas), em vez do ciclo completo.
+                                try:
+                                    gcal.sincronizar_agendamento(db_esp, _ag)
+                                except Exception:
+                                    db_esp.rollback()
+                                st.session_state.pop("espelho_editar", None)
+                                st.session_state.pop("espelho_editar_id", None)
+                                st.rerun()
+                        if _cancel_esp:
                             st.session_state.pop("espelho_editar", None)
                             st.session_state.pop("espelho_editar_id", None)
                             st.rerun()
-                        return
-                    st.caption(
-                        "Editando evento do Google Calendar — ao salvar, "
-                        "sincroniza automaticamente."
-                    )
-                    _ed_nome = st.text_input("Paciente", value=_ag.cliente_nome or "", key="espm_nome")
-                    _ed_proc = st.text_input("Procedimento", value=_ag.procedimento or "", key="espm_proc")
-                    _c1, _c2, _c3 = st.columns(3)
-                    with _c1:
-                        _ed_data = st.date_input("Data", value=_ag.data, format="DD/MM/YYYY", key="espm_data")
-                    with _c2:
-                        _ed_ini = st.time_input("Início", value=time.fromisoformat(_ag.hora_inicio or "08:00"), step=900, key="espm_ini")
-                    with _c3:
-                        _dur_opts = [15, 30, 45, 60, 75, 90, 105, 120, 150, 180, 210, 240]
-                        _dur_val = _ag.duracao_min or 60
-                        _dur_idx = _dur_opts.index(_dur_val) if _dur_val in _dur_opts else 3
-                        _ed_dur = st.selectbox("Duração", _dur_opts, index=_dur_idx, format_func=lambda v: f"{v//60}h{v%60:02d}" if v >= 60 else f"{v} min", key="espm_dur")
-                    _profs_esp = db.query(Professional).order_by(Professional.nome.asc()).all()
-                    _salas_esp = db.query(Room).order_by(Room.nome.asc()).all()
-                    _cp1, _cp2 = st.columns(2)
-                    with _cp1:
-                        _prof_nomes = [p.nome for p in _profs_esp]
-                        _prof_idx = _prof_nomes.index(_ag.profissional) if _ag.profissional in _prof_nomes else 0
-                        _ed_prof = st.selectbox("Profissional", _prof_nomes, index=_prof_idx, key="espm_prof") if _prof_nomes else None
-                    with _cp2:
-                        _sala_nomes = ["—"] + [r.nome for r in _salas_esp]
-                        _sala_idx = _sala_nomes.index(_ag.sala) if _ag.sala in _sala_nomes else 0
-                        _ed_sala = st.selectbox("Sala", _sala_nomes, index=_sala_idx, key="espm_sala")
-                    _ed_obs = st.text_area("Observações", value=_ag.observacoes or "", key="espm_obs")
-                    _b1, _b2 = st.columns(2)
-                    with _b1:
-                        _salvar_esp = st.button("💾 Salvar", use_container_width=True, key="espm_salvar")
-                    with _b2:
-                        _cancel_esp = st.button("Cancelar", use_container_width=True, key="espm_cancelar")
-                    if _salvar_esp:
-                        if not _ed_nome.strip():
-                            st.error("Informe o nome do paciente.")
-                        else:
-                            _ag.cliente_nome = _ed_nome.strip()
-                            _ag.procedimento = _ed_proc.strip() or None
-                            _ag.data = _ed_data
-                            _ag.hora_inicio = _ed_ini.strftime("%H:%M")
-                            _ag.duracao_min = _ed_dur
-                            _min_ini = _ed_ini.hour * 60 + _ed_ini.minute
-                            _min_fim = _min_ini + _ed_dur
-                            _ag.hora_fim = f"{(_min_fim // 60) % 24:02d}:{_min_fim % 60:02d}"
-                            if _ed_prof:
-                                _ag.profissional = _ed_prof
-                            _ag.sala = None if _ed_sala == "—" else _ed_sala
-                            _ag.observacoes = _ed_obs.strip() or None
-                            db.commit()
-                            try:
-                                gcal.sincronizar(db, forcar=True)
-                            except Exception:
-                                pass
-                            st.session_state.pop("espelho_editar", None)
-                            st.session_state.pop("espelho_editar_id", None)
-                            st.rerun()
-                    if _cancel_esp:
-                        st.session_state.pop("espelho_editar", None)
-                        st.session_state.pop("espelho_editar_id", None)
-                        st.rerun()
+                    finally:
+                        db_esp.close()
 
                 @st.dialog("Excluir agendamento")
                 def _dialog_espelho_excluir():
-                    _idx = st.session_state.get("espelho_sel_idx", 0)
-                    _aid = _blocos_ed[_idx][0]
-                    _ag = db.get(ScheduledAppointment, _aid)
-                    if _ag is None:
-                        st.warning("Este agendamento não existe mais.")
-                        if st.button("Fechar", use_container_width=True):
+                    # Sessão própria (mesmo motivo do dialog de edição)
+                    db_esp = SessionLocal()
+                    try:
+                        _idx = st.session_state.get("espelho_sel_idx", 0)
+                        _aid = _blocos_ed[_idx][0]
+                        _ag = db_esp.get(ScheduledAppointment, _aid)
+                        if _ag is None:
+                            st.warning("Este agendamento não existe mais.")
+                            if st.button("Fechar", use_container_width=True):
+                                st.session_state.pop("espelho_excluir", None)
+                                st.rerun()
+                            return
+                        st.warning(
+                            f"Excluir **{_ag.cliente_nome or '(sem título)'}** "
+                            f"de {_ag.data.strftime('%d/%m/%Y')} às {_ag.hora_inicio}?"
+                        )
+                        st.caption("O evento correspondente será apagado do Google Calendar também.")
+                        _b1, _b2 = st.columns(2)
+                        with _b1:
+                            _confirma = st.button("🗑️ Sim, excluir", use_container_width=True, key="espm_del_ok")
+                        with _b2:
+                            _nao = st.button("Cancelar", use_container_width=True, key="espm_del_nao")
+                        if _confirma:
+                            try:
+                                gcal.excluir_agendamento(db_esp, _ag)
+                            except Exception:
+                                db_esp.rollback()
+                            db_esp.delete(_ag)
+                            db_esp.commit()
                             st.session_state.pop("espelho_excluir", None)
                             st.rerun()
-                        return
-                    st.warning(
-                        f"Excluir **{_ag.cliente_nome or '(sem título)'}** "
-                        f"de {_ag.data.strftime('%d/%m/%Y')} às {_ag.hora_inicio}?"
-                    )
-                    st.caption("O evento correspondente será apagado do Google Calendar também.")
-                    _b1, _b2 = st.columns(2)
-                    with _b1:
-                        _confirma = st.button("🗑️ Sim, excluir", use_container_width=True, key="espm_del_ok")
-                    with _b2:
-                        _nao = st.button("Cancelar", use_container_width=True, key="espm_del_nao")
-                    if _confirma:
-                        try:
-                            gcal.excluir_agendamento(db, _ag)
-                        except Exception:
-                            pass
-                        db.delete(_ag)
-                        db.commit()
-                        st.session_state.pop("espelho_excluir", None)
-                        st.rerun()
-                    if _nao:
-                        st.session_state.pop("espelho_excluir", None)
-                        st.rerun()
+                        if _nao:
+                            st.session_state.pop("espelho_excluir", None)
+                            st.rerun()
+                    finally:
+                        db_esp.close()
 
                 if _blocos_ed:
                     st.caption("Clique em um agendamento na grade para editar.")

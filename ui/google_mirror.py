@@ -46,40 +46,20 @@ function acionar(marcador) {{
     console.warn('Ponte nao encontrada para ' + marcador);
     return false;
 }}
-function acionarNovo(hora) {{
-    var doc = docPai();
-    if (!doc) return false;
-    var campo = doc.querySelector('input[aria-label="esp-novo-payload"]');
-    var btn = acharBotao('agx-espnovo');
-    if (!campo || !btn) {{
-        console.warn('Ponte de novo agendamento nao encontrada');
-        return false;
-    }}
-    try {{
-        var proto = (window.parent || window).HTMLInputElement.prototype;
-        var setter = Object.getOwnPropertyDescriptor(proto, 'value').set;
-        setter.call(campo, hora);
-        campo.dispatchEvent(new Event('input', {{ bubbles: true }}));
-        campo.dispatchEvent(new Event('change', {{ bubbles: true }}));
-        campo.blur();
-    }} catch (e) {{ return false; }}
-    setTimeout(function () {{ btn.click(); }}, 120);
-    return true;
-}}
 function clicouFundo(ev) {{
     var alvo = ev.currentTarget;
     var rect = alvo.getBoundingClientRect();
     if (!rect.height) return;
     var totalMin = {(HORA_FIM - HORA_INI) * 60};
     var minIni = {HORA_INI * 60};
+    var maxSlot = 20 * 60;  // último horário com botão na ponte (grade de agendamento)
     var y = ev.clientY - rect.top;
     var minutos = minIni + Math.floor((y / rect.height) * totalMin / 15) * 15;
-    var teto = minIni + totalMin - 15;
-    if (minutos > teto) minutos = teto;
+    if (minutos > maxSlot) minutos = maxSlot;
     if (minutos < minIni) minutos = minIni;
     var hh = ('0' + Math.floor(minutos / 60)).slice(-2);
     var mm = ('0' + (minutos % 60)).slice(-2);
-    acionarNovo(hh + ':' + mm);
+    acionar('agx-esp-novo-' + hh + ':' + mm);
 }}
 """
 
