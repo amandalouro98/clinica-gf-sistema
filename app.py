@@ -2077,6 +2077,27 @@ def tela_agenda():
                     st.rerun()
 
             _esp_data = st.session_state.get("espelho_data") or _hoje()
+
+            # Clique em espaço vazio da grade -> novo agendamento com a hora
+            # clicada pré-preenchida (chega pelo campo oculto esp-novo-payload).
+            _pay_esp = (st.session_state.get("esp_novo_payload") or "").strip()
+            if _pay_esp:
+                # limpa ANTES de renderizar o widget oculto mais abaixo
+                st.session_state["esp_novo_payload"] = ""
+                try:
+                    _h_e, _m_e = _pay_esp.split(":")
+                    _hora_esp = f"{int(_h_e):02d}:{int(_m_e):02d}"
+                except Exception:
+                    _hora_esp = None
+                if _hora_esp:
+                    _slots_esp = gerar_slots_horario()
+                    if _hora_esp not in _slots_esp:
+                        _menores = [s for s in _slots_esp if s <= _hora_esp]
+                        _hora_esp = _menores[-1] if _menores else _slots_esp[0]
+                    st.session_state["dlg_ag_hora_ini"] = _hora_esp
+                st.session_state["dlg_ag_data_pre"] = _esp_data
+                st.session_state["ag_abrir_novo_popup"] = True
+
             _esp = render_espelho_google(db, _esp_data)
             if _esp:
                 _grid_html, _n_blocos = _esp
@@ -2099,6 +2120,10 @@ def tela_agenda():
                             st.session_state["espelho_editar_id"] = _aid_esp
                             st.session_state["espelho_editar"] = True
                             st.rerun()
+                    # clique em espaço vazio da grade do espelho
+                    st.text_input("esp-novo-payload", value="", key="esp_novo_payload")
+                    if st.button("agx-espnovo", key="agx_espnovo"):
+                        st.rerun()  # payload já é processado acima
 
                 components.html(
                     _grid_html,
@@ -2210,12 +2235,12 @@ def tela_agenda():
                     with _b2:
                         _nao = st.button("Cancelar", use_container_width=True, key="espm_del_nao")
                     if _confirma:
-                        db.delete(_ag)
-                        db.commit()
                         try:
-                            gcal.sincronizar(db, forcar=True)
+                            gcal.excluir_agendamento(db, _ag)
                         except Exception:
                             pass
+                        db.delete(_ag)
+                        db.commit()
                         st.session_state.pop("espelho_excluir", None)
                         st.rerun()
                     if _nao:
@@ -2527,6 +2552,11 @@ def tela_agenda():
                                 )
                                 db_dlg.add(_novo_sala)
                                 db_dlg.commit()
+                                # Envia a reserva para o Google Calendar
+                                try:
+                                    gcal.enviar_agendamentos(db_dlg, [_novo_sala.id])
+                                except Exception:
+                                    pass
                                 st.success("Reserva de sala salva!")
                                 st.rerun()
                     with col_cancelar_sala:
@@ -2552,6 +2582,7 @@ def tela_agenda():
             _total_rep = max(1, int(num_repeticoes or 1))
             _criados = 0
             _duplicados = 0
+            _ids_criados = []
 
             def _ja_existe(_dt, _hora):
                 """Evita gravar o mesmo horário duas vezes (cliques repetidos)."""
@@ -2590,6 +2621,7 @@ def tela_agenda():
                 db_save.add(_novo)
                 db_save.flush()
                 _criados += 1
+                _ids_criados.append(_novo.id)
                 try:
                     _ulog = st.session_state.get("user", {}) or {}
                     db_save.add(AgendaLog(
@@ -2629,6 +2661,11 @@ def tela_agenda():
 
                 db_save.commit()
                 sincronizar_datas_pacote(db_save, _pacote_item_id)
+                # Envia os novos agendamentos para o Google Calendar
+                try:
+                    gcal.enviar_agendamentos(db_save, _ids_criados)
+                except Exception:
+                    pass  # falha no Google não bloqueia o salvamento
             except Exception as _err_save:
                 db_save.rollback()
                 st.error(f"Erro ao salvar agendamento: {_err_save}")
@@ -3072,6 +3109,10 @@ def tela_agenda():
                                     except Exception:
                                         _nova_ocorrencia = None
                                 _pkg_sync = getattr(_ag_del, "sale_item_id", None)
+                                try:
+                                    gcal.excluir_agendamento(db, _ag_del)
+                                except Exception:
+                                    pass
                                 db.delete(_ag_del)
                                 db.commit()
                                 sincronizar_datas_pacote(db, _pkg_sync)
@@ -3109,6 +3150,10 @@ def tela_agenda():
                                      if getattr(_a, "sale_item_id", None)), None
                                 )
                                 for _ag_item in _serie:
+                                    try:
+                                        gcal.excluir_agendamento(db, _ag_item)
+                                    except Exception:
+                                        pass
                                     db.delete(_ag_item)
                                 db.commit()
                                 sincronizar_datas_pacote(db, _pkg_sync)
@@ -3142,6 +3187,10 @@ def tela_agenda():
                                 except Exception:
                                     pass
                                 _pkg_sync = getattr(_ag_del, "sale_item_id", None)
+                                try:
+                                    gcal.excluir_agendamento(db, _ag_del)
+                                except Exception:
+                                    pass
                                 db.delete(_ag_del)
                                 db.commit()
                                 sincronizar_datas_pacote(db, _pkg_sync)

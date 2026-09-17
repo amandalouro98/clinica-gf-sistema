@@ -748,7 +748,11 @@ def _sync_recente(db):
 
 
 def sincronizar(db, forcar=False):
-    """Executa um ciclo: puxa mudanças do Google e envia as locais.
+    """Executa um ciclo: envia as mudanças locais e puxa as do Google.
+
+    A ordem importa: o envio (sistema -> Google) roda ANTES do pull, para
+    que uma edição feita no sistema não seja revertida pela versão antiga
+    que ainda está no Google.
 
     Retorna um dicionário de estatísticas ou None quando não há o que fazer.
     """
@@ -766,6 +770,11 @@ def sincronizar(db, forcar=False):
     # Os IDs podem não ter sido cadastrados manualmente. O Google fornece
     # summary/summaryOverride, então conseguimos localizar pelo nome.
     _descobrir_calendarios(db, access)
+    try:
+        _push(db, access, stats)
+    except Exception as ex:
+        db.rollback()
+        stats["erros"].append(f"envio: {ex}")
     for cal_id, (tipo_cal, nome_cal) in _mapa_calendarios(db).items():
         try:
             _pull_calendario(db, access, cal_id, tipo_cal, nome_cal, stats)
@@ -780,9 +789,80 @@ def sincronizar(db, forcar=False):
                 stats["erros"].append(f"{nome_cal}: {ex}")
         except Exception as ex:
             stats["erros"].append(f"{nome_cal}: {ex}")
-    try:
-        _push(db, access, stats)
-    except Exception as ex:
-        db.rollback()
-        stats["erros"].append(f"envio: {ex}")
     return stats
+
+
+def enviar_agendamentos(db, ag_ids):
+    """Cria os eventos no Google para agendamentos criados no sistema.
+
+    Chamado na criação de novos agendamentos: o evento entra nos calendários
+    do profissional e da sala e fica vinculado (GoogleEvento).
+    """
+    if not ag_ids:
+        return None
+    if not configurado() or not conectado(db):
+        return None
+    access = _access_token(db)
+    if not access:
+        return {"erros": ["Sem acesso ao Google — reconecte."]}
+    from models.schedule import ScheduledAppointment
+    from models.google_sync import GoogleEvento
+
+    prof_para_cal, sala_para_cal = _mapas(db)
+    erros = []
+    for ag_id in ag_ids:
+        ag = db.get(ScheduledAppointment, ag_id)
+        if ag is None:
+            continue
+        desejados = set()
+        if prof_para_cal.get(ag.profissional):
+            desejados.add(prof_para_cal[ag.profissional])
+        if ag.sala and sala_para_cal.get(ag.sala):
+            desejados.add(sala_para_cal[ag.sala])
+        for cal_id in desejados:
+            ja_tem = (
+                db.query(GoogleEvento)
+                .filter_by(agendamento_id=ag_id, calendar_id=cal_id)
+                .first()
+            )
+            if ja_tem:
+                continue
+            try:
+                ev = _api_post(access, cal_id, _corpo_evento(ag))
+                db.add(GoogleEvento(
+                    agendamento_id=ag_id,
+                    calendar_id=cal_id,
+                    event_id=ev.get("id"),
+                    hash_conteudo=_hash_ag(ag),
+                ))
+                db.commit()
+            except Exception as ex:
+                db.rollback()
+                erros.append(str(ex))
+    return {"erros": erros} if erros else None
+
+
+def excluir_agendamento(db, ag):
+    """Apaga do Google os eventos vinculados a um agendamento.
+
+    Deve ser chamado ANTES de db.delete(ag): o vínculo é apagado em
+    cascata pelo banco e, sem isso, o evento ficaria órfão no Google.
+    """
+    if ag is None:
+        return
+    if not configurado() or not conectado(db):
+        return
+    from models.google_sync import GoogleEvento
+    access = _access_token(db)
+    if not access:
+        return
+    links = db.query(GoogleEvento).filter_by(agendamento_id=ag.id).all()
+    if not links:
+        return
+    for l in links:
+        try:
+            _api_delete(access, l.calendar_id, l.event_id)
+        except Exception:
+            pass  # não bloqueia a exclusão local
+        db.delete(l)
+    db.commit()

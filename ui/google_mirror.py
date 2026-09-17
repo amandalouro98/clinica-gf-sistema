@@ -20,32 +20,67 @@ HORA_FIM = 22  # 22:00
 PX_POR_HORA = 56
 
 # Ponte JS <-> Streamlit (mesma da grade FullCalendar)
-_JS_PONTE = """
-function docPai() {
-    try {
+_JS_PONTE = f"""
+function docPai() {{
+    try {{
         return (window.parent && window.parent !== window) ? window.parent.document : document;
-    } catch (e) {
+    }} catch (e) {{
         return null;
-    }
-}
-function textoBotao(btn) {
+    }}
+}}
+function textoBotao(btn) {{
     return ((btn.innerText || btn.textContent) || '').trim();
-}
-function acharBotao(marcador) {
+}}
+function acharBotao(marcador) {{
     var doc = docPai();
     if (!doc) return null;
     var botoes = doc.querySelectorAll('button');
-    for (var i = 0; i < botoes.length; i++) {
+    for (var i = 0; i < botoes.length; i++) {{
         if (textoBotao(botoes[i]) === marcador) return botoes[i];
-    }
+    }}
     return null;
-}
-function acionar(marcador) {
+}}
+function acionar(marcador) {{
     var btn = acharBotao(marcador);
-    if (btn) { btn.click(); return true; }
+    if (btn) {{ btn.click(); return true; }}
     console.warn('Ponte nao encontrada para ' + marcador);
     return false;
-}
+}}
+function acionarNovo(hora) {{
+    var doc = docPai();
+    if (!doc) return false;
+    var campo = doc.querySelector('input[aria-label="esp-novo-payload"]');
+    var btn = acharBotao('agx-espnovo');
+    if (!campo || !btn) {{
+        console.warn('Ponte de novo agendamento nao encontrada');
+        return false;
+    }}
+    try {{
+        var proto = (window.parent || window).HTMLInputElement.prototype;
+        var setter = Object.getOwnPropertyDescriptor(proto, 'value').set;
+        setter.call(campo, hora);
+        campo.dispatchEvent(new Event('input', {{ bubbles: true }}));
+        campo.dispatchEvent(new Event('change', {{ bubbles: true }}));
+        campo.blur();
+    }} catch (e) {{ return false; }}
+    setTimeout(function () {{ btn.click(); }}, 120);
+    return true;
+}}
+function clicouFundo(ev) {{
+    var alvo = ev.currentTarget;
+    var rect = alvo.getBoundingClientRect();
+    if (!rect.height) return;
+    var totalMin = {(HORA_FIM - HORA_INI) * 60};
+    var minIni = {HORA_INI * 60};
+    var y = ev.clientY - rect.top;
+    var minutos = minIni + Math.floor((y / rect.height) * totalMin / 15) * 15;
+    var teto = minIni + totalMin - 15;
+    if (minutos > teto) minutos = teto;
+    if (minutos < minIni) minutos = minIni;
+    var hh = ('0' + Math.floor(minutos / 60)).slice(-2);
+    var mm = ('0' + (minutos % 60)).slice(-2);
+    acionarNovo(hh + ':' + mm);
+}}
 """
 
 
@@ -158,7 +193,7 @@ def render_espelho_google(db, data):
             alt_pct = b["dur"] / total * 100
             blocos_html.append(
                 f'<div title="{b["dica"]} — clique para editar" '
-                f'onclick="acionar(\'agx-esp-{b["ag_id"]}\')" '
+                f'onclick="event.stopPropagation();acionar(\'agx-esp-{b["ag_id"]}\')" '
                 f'style="position:absolute;'
                 f'top:calc({top_pct:.3f}% + 1px);height:calc({alt_pct:.3f}% - 2px);'
                 f'left:2px;right:2px;background:{cor};border-radius:6px;'
@@ -170,8 +205,10 @@ def render_espelho_google(db, data):
                 '</div>'
             )
         html_cols.append(
-            f'<div style="flex:1;min-width:130px;position:relative;'
-            f'border-left:1px solid #eee;">{linha_agora}{"".join(blocos_html)}</div>'
+            f'<div onclick="clicouFundo(event)" '
+            f'title="Clique para criar um agendamento neste horário" '
+            f'style="flex:1;min-width:130px;position:relative;'
+            f'border-left:1px solid #eee;cursor:copy;">{linha_agora}{"".join(blocos_html)}</div>'
         )
 
     cabecalhos = "".join(
