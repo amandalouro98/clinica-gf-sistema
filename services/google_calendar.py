@@ -36,10 +36,14 @@ MIN_ENTRE_SYNCS_SEG = 180
 
 class _SyncExpirado(Exception):
     """syncToken do Google expirou — precisa sincronização completa."""
+    def __init__(self, msg="sincronização incremental expirada (410)"):
+        super().__init__(msg)
 
 
 class _EventoNaoEncontrado(Exception):
-    """Evento foi apagado no Google."""
+    """Evento/calendário não encontrado no Google (404)."""
+    def __init__(self, msg="não encontrado no Google (404)"):
+        super().__init__(msg)
 
 
 # ────────────────────────── credenciais do app ──────────────────────────
@@ -285,7 +289,13 @@ def _mapa_calendarios(db):
 
 
 def _descobrir_calendarios(db, access):
-    """Preenche IDs ausentes usando os nomes exibidos no Google Calendar."""
+    """Preenche e repara os IDs dos calendários usando a lista real do Google.
+
+    Os arquivos exportados pelo Google têm nome "NomeDoCalendario_<id>@...",
+    então IDs cadastrados a partir do nome do arquivo ficam inválidos —
+    aqui eles são corrigidos removendo o prefixo e validando contra a lista
+    real de calendários da conta.
+    """
     from models.professional import Professional
     from models.room import Room
 
@@ -294,11 +304,15 @@ def _descobrir_calendarios(db, access):
     except Exception:
         return
 
+    ids_reais = {item.get("id") for item in itens if item.get("id")}
+    primario = None
     por_nome = {}
     for item in itens:
         cal_id = item.get("id")
         if not cal_id:
             continue
+        if item.get("primary"):
+            primario = cal_id
         for valor in (item.get("summary"), item.get("summaryOverride"), cal_id):
             chave = _norm(valor)
             if chave:
@@ -315,13 +329,49 @@ def _descobrir_calendarios(db, access):
                 return cal_id
         return None
 
+    def reparar(cal_id):
+        """Remove o prefixo 'Nome_' de IDs vindos do nome do arquivo exportado."""
+        if not cal_id or cal_id in ids_reais:
+            return cal_id
+        if "@" in cal_id:
+            local, dominio = cal_id.split("@", 1)
+            if "_" in local:
+                suspeito = f"{local.rsplit('_', 1)[1]}@{dominio}"
+                if suspeito in ids_reais:
+                    return suspeito
+        return None
+
     alterou = False
-    for objeto in db.query(Professional).all() + db.query(Room).all():
-        if not objeto.google_calendar_id:
-            cal_id = procurar(objeto.nome)
-            if cal_id:
-                objeto.google_calendar_id = cal_id
+    objetos = db.query(Professional).all() + db.query(Room).all()
+    for objeto in objetos:
+        atual = objeto.google_calendar_id
+        consertado = reparar(atual)
+        if consertado and consertado != atual:
+            objeto.google_calendar_id = consertado
+            alterou = True
+        elif not consertado and atual:
+            # ID inválido e irreparável: tenta achar pelo nome
+            novo = procurar(objeto.nome)
+            if novo:
+                objeto.google_calendar_id = novo
                 alterou = True
+        if not objeto.google_calendar_id:
+            novo = procurar(objeto.nome)
+            if novo:
+                objeto.google_calendar_id = novo
+                alterou = True
+
+    # Calendário principal da conta (o da Gabi) sem dono -> se sobrar
+    # exatamente uma profissional sem calendário, é dela.
+    if primario and primario not in {o.google_calendar_id for o in objetos}:
+        sem_cal = [
+            o for o in objetos
+            if not o.google_calendar_id and isinstance(o, Professional)
+        ]
+        if len(sem_cal) == 1:
+            sem_cal[0].google_calendar_id = primario
+            alterou = True
+
     if alterou:
         db.commit()
 
