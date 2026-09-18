@@ -25,6 +25,30 @@ def seed_admin():
     finally:
         db.close()
 
+def seed_usuario_venda():
+    """Cria o usuário de demonstração (vende o sistema sem expor dados reais).
+
+    Ao logar, esse perfil enxerga o sistema rodando num banco de demonstração
+    vazio e separado — ver utils/db.py.
+    """
+    db = SessionLocal()
+    try:
+        email = "teste@clinica.com"
+        existe = db.query(User).filter_by(email=email).first()
+        if not existe:
+            venda = User(
+                nome="Demonstração",
+                email=email,
+                senha_hash=hash_password("@Teste123"),
+                perfil="venda",
+                ativo=True
+            )
+            db.add(venda)
+            db.commit()
+    finally:
+        db.close()
+
+
 def authenticate(email: str, senha: str):
     db = SessionLocal()
     try:

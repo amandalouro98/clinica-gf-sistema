@@ -73,7 +73,7 @@ from models.google_sync import GoogleToken, GoogleEvento, GoogleSyncState
 import services.google_calendar as gcal
 from utils.security import hash_password
 from utils.helpers import calcular_imc
-from services.auth import authenticate, seed_admin
+from services.auth import authenticate, seed_admin, seed_usuario_venda
 from services.inventory import movimentar, alertas
 from services.contracts import gerar_pdf_contrato
 from services.importador import sincronizar_clientes
@@ -90,6 +90,7 @@ from ui.calendar_component import (
 # ====== CRIA O BANCO (SE NÃO EXISTIR) E SEED DO ADMIN ======
 Base.metadata.create_all(bind=engine)
 seed_admin()
+seed_usuario_venda()
 
 # ====== CSS DO TEMA ======
 try:
@@ -747,6 +748,9 @@ def login_screen():
             user = authenticate(email, senha)
             if user:
                 st.session_state.user = {"id": user.id, "nome": user.nome, "perfil": user.perfil}
+                # Perfil de venda/demonstração: todo o sistema roda num banco
+                # de demonstração vazio — dados reais ficam fora de alcance.
+                st.session_state["db_demo"] = (user.perfil == "venda")
                 st.success(f"Bem-vinda, {user.nome}!")
                 st.rerun()
             else:
@@ -1429,8 +1433,8 @@ def sidebar_menu():
         # Gestão - varia por perfil
         gestao_itens = []
         
-        if perfil == "admin":
-            # Admin vê tudo
+        if perfil == "admin" or perfil == "venda":
+            # Admin (e venda/demo) vê tudo
             gestao_itens = [
                 ("📝", "Cadastro de Clientes", "Cadastro de Clientes"),
                 ("📦", "Pacotes", "Pacotes"),
@@ -1503,6 +1507,30 @@ def sidebar_menu():
                     st.rerun()
 
         st.markdown("---")
+
+        # ── Banner do modo demonstração (perfil venda) ──
+        if st.session_state.get("db_demo"):
+            st.markdown(
+                """
+                <div style="background:#fdf3e7;border:1px solid #e8c9a0;border-radius:12px;
+                            padding:0.6rem 0.7rem;margin-bottom:0.4rem;">
+                    <div style="font-family:'DM Sans',sans-serif;font-size:0.85rem;
+                                color:#8a6a3b;font-weight:600;">🧪 Demonstração</div>
+                    <div style="font-family:'DM Sans',sans-serif;font-size:0.72rem;
+                                color:#a8875a;">Ambiente de teste — dados fictícios</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            if st.button("🔄 Restaurar demonstração", key="demo_reset", use_container_width=True):
+                from utils.db import resetar_demo_db
+                try:
+                    resetar_demo_db()
+                    st.success("Demonstração restaurada ao vazio.")
+                except Exception as ex:
+                    st.error(f"Não foi possível restaurar: {ex}")
+                st.rerun()
+
         nome_usuario = user["nome"] if user else ""
         perfil_usuario = user.get("perfil", "") if user else ""
         st.markdown(f"""
@@ -1513,6 +1541,7 @@ def sidebar_menu():
         """, unsafe_allow_html=True)
         if st.button("Sair", type="secondary", use_container_width=True):
             st.session_state.user = None
+            st.session_state.pop("db_demo", None)
             st.rerun()
 
 
@@ -1964,9 +1993,10 @@ def tela_agenda():
         # ── Google Calendar: sincronização bidirecional ────────────────────
         _user_gc = st.session_state.get("user", {}) or {}
         _perfil_gc = (_user_gc.get("perfil") or "").strip().lower()
-        # Sincroniza sozinho ao abrir a agenda (com intervalo mínimo de 3 min)
+        # Sincroniza sozinho ao abrir a agenda (com intervalo mínimo de 3 min).
+        # Nunca sincroniza no modo demonstração (banco separado, sem token).
         _gc_resultado_auto = None
-        if _perfil_gc in ("admin", "recepcao"):
+        if _perfil_gc in ("admin", "recepcao") and not st.session_state.get("db_demo"):
             try:
                 _gc_resultado_auto = gcal.sincronizar(db)
                 if _gc_resultado_auto:
@@ -1976,7 +2006,7 @@ def tela_agenda():
                     "erros": [str(_gc_ex)]
                 }
 
-        if _perfil_gc == "admin":
+        if _perfil_gc == "admin" and not st.session_state.get("db_demo"):
             with st.expander("🔗 Google Calendar"):
                 _gc_st = gcal.status_conexao(db)
                 if not _gc_st["configurado"]:
@@ -3891,7 +3921,9 @@ def tela_clientes():
     _cli_id_top = st.session_state.get("cliente_id_edicao", 0)
     col_sync, col_novo, col_edit, _ = st.columns([1, 1, 1, 2])
     with col_sync:
-        if st.button("🔄 Sincronizar", use_container_width=True):
+        # No modo demonstração o botão fica oculto: ele puxa clientes REAIS
+        # do Google Sheets e vazaria dados para a apresentação.
+        if not st.session_state.get("db_demo") and st.button("🔄 Sincronizar", use_container_width=True):
             try:
                 with st.spinner("Sincronizando..."):
                     r = sincronizar_clientes()
@@ -7482,10 +7514,11 @@ def _modal_editar_usuario(uid: int):
                 return
             nome_e = st.text_input("Nome", value=u.nome, key=f"dlg_ed_nome_{uid}")
             email_e = st.text_input("E-mail", value=u.email, key=f"dlg_ed_email_{uid}")
+            _perfis_lista = ["admin", "recepcao", "profissional", "venda"]
             perfil_e = st.selectbox(
-                "Perfil", ["admin", "recepcao", "profissional"],
-                index=["admin", "recepcao", "profissional"].index(u.perfil)
-                if u.perfil in ["admin", "recepcao", "profissional"] else 0,
+                "Perfil", _perfis_lista,
+                index=_perfis_lista.index(u.perfil)
+                if u.perfil in _perfis_lista else 0,
                 key=f"dlg_ed_perfil_{uid}",
             )
             ativo_e = st.checkbox("Ativo", value=bool(u.ativo), key=f"dlg_ed_ativo_{uid}")
@@ -7816,7 +7849,7 @@ def tela_usuarios():
     header_titulo("Usuários", "Perfis e acesso ao sistema")
     perfil_atual = st.session_state.user.get("perfil", "")
     user_id_atual = st.session_state.user.get("id")
-    is_admin = perfil_atual == "admin"
+    is_admin = perfil_atual in ("admin", "venda")
 
     db = SessionLocal()
     try:
@@ -7865,7 +7898,7 @@ def tela_usuarios():
         with col1:
             nome_n = st.text_input("Nome", key="usr_new_nome")
             email_n = st.text_input("E-mail", key="usr_new_email")
-            perfil_n = st.selectbox("Perfil", ["admin", "recepcao", "profissional"], key="usr_new_perfil")
+            perfil_n = st.selectbox("Perfil", ["admin", "recepcao", "profissional", "venda"], key="usr_new_perfil")
         with col2:
             senha_n = st.text_input("Senha", type="password", key="usr_new_senha")
             ativo_n = st.checkbox("Ativo", value=True, key="usr_new_ativo")
@@ -7978,10 +8011,10 @@ def main():
     # Garante que a rota atual ainda existe e é permitida para o perfil
     perfil_atual = st.session_state.user.get("perfil", "") if st.session_state.user else ""
     rotas_validas = {"Dashboard", "Agenda", "Clientes", "Pré-avaliação", "Atendimentos", "Biometria", "Estoque", "Contratos", "Cadastros"}
-    if perfil_atual in ["admin", "recepcao"]:
+    if perfil_atual in ["admin", "recepcao", "venda"]:
         rotas_validas.add("Pacotes")
         rotas_validas.add("Cadastro de Clientes")
-    if perfil_atual == "admin":
+    if perfil_atual in ["admin", "venda"]:
         rotas_validas.update({"Relatórios", "Usuários"})
     if rota not in rotas_validas:
         st.session_state.menu = "Dashboard"
@@ -8001,9 +8034,9 @@ def main():
     elif rota == "Biometria":
         tela_biometria()
     elif rota == "Cadastro de Clientes":
-        # Verificar permissão - admin e recepcao
+        # Verificar permissão - admin, recepcao e venda (demo)
         perfil = st.session_state.user.get("perfil", "") if st.session_state.user else ""
-        if perfil in ["admin", "recepcao"]:
+        if perfil in ["admin", "recepcao", "venda"]:
             tela_formularios()
         else:
             st.error("Você não tem permissão para acessar esta página.")
@@ -8011,7 +8044,7 @@ def main():
     elif rota == "Pacotes":
         # Verificar permissão
         perfil = st.session_state.user.get("perfil", "") if st.session_state.user else ""
-        if perfil in ["admin", "recepcao"]:
+        if perfil in ["admin", "recepcao", "venda"]:
             tela_pacotes()
         else:
             st.error("Você não tem permissão para acessar esta página.")
@@ -8019,9 +8052,9 @@ def main():
     elif rota == "Estoque":
         tela_estoque()
     elif rota == "Relatórios":
-        # Verificar permissão - apenas admin
+        # Verificar permissão - admin e venda (demo)
         perfil = st.session_state.user.get("perfil", "") if st.session_state.user else ""
-        if perfil == "admin":
+        if perfil in ["admin", "venda"]:
             tela_relatorios()
         else:
             st.error("Você não tem permissão para acessar esta página.")
@@ -8029,9 +8062,9 @@ def main():
     elif rota == "Contratos":
         tela_contratos()
     elif rota == "Usuários":
-        # Verificar permissão - apenas admin
+        # Verificar permissão - admin e venda (demo)
         perfil = st.session_state.user.get("perfil", "") if st.session_state.user else ""
-        if perfil == "admin":
+        if perfil in ["admin", "venda"]:
             tela_usuarios()
         else:
             st.error("Você não tem permissão para acessar esta página.")
