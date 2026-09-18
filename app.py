@@ -5475,23 +5475,26 @@ def tela_atendimentos():
         # renderizados. A limpeza é feita no início do próximo rerun, antes
         # de criar o selectbox e os demais campos do formulário.
         if st.session_state.pop("atendimento_reset_pendente", False):
-            _chaves_atendimento = [
-                "atendimento_selectbox",
-                "atendimento_cliente_id",
-                "atendimento_cliente_nome",
-                "at_data",
-                "at_queixa",
-                "at_tipo",
-                "at_protocolo",
-                "at_obs",
-                "at_pacote_sel",
-                "at_linhas",
-            ]
-            _chaves_atendimento += [
+            # Dados derivados (não-widgets): remover
+            st.session_state.pop("atendimento_cliente_id", None)
+            st.session_state.pop("atendimento_cliente_nome", None)
+            # WIDGETS: setar o valor padrão. Dar pop NÃO reseta o widget no
+            # navegador — o frontend devolve o valor antigo e o nome da
+            # paciente anterior continuava travando o formulário até a
+            # página ser atualizada manualmente.
+            st.session_state["atendimento_selectbox"] = "— Selecione —"
+            st.session_state["at_data"] = _hoje()
+            st.session_state["at_queixa"] = ""
+            st.session_state["at_tipo"] = "— selecione —"
+            st.session_state["at_protocolo"] = ""
+            st.session_state["at_obs"] = ""
+            st.session_state["at_pacote_sel"] = "— nenhum —"
+            st.session_state["at_linhas"] = 0
+            # Linhas de material voltam do zero quando a quantidade zera
+            for _k_atendimento in [
                 _k for _k in list(st.session_state)
                 if _k.startswith(("at_prod_", "at_lote_", "at_qtd_"))
-            ]
-            for _k_atendimento in _chaves_atendimento:
+            ]:
                 st.session_state.pop(_k_atendimento, None)
 
         # Mensagem de sucesso persistente após salvar
