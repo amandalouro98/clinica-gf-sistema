@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 def _default_db_url() -> str:
-    """
+    r"""
     Retorna a URL padrão do SQLite em uma pasta gravável do usuário:
     %LOCALAPPDATA%\ClinicaGestao\db\database.db (Windows)
     Isso evita problemas de permissão quando o app estiver instalado em Program Files.

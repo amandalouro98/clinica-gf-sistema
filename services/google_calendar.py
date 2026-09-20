@@ -616,6 +616,14 @@ def _pull_calendario(db, access, cal_id, tipo_cal, nome_cal, stats):
     state = db.query(GoogleSyncState).filter_by(calendar_id=cal_id).first()
     token = state.sync_token if state else None
     eventos, novo_token = _listar_eventos(access, cal_id, token)
+    _aplicar_eventos_calendario(
+        db, access, cal_id, tipo_cal, nome_cal, eventos, novo_token, stats
+    )
+
+
+def _aplicar_eventos_calendario(db, access, cal_id, tipo_cal, nome_cal, eventos, novo_token, stats):
+    """Grava no banco os eventos baixados de UM calendário (fase sequencial)."""
+    from models.google_sync import GoogleSyncState
 
     # 1) cria/atualiza; 2) cancelamentos por último (a recorrência editada no
     #    Google chega como "apague o evento antigo + crie o novo" — nessa ordem
@@ -634,6 +642,7 @@ def _pull_calendario(db, access, cal_id, tipo_cal, nome_cal, stats):
         except Exception as ex:
             stats["erros"].append(f"{nome_cal}: {ex}")
 
+    state = db.query(GoogleSyncState).filter_by(calendar_id=cal_id).first()
     if state is None:
         state = GoogleSyncState(calendar_id=cal_id)
         db.add(state)
@@ -775,20 +784,56 @@ def sincronizar(db, forcar=False):
     except Exception as ex:
         db.rollback()
         stats["erros"].append(f"envio: {ex}")
-    for cal_id, (tipo_cal, nome_cal) in _mapa_calendarios(db).items():
+
+    # ── PULL em duas fases ──
+    # Fase 1 (paralela): baixa os eventos de TODOS os calendários ao mesmo
+    # tempo — eram ~7 chamadas em sequência (2-5 s) e agora levam o tempo de
+    # uma só (~0,5 s). Só HTTP, sem tocar no banco (sessão não é thread-safe).
+    from concurrent.futures import ThreadPoolExecutor
+    from models.google_sync import GoogleSyncState
+
+    mapa = _mapa_calendarios(db)
+    tokens_atuais = {}
+    for _cal_id in mapa:
+        _st = db.query(GoogleSyncState).filter_by(calendar_id=_cal_id).first()
+        tokens_atuais[_cal_id] = _st.sync_token if _st else None
+
+    baixados = {}
+    expirados = []
+    if mapa:
+        with ThreadPoolExecutor(max_workers=min(10, len(mapa))) as ex:
+            futuros = {
+                ex.submit(_listar_eventos, access, _cal_id, tokens_atuais[_cal_id]): _cal_id
+                for _cal_id in mapa
+            }
+            for fut, _cal_id in futuros.items():
+                try:
+                    baixados[_cal_id] = fut.result()
+                except _SyncExpirado:
+                    expirados.append(_cal_id)
+                except Exception as ex_erro:
+                    stats["erros"].append(f"{mapa[_cal_id][1]}: {ex_erro}")
+
+    # token incremental expirou: baixa aquele calendário inteiro
+    for _cal_id in expirados:
         try:
-            _pull_calendario(db, access, cal_id, tipo_cal, nome_cal, stats)
-        except _SyncExpirado:
-            # token incremental expirou: sincronização completa daquele calendário
-            from models.google_sync import GoogleSyncState
-            try:
-                db.query(GoogleSyncState).filter_by(calendar_id=cal_id).delete()
-                db.commit()
-                _pull_calendario(db, access, cal_id, tipo_cal, nome_cal, stats)
-            except Exception as ex:
-                stats["erros"].append(f"{nome_cal}: {ex}")
+            db.query(GoogleSyncState).filter_by(calendar_id=_cal_id).delete()
+            db.commit()
+            baixados[_cal_id] = _listar_eventos(access, _cal_id, None)
+        except Exception as ex_erro:
+            stats["erros"].append(f"{mapa[_cal_id][1]}: {ex_erro}")
+
+    # Fase 2 (sequencial): aplica no banco, um calendário por vez
+    for _cal_id, (_tipo_cal, _nome_cal) in mapa.items():
+        if _cal_id not in baixados:
+            continue
+        _evs, _ntok = baixados[_cal_id]
+        try:
+            _aplicar_eventos_calendario(
+                db, access, _cal_id, _tipo_cal, _nome_cal, _evs, _ntok, stats
+            )
         except Exception as ex:
-            stats["erros"].append(f"{nome_cal}: {ex}")
+            stats["erros"].append(f"{_nome_cal}: {ex}")
     return stats
 
 

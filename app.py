@@ -70,10 +70,18 @@ from models.tratamento import Tratamento
 from models.deletion_log import RegistroExclusao
 from models.form_response import FormResposta
 from models.google_sync import GoogleToken, GoogleEvento, GoogleSyncState
+from models.app_setting import AppSetting  # tabela criada no boot (segredo do login)
 import services.google_calendar as gcal
 from utils.security import hash_password
 from utils.helpers import calcular_imc
-from services.auth import authenticate, seed_admin, seed_usuario_venda
+from services.auth import (
+    authenticate,
+    seed_admin,
+    seed_usuario_venda,
+    gerar_token_login,
+    validar_token_login,
+    COOKIE_LOGIN,
+)
 from services.inventory import movimentar, alertas
 from services.contracts import gerar_pdf_contrato
 from services.importador import sincronizar_clientes
@@ -751,6 +759,8 @@ def login_screen():
                 # Perfil de venda/demonstração: todo o sistema roda num banco
                 # de demonstração vazio — dados reais ficam fora de alcance.
                 st.session_state["db_demo"] = (user.perfil == "venda")
+                # Mantém o login por 30 dias (F5 / fechar e abrir no celular)
+                st.session_state["definir_cookie_login"] = True
                 st.success(f"Bem-vinda, {user.nome}!")
                 st.rerun()
             else:
@@ -1542,6 +1552,8 @@ def sidebar_menu():
         if st.button("Sair", type="secondary", use_container_width=True):
             st.session_state.user = None
             st.session_state.pop("db_demo", None)
+            # Expira o cookie de login no navegador
+            st.session_state["remover_cookie_login"] = True
             st.rerun()
 
 
@@ -1993,18 +2005,14 @@ def tela_agenda():
         # ── Google Calendar: sincronização bidirecional ────────────────────
         _user_gc = st.session_state.get("user", {}) or {}
         _perfil_gc = (_user_gc.get("perfil") or "").strip().lower()
-        # Sincroniza sozinho ao abrir a agenda (com intervalo mínimo de 3 min).
+        # A sincronização automática NÃO roda aqui: ela é adiada para o fim
+        # desta tela, DEPOIS do espelho já renderizado. Assim a agenda
+        # aparece na hora e o sync acontece nas costas (a cada 3 min no máx).
         # Nunca sincroniza no modo demonstração (banco separado, sem token).
-        _gc_resultado_auto = None
-        if _perfil_gc in ("admin", "recepcao") and not st.session_state.get("db_demo"):
-            try:
-                _gc_resultado_auto = gcal.sincronizar(db)
-                if _gc_resultado_auto:
-                    st.session_state["gc_ultimo_resultado"] = _gc_resultado_auto
-            except Exception as _gc_ex:
-                st.session_state["gc_ultimo_resultado"] = {
-                    "erros": [str(_gc_ex)]
-                }
+        _gc_sync_adiado = (
+            _perfil_gc in ("admin", "recepcao")
+            and not st.session_state.get("db_demo")
+        )
 
         if _perfil_gc == "admin" and not st.session_state.get("db_demo"):
             with st.expander("🔗 Google Calendar"):
@@ -3750,6 +3758,23 @@ def tela_agenda():
                         st.dataframe(_pd.DataFrame(_rows), use_container_width=True, hide_index=True)
                 except Exception as _e:
                     st.warning(f"Não foi possível carregar o histórico: {_e}")
+
+        # ── Sincronização automática com o Google (adiada até aqui) ──
+        # O espelho e toda a tela já foram renderizados acima; o usuário vê
+        # a agenda na hora enquanto a sincronização roda agora, nas costas.
+        # Se ela trouxe qualquer mudança, um rerun atualiza a grade.
+        if _gc_sync_adiado:
+            try:
+                _r_auto = gcal.sincronizar(db)
+                if _r_auto:
+                    st.session_state["gc_ultimo_resultado"] = _r_auto
+                    if (_r_auto.get("criados") or _r_auto.get("atualizados")
+                            or _r_auto.get("excluidos") or _r_auto.get("enviados")):
+                        st.rerun()
+            except Exception as _gc_ex:
+                st.session_state["gc_ultimo_resultado"] = {
+                    "erros": [str(_gc_ex)]
+                }
 
     finally:
         db.close()
@@ -7982,6 +8007,46 @@ def main():
     if st.query_params.get("gc_auth") == "callback":
         tela_gc_callback()
         return
+
+    # ── Login persistente: restaura a sessão pelo cookie assinado ──
+    # O Streamlit cria uma sessão nova a cada F5 / aba reaberta no celular.
+    # Se o navegador tem o cookie válido, o usuário volta direto pro sistema.
+    if not st.session_state.user:
+        try:
+            _tk = st.context.cookies.get(COOKIE_LOGIN)
+        except Exception:
+            _tk = None
+        if _tk:
+            _u_ck = validar_token_login(_tk)
+            if _u_ck:
+                st.session_state.user = {
+                    "id": _u_ck.id, "nome": _u_ck.nome, "perfil": _u_ck.perfil
+                }
+                st.session_state["db_demo"] = (_u_ck.perfil == "venda")
+
+    # Cookie de login pendente (definido logo após o login bem-sucedido):
+    # grava no navegador o token assinado que mantém o acesso por 30 dias.
+    if st.session_state.user and st.session_state.pop("definir_cookie_login", False):
+        try:
+            _tk_novo = gerar_token_login(st.session_state.user["id"])
+            _seg = (
+                f"<script>document.cookie='{COOKIE_LOGIN}={_tk_novo}; path=/; "
+                f"max-age={30*86400}; SameSite=Lax';</script>"
+            )
+            components.html(_seg, height=0)
+        except Exception:
+            pass
+
+    # Remoção do cookie (logout): expira o token no navegador
+    if not st.session_state.user and st.session_state.pop("remover_cookie_login", False):
+        try:
+            components.html(
+                f"<script>document.cookie='{COOKIE_LOGIN}=; path=/; "
+                f"max-age=0; SameSite=Lax';</script>",
+                height=0,
+            )
+        except Exception:
+            pass
 
     if not st.session_state.user:
         login_screen()
