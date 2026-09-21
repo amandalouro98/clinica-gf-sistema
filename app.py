@@ -2094,26 +2094,31 @@ def tela_agenda():
                     "espelho_data_pendente"
                 )
             _esp_data = st.session_state.get("espelho_data") or _hoje()
-            _em_c1, _em_c2, _em_c3, _em_c4 = st.columns([1, 1, 2.4, 1])
-            with _em_c1:
-                if st.button("◀", key="espelho_prev", help="Dia anterior"):
-                    st.session_state["espelho_data_pendente"] = _esp_data - timedelta(days=1)
-                    st.rerun()
-            with _em_c2:
-                if st.button("Hoje", key="espelho_hoje"):
-                    st.session_state["espelho_data_pendente"] = _hoje()
-                    st.rerun()
-            with _em_c3:
-                st.date_input(
-                    "Dia",
-                    key="espelho_data",
-                    format="DD/MM/YYYY",
-                    label_visibility="collapsed",
-                )
-            with _em_c4:
-                if st.button("▶", key="espelho_next", help="Próximo dia"):
-                    st.session_state["espelho_data_pendente"] = _esp_data + timedelta(days=1)
-                    st.rerun()
+            try:
+                _em_nav = st.container(key="agenda_nav")
+            except TypeError:
+                _em_nav = st.container()
+            with _em_nav:
+                _em_c1, _em_c2, _em_c3, _em_c4 = st.columns([1, 1.3, 2.6, 1])
+                with _em_c1:
+                    if st.button("◀", key="espelho_prev", help="Dia anterior"):
+                        st.session_state["espelho_data_pendente"] = _esp_data - timedelta(days=1)
+                        st.rerun()
+                with _em_c2:
+                    if st.button("Hoje", key="espelho_hoje"):
+                        st.session_state["espelho_data_pendente"] = _hoje()
+                        st.rerun()
+                with _em_c3:
+                    st.date_input(
+                        "Dia",
+                        key="espelho_data",
+                        format="DD/MM/YYYY",
+                        label_visibility="collapsed",
+                    )
+                with _em_c4:
+                    if st.button("▶", key="espelho_next", help="Próximo dia"):
+                        st.session_state["espelho_data_pendente"] = _esp_data + timedelta(days=1)
+                        st.rerun()
 
             _esp_data = st.session_state.get("espelho_data") or _hoje()
 
