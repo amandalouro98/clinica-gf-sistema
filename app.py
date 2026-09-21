@@ -45,6 +45,22 @@ from streamlit_searchbox import st_searchbox
 
 # ====== CONFIGURAÇÃO INICIAL ======
 st.set_page_config(page_title="Gabriela Franco Saúde", page_icon="ui/favicon.png", layout="wide")
+
+# PWA: quando o app é salvo na tela inicial do celular, usa a logo da clínica
+st.markdown(
+    """
+    <link rel="manifest" href="/app/static/manifest.json">
+    <link rel="apple-touch-icon" sizes="180x180" href="/app/static/icon-180.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="/app/static/icon-192.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="Gabi Franco">
+    <meta name="application-name" content="Gabi Franco">
+    <meta name="theme-color" content="#9B7E69">
+    """,
+    unsafe_allow_html=True,
+)
 load_dotenv()
 
 # ====== IMPORTS DO PROJETO ======
