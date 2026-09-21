@@ -639,23 +639,37 @@ a:hover { color: var(--accent) !important; }
         gap: 0.25rem !important;
         align-items: center !important;
         flex-wrap: nowrap !important;
+        max-width: 100% !important;
     }
 
     .st-key-agenda_nav .stButton > button {
-        min-height: 38px !important;
-        padding: 0.3rem 0.55rem !important;
-        font-size: 0.85rem !important;
+        min-height: 36px !important;
+        max-height: 36px !important;
+        padding: 0.25rem 0.5rem !important;
+        font-size: 0.82rem !important;
+        white-space: nowrap !important;
+    }
+
+    .st-key-agenda_nav [data-testid="stDateInput"] {
+        flex: 1 1 auto !important;
+        min-width: 0 !important;
     }
 
     .st-key-agenda_nav [data-testid="stDateInput"] label {
         display: none !important;
     }
 
+    .st-key-agenda_nav [data-testid="stDateInput"] > div,
+    .st-key-agenda_nav [data-testid="stDateInput"] div[data-baseweb="input"] {
+        width: 100% !important;
+    }
+
     .st-key-agenda_nav [data-testid="stDateInput"] input,
     .st-key-agenda_nav div[data-baseweb="input"] input {
-        font-size: 0.82rem !important;
-        padding: 0.3rem 0.45rem !important;
-        min-height: 38px !important;
+        font-size: 0.8rem !important;
+        padding: 0.25rem 0.4rem !important;
+        min-height: 36px !important;
+        max-height: 36px !important;
         text-align: center !important;
     }
 }
