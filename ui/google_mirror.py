@@ -328,7 +328,7 @@ def _html_lista(data, blocos, hoje=None):
                 f'<div style="width:5px;flex:none;background:{cor};"></div>'
                 f'<div style="flex:1;padding:12px 14px;background:{bg_claro};">'
                 f'<div style="font-size:15px;font-weight:700;color:#3e3e3e;line-height:1.25;'
-                'word-break:break-word;">{b["titulo"]}</div>'
+                f'word-break:break-word;">{b["titulo"]}</div>'
                 f'{sub_html}'
                 '</div>'
                 f'<div style="flex:none;display:flex;align-items:center;justify-content:center;'
