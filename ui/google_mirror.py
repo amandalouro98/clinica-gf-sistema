@@ -8,6 +8,8 @@ linha vermelha no horário atual. Mostra SOMENTE eventos vindos do Google
 Clique em um bloco abre o pop-up de edição: o bloco aciona um botão
 oculto do Streamlit na página mãe (mesma ponte da grade FullCalendar) —
 navegar por URL recarregaria a página e derrubaria o login.
+
+Versão mobile: lista do dia colorida, como o Google Calendar mobile.
 """
 import html
 from datetime import datetime, timedelta, timezone
@@ -64,6 +66,26 @@ function clicouFundo(ev) {{
 """
 
 
+# Ajusta a altura do iframe ao conteúdo (a lista mobile pode ser mais alta
+# que a grade; sem isso os agendamentos de baixo ficam cortados, sem rolagem)
+_JS_ALTURA = """
+function ajustarAltura() {
+    try {
+        var h = document.documentElement.scrollHeight;
+        if (document.body) h = Math.max(h, document.body.scrollHeight);
+        if (window.frameElement && h > 100) {
+            window.frameElement.style.height = h + 'px';
+        }
+    } catch (e) {}
+}
+window.addEventListener('load', ajustarAltura);
+window.addEventListener('resize', ajustarAltura);
+setTimeout(ajustarAltura, 50);
+setTimeout(ajustarAltura, 300);
+setTimeout(ajustarAltura, 900);
+"""
+
+
 def altura_px_grade():
     """Altura total do iframe da grade (grade + cabeçalho)."""
     return (HORA_FIM - HORA_INI) * PX_POR_HORA + 40
@@ -77,17 +99,82 @@ def _minutos(texto, padrao=0):
         return padrao
 
 
-def render_espelho_google(db, data):
-    """HTML completo da grade-espelho do Google para a data escolhida.
+def _carregar_blocos(db, data):
+    """Carrega eventos do Google do dia com cores/nomes dos calendários.
 
-    Retorna (html, total_de_blocos) ou None se não há calendários.
+    Retorna (blocos, cores, nomes, total) onde blocos está ordenado por hora.
     """
     from models.professional import Professional
     from models.room import Room
     from models.schedule import ScheduledAppointment
     from models.google_sync import GoogleEvento
 
-    # ── colunas: calendários mapeados (profissionais primeiro, depois salas) ──
+    cores = {}
+    nomes = {}
+    for p in db.query(Professional).all():
+        if p.google_calendar_id:
+            cores[p.google_calendar_id] = p.cor or "#E3A5C7"
+            nomes[p.google_calendar_id] = p.nome
+    for r in db.query(Room).all():
+        if r.google_calendar_id:
+            cores[r.google_calendar_id] = r.cor or "#E3A5C7"
+            nomes[r.google_calendar_id] = r.nome
+
+    if not cores:
+        return [], cores, nomes, 0
+
+    links = (
+        db.query(GoogleEvento, ScheduledAppointment)
+        .join(ScheduledAppointment, GoogleEvento.agendamento_id == ScheduledAppointment.id)
+        .filter(ScheduledAppointment.data == data)
+        .all()
+    )
+
+    blocos = []
+    for link, ag in links:
+        cal_id = link.calendar_id
+        if cal_id not in cores:
+            continue
+        cor = cores[cal_id]
+        titulo = (ag.cliente_nome or "").strip() or "(sem título)"
+        if ag.procedimento:
+            titulo = f"{titulo} · {ag.procedimento}"
+        sub_itens = []
+        if ag.sala:
+            sub_itens.append(ag.sala)
+        sub = " · ".join(sub_itens)
+
+        dica = f"{ag.hora_inicio}–{ag.hora_fim} · {titulo}"
+        if ag.sala:
+            dica += f" · {ag.sala}"
+        if getattr(ag, "pre_agendamento", False):
+            dica += " · pré-agendamento"
+        elif ag.confirmado:
+            dica += " · confirmado"
+
+        blocos.append({
+            "ag_id": ag.id,
+            "titulo": html.escape(titulo),
+            "sub": html.escape(sub),
+            "hora": f"{ag.hora_inicio or ''}–{ag.hora_fim or ''}",
+            "prof": html.escape(nomes.get(cal_id, "")),
+            "cor": cor,
+            "dica": html.escape(dica),
+            "ini": _minutos(ag.hora_inicio, HORA_INI * 60),
+            "dur": max(20, _minutos(ag.hora_fim, _minutos(ag.hora_inicio, HORA_INI * 60) + 60) - _minutos(ag.hora_inicio, HORA_INI * 60)),
+            "cal_id": cal_id,
+        })
+
+    blocos.sort(key=lambda b: (b["ini"], b["titulo"]))
+    return blocos, cores, nomes, len(blocos)
+
+
+def _html_grade(db, data, blocos, cores):
+    """Retorna HTML interno da visão em grade (desktop)."""
+    from models.professional import Professional
+    from models.room import Room
+    from models.google_sync import GoogleEvento
+
     colunas = []  # [(calendar_id, nome, cor, tipo)]
     for p in db.query(Professional).order_by(Professional.nome.asc()).all():
         if p.google_calendar_id:
@@ -96,46 +183,14 @@ def render_espelho_google(db, data):
         if r.google_calendar_id:
             colunas.append((r.google_calendar_id, r.nome, r.cor or "#E3A5C7", "sala"))
     if not colunas:
-        return None
-
-    # ── eventos do dia com vínculo no Google ──
-    links = (
-        db.query(GoogleEvento, ScheduledAppointment)
-        .join(ScheduledAppointment, GoogleEvento.agendamento_id == ScheduledAppointment.id)
-        .filter(ScheduledAppointment.data == data)
-        .all()
-    )
+        return ""
 
     blocos_por_col = {c[0]: [] for c in colunas}
-    for link, ag in links:
-        if link.calendar_id not in blocos_por_col:
-            continue
-        ini_m = _minutos(ag.hora_inicio, HORA_INI * 60)
-        fim_m = _minutos(ag.hora_fim, ini_m + (ag.duracao_min or 60))
-        dur = max(20, fim_m - ini_m)
-        titulo = (ag.cliente_nome or "").strip() or "(sem título)"
-        sub = ag.hora_inicio or ""
-        if ag.procedimento:
-            titulo = f"{titulo} · {ag.procedimento}"
-        dica = f"{ag.hora_inicio}–{ag.hora_fim} · {titulo}"
-        if ag.sala:
-            dica += f" · {ag.sala}"
-        if getattr(ag, "pre_agendamento", False):
-            dica += " · pré-agendamento"
-        elif ag.confirmado:
-            dica += " · confirmado"
-        blocos_por_col[link.calendar_id].append({
-            "ini": ini_m, "dur": dur, "ag_id": ag.id,
-            "titulo": html.escape(titulo),
-            "sub": html.escape(sub),
-            "dica": html.escape(dica),
-        })
+    for b in blocos:
+        if b["cal_id"] in blocos_por_col:
+            blocos_por_col[b["cal_id"]].append(b)
 
-    # ordena por horário de início
-    for cal in blocos_por_col:
-        blocos_por_col[cal].sort(key=lambda b: b["ini"])
-
-    # ── linha do horário atual (só se for hoje) ──
+    # linha do horário atual
     agora = datetime.now(BR_TZ)
     linha_agora = ""
     if agora.date() == data:
@@ -148,7 +203,6 @@ def render_espelho_google(db, data):
                 'height:2px;background:#d93025;z-index:5;"></div>'
             )
 
-    # ── eixo de horas (coluna própria, à esquerda da grade) ──
     altura = (HORA_FIM - HORA_INI) * PX_POR_HORA
     marcas, eixo = [], []
     for h in range(HORA_INI, HORA_FIM + 1):
@@ -163,12 +217,11 @@ def render_espelho_google(db, data):
             f'background:#fff;z-index:2;">{h:02d}:00</div>'
         )
 
-    # ── colunas com blocos (clique -> ponte com botão oculto) ──
     total = (HORA_FIM - HORA_INI) * 60
     html_cols = []
     for cal_id, nome, cor, _tipo in colunas:
         blocos_html = []
-        for b in blocos_por_col[cal_id]:
+        for b in blocos_por_col.get(cal_id, []):
             top_pct = max(0.0, (b["ini"] - HORA_INI * 60) / total * 100)
             alt_pct = b["dur"] / total * 100
             blocos_html.append(
@@ -181,7 +234,7 @@ def render_espelho_google(db, data):
                 'box-shadow:0 1px 2px rgba(0,0,0,.25);cursor:pointer;">'
                 f'<div style="font-size:11px;font-weight:600;line-height:1.2;'
                 f'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{b["titulo"]}</div>'
-                f'<div style="font-size:10px;opacity:.9;">{b["sub"]}</div>'
+                f'<div style="font-size:10px;opacity:.9;">{b["hora"]}</div>'
                 '</div>'
             )
         html_cols.append(
@@ -200,18 +253,7 @@ def render_espelho_google(db, data):
         for _cal, nome, cor, _t in colunas
     )
 
-    total_blocos = sum(len(v) for v in blocos_por_col.values())
-    doc = f"""<!DOCTYPE html>
-<html lang="pt-br">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<style>
-    html, body {{ margin:0; padding:0; background:#fff;
-        font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }}
-</style>
-</head>
-<body>
+    return f"""<div class="gf-view-desktop">
 <div style="border:1px solid #f0d5ce;border-radius:12px;overflow:hidden;background:#fff;">
     <div style="display:flex;border-bottom:1px solid #f0d5ce;background:#fdf6f4;">
         <div style="width:52px;flex:none;"></div>{cabecalhos}
@@ -229,10 +271,184 @@ def render_espelho_google(db, data):
         </div>
     </div>
 </div>
+</div>"""
+
+
+def _html_lista(data, blocos, hoje=None):
+    """Retorna HTML interno da visão em lista (mobile)."""
+    if hoje is None:
+        hoje = datetime.now(BR_TZ).date()
+
+    if data == hoje:
+        cabecalho = (
+            f'<div style="font-size:14px;color:#d93025;font-weight:700;margin-bottom:12px;">'
+            f'Hoje · {data.strftime("%d/%m/%Y")}</div>'
+        )
+    else:
+        dias = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"]
+        dia_sem = dias[data.weekday()]
+        cabecalho = (
+            f'<div style="font-size:14px;color:#5a4038;font-weight:700;margin-bottom:12px;">'
+            f'{dia_sem} · {data.strftime("%d/%m/%Y")}</div>'
+        )
+
+    if not blocos:
+        lista = (
+            '<div style="text-align:center;padding:48px 20px;color:#9e7575;font-size:15px;">'
+            'Nenhum agendamento para este dia.</div>'
+        )
+    else:
+        cards = []
+        for b in blocos:
+            # cor mais clara para o fundo e cor original na barra lateral
+            cor = b["cor"]
+            r = int(cor[1:3], 16)
+            g = int(cor[3:5], 16)
+            bb = int(cor[5:7], 16)
+            bg_claro = f"rgba({r},{g},{bb},0.12)"
+
+            sub_linhas = []
+            if b["sub"]:
+                sub_linhas.append(b["sub"])
+            if b["prof"]:
+                sub_linhas.append(b["prof"])
+            sub_html = (
+                f'<div style="font-size:13px;color:#5a4038;opacity:.85;line-height:1.35;margin-top:4px;">'
+                f'{" · ".join(sub_linhas)}</div>'
+            ) if sub_linhas else ""
+
+            ini = (b["hora"] or "").split("–")[0] or ""
+
+            cards.append(
+                f'<div title="{b["dica"]}" '
+                f'onclick="acionar(\'agx-esp-{b["ag_id"]}\')" '
+                'style="display:flex;background:#fff;border-radius:10px;'
+                'margin-bottom:10px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.08);'
+                'cursor:pointer;-webkit-tap-highlight-color:transparent;">'
+                f'<div style="width:5px;flex:none;background:{cor};"></div>'
+                f'<div style="flex:1;padding:12px 14px;background:{bg_claro};">'
+                f'<div style="font-size:15px;font-weight:700;color:#3e3e3e;line-height:1.25;'
+                'word-break:break-word;">{b["titulo"]}</div>'
+                f'{sub_html}'
+                '</div>'
+                f'<div style="flex:none;display:flex;align-items:center;justify-content:center;'
+                f'padding:0 14px;background:{bg_claro};border-left:1px solid rgba({r},{g},{bb},0.18);">'
+                f'<div style="font-size:13px;font-weight:700;color:{cor};white-space:nowrap;">{ini}</div>'
+                '</div>'
+                '</div>'
+            )
+        lista = "".join(cards)
+
+    return f"""<div class="gf-view-mobile">
+<div style="padding:12px 14px 90px 14px;max-width:600px;margin:0 auto;">
+    {cabecalho}
+    {lista}
+</div>
+</div>"""
+
+
+def render_espelho_responsivo(db, data):
+    """HTML responsivo: grade no desktop, lista colorida no mobile.
+
+    A escolha é feita por CSS media query dentro do próprio iframe, então
+    funciona no primeiro carregamento mesmo antes do Python saber a largura.
+    Retorna (html, total_de_blocos) ou (None, 0).
+    """
+    blocos, cores, nomes, total = _carregar_blocos(db, data)
+    if not cores:
+        return None, 0
+
+    html_grade = _html_grade(db, data, blocos, cores)
+    html_lista = _html_lista(data, blocos)
+
+    doc = f"""<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<style>
+    html, body {{ margin:0; padding:0; background:#fdf8f7;
+        font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }}
+    .gf-view-mobile {{ display:none; }}
+    .gf-view-desktop {{ display:block; }}
+    .fab {{ position:fixed; bottom:22px; right:18px; width:56px; height:56px;
+            border-radius:50%; background:#5a4038; color:#fff; font-size:32px;
+            line-height:56px; text-align:center; box-shadow:0 4px 10px rgba(0,0,0,.35);
+            cursor:pointer; z-index:100; border:none; -webkit-tap-highlight-color:transparent; }}
+    @media (max-width: 768px) {{
+        .gf-view-desktop {{ display:none !important; }}
+        .gf-view-mobile {{ display:block !important; }}
+        body {{ background:#fdf8f7; }}
+    }}
+</style>
+</head>
+<body>
+{html_grade}
+{html_lista}
+<div class="fab" onclick="acionar('agx-esp-novo-08:00')" title="Novo agendamento">+</div>
+<script>{_JS_PONTE}{_JS_ALTURA}</script>
+</body>
+</html>"""
+    return doc, total
+
+
+def render_espelho_google(db, data):
+    """HTML completo da grade-espelho do Google para a data escolhida.
+
+    Mantido para compatibilidade. Retorna (html, total_de_blocos) ou None.
+    """
+    blocos, cores, nomes, total = _carregar_blocos(db, data)
+    if not cores:
+        return None
+    html_grade = _html_grade(db, data, blocos, cores)
+    doc = f"""<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+    html, body {{ margin:0; padding:0; background:#fff;
+        font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }}
+</style>
+</head>
+<body>
+{html_grade}
 <script>{_JS_PONTE}</script>
 </body>
 </html>"""
-    return doc, total_blocos
+    return doc, total
+
+
+def render_lista_mobile(db, data, hoje=None):
+    """HTML completo da lista mobile.
+
+    Mantido para compatibilidade. Retorna (html, total_de_blocos).
+    """
+    blocos, cores, nomes, total = _carregar_blocos(db, data)
+    if not cores:
+        return None, 0
+    html_lista = _html_lista(data, blocos, hoje=hoje)
+    doc = f"""<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<style>
+    html, body {{ margin:0; padding:0; background:#fdf8f7;
+        font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }}
+    .fab {{ position:fixed; bottom:22px; right:18px; width:56px; height:56px;
+            border-radius:50%; background:#5a4038; color:#fff; font-size:32px;
+            line-height:56px; text-align:center; box-shadow:0 4px 10px rgba(0,0,0,.35);
+            cursor:pointer; z-index:100; border:none; -webkit-tap-highlight-color:transparent; }}
+</style>
+</head>
+<body>
+{html_lista}
+<div class="fab" onclick="acionar('agx-esp-novo-08:00')" title="Novo agendamento">+</div>
+<script>{_JS_PONTE}</script>
+</body>
+</html>"""
+    return doc, total
 
 
 def listar_blocos_editaveis(db, data):
@@ -265,133 +481,3 @@ def listar_blocos_editaveis(db, data):
             partes.append(a.procedimento)
         saida.append((a.id, " · ".join(p for p in partes if p)))
     return saida
-
-
-def render_lista_mobile(db, data, hoje=None):
-    """Versão celular da agenda: lista do dia, blocos em linha cheia.
-
-    Cada agendamento vira um card colorido (cor do profissional/sala),
-    ordenado por horário. Toque abre o popup de edição (mesma ponte
-    agx-esp-{id}). Botão flutuante '+' abre novo agendamento.
-    """
-    from models.professional import Professional
-    from models.room import Room
-    from models.schedule import ScheduledAppointment
-    from models.google_sync import GoogleEvento
-
-    # cor por calendar_id
-    cores = {}
-    nomes = {}
-    for p in db.query(Professional).all():
-        if p.google_calendar_id:
-            cores[p.google_calendar_id] = p.cor or "#E3A5C7"
-            nomes[p.google_calendar_id] = p.nome
-    for r in db.query(Room).all():
-        if r.google_calendar_id:
-            cores[r.google_calendar_id] = r.cor or "#E3A5C7"
-            nomes[r.google_calendar_id] = r.nome
-
-    if not cores:
-        return None, 0
-
-    links = (
-        db.query(GoogleEvento, ScheduledAppointment)
-        .join(ScheduledAppointment, GoogleEvento.agendamento_id == ScheduledAppointment.id)
-        .filter(ScheduledAppointment.data == data)
-        .all()
-    )
-
-    blocos = []
-    for link, ag in links:
-        cal_id = link.calendar_id
-        if cal_id not in cores:
-            continue
-        cor = cores[cal_id]
-        titulo = (ag.cliente_nome or "").strip() or "(sem título)"
-        sub = []
-        if ag.procedimento:
-            sub.append(ag.procedimento)
-        if ag.sala:
-            sub.append(ag.sala)
-        dica = f"{ag.hora_inicio}–{ag.hora_fim} · {titulo}"
-        if ag.sala:
-            dica += f" · {ag.sala}"
-        if getattr(ag, "pre_agendamento", False):
-            dica += " · pré-agendamento"
-        elif ag.confirmado:
-            dica += " · confirmado"
-        blocos.append({
-            "ag_id": ag.id,
-            "titulo": html.escape(titulo),
-            "sub": html.escape(" · ".join(sub)),
-            "hora": f"{ag.hora_inicio or ''}–{ag.hora_fim or ''}",
-            "prof": html.escape(nomes.get(cal_id, "")),
-            "cor": cor,
-            "dica": html.escape(dica),
-        })
-
-    blocos.sort(key=lambda b: b["hora"])
-
-    if hoje is None:
-        hoje = datetime.now(BR_TZ).date()
-    if data == hoje:
-        linha_hoje = f'<div style="font-size:12px;color:#d93025;font-weight:600;margin-bottom:8px;">Hoje · {data.strftime("%d/%m/%Y")}</div>'
-    else:
-        dias = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
-        dia_sem = dias[data.weekday()]
-        linha_hoje = f'<div style="font-size:12px;color:#5a4038;font-weight:600;margin-bottom:8px;">{dia_sem} · {data.strftime("%d/%m/%Y")}</div>'
-
-    if not blocos:
-        lista_html = (
-            '<div style="text-align:center;padding:40px 20px;color:#999;font-size:14px;">'
-            'Nenhum agendamento para este dia.</div>'
-        )
-    else:
-        cards = []
-        for b in blocos:
-            sub_html = f'<div style="font-size:12px;opacity:.92;line-height:1.3;">{b["sub"]}</div>' if b["sub"] else ""
-            prof_html = f'<div style="font-size:11px;opacity:.85;margin-top:3px;">{b["prof"]}</div>' if b["prof"] else ""
-            cards.append(
-                f'<div title="{b["dica"]}" '
-                f'onclick="acionar(\'agx-esp-{b["ag_id"]}\')" '
-                'style="background:{cor};border-radius:10px;padding:12px 14px;'
-                'margin-bottom:10px;color:#fff;box-shadow:0 2px 4px rgba(0,0,0,.2);'
-                'cursor:pointer;position:relative;overflow:hidden;">'
-                '<div style="display:flex;justify-content:space-between;align-items:flex-start;">'
-                '<div style="font-size:15px;font-weight:700;line-height:1.25;'
-                'word-break:break-word;flex:1;padding-right:8px;">{titulo}</div>'
-                '<div style="font-size:13px;font-weight:600;white-space:nowrap;">{hora}</div>'
-                '</div>'
-                '{sub}{prof}'
-                '</div>'.format(
-                    cor=b["cor"], titulo=b["titulo"], hora=b["hora"],
-                    sub=sub_html, prof=prof_html
-                )
-            )
-        lista_html = "".join(cards)
-
-    total_blocos = len(blocos)
-    doc = f"""<!DOCTYPE html>
-<html lang="pt-br">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<style>
-    html, body {{ margin:0; padding:0; background:#fff;
-        font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }}
-    .fab {{ position:fixed; bottom:22px; right:18px; width:56px; height:56px;
-            border-radius:50%; background:#5a4038; color:#fff; font-size:32px;
-            line-height:56px; text-align:center; box-shadow:0 4px 10px rgba(0,0,0,.35);
-            cursor:pointer; z-index:100; border:none; -webkit-tap-highlight-color:transparent; }}
-</style>
-</head>
-<body>
-<div style="padding:12px 14px 90px 14px;">
-    {linha_hoje}
-    {lista_html}
-</div>
-<div class="fab" onclick="acionar('agx-esp-novo-08:00')" title="Novo agendamento">+</div>
-<script>{_JS_PONTE}</script>
-</body>
-</html>"""
-    return doc, total_blocos

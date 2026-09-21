@@ -1897,42 +1897,6 @@ def tela_dashboard():
 
 
 # ====== TELA: AGENDA ======
-def _viewport_estreita():
-    """Detecta se o navegador está em largura de celular (<= 768px).
-
-    Usa uma ponte JS leve: a primeira execução seta o cookie 'vw_estreita'
-    via components.html; nas execuções seguintes, st.context.cookies indica
-    a largura. Fallback para False se o navegador não reportar.
-    """
-    try:
-        import streamlit as st
-        ck = st.context.cookies.get("vw_estreita", "")
-        if ck == "1":
-            return True
-        if ck == "0":
-            return False
-    except Exception:
-        pass
-    return False
-
-
-def _detectar_viewport():
-    """Renderiza o script que detecta largura e grava cookie para o rerun."""
-    try:
-        components.html(
-            """<script>
-(function(){
-    var w = window.innerWidth || document.documentElement.clientWidth || 768;
-    document.cookie = 'vw_estreita=' + (w <= 768 ? '1' : '0') +
-                      '; path=/; max-age=86400; SameSite=Lax';
-})();
-            </script>""",
-            height=0,
-        )
-    except Exception:
-        pass
-
-
 def _init_agenda_state():
     defaults = {
         "ag_edit_id": None,
@@ -1971,7 +1935,6 @@ def tela_agenda():
 
     header_titulo("🕐 Agenda", "Agendamentos e calendário diário")
     _init_agenda_state()
-    _detectar_viewport()
 
     # Aplica pending edit ANTES de qualquer widget ser renderizado
     if "ag_pending_edit" in st.session_state:
@@ -2154,16 +2117,10 @@ def tela_agenda():
 
             _esp_data = st.session_state.get("espelho_data") or _hoje()
 
-            # Escolhe visual: celular = lista do dia; desktop = espelho do Google
-            _mobile_agenda = _viewport_estreita()
-            if _mobile_agenda:
-                from ui.google_mirror import render_lista_mobile
+            # Espelho responsivo: grade no desktop, lista colorida no mobile
+            from ui.google_mirror import render_espelho_responsivo
 
-                _esp = render_lista_mobile(db, _esp_data)
-            else:
-                from ui.google_mirror import render_espelho_google
-
-                _esp = render_espelho_google(db, _esp_data)
+            _esp = render_espelho_responsivo(db, _esp_data)
             if _esp:
                 _grid_html, _n_blocos = _esp
 
@@ -2188,17 +2145,16 @@ def tela_agenda():
                             st.session_state.pop("espm_del_confirma", None)
                             st.rerun()
                     # clique em espaço vazio da grade (desktop): botão por slot
-                    if not _mobile_agenda:
-                        for _slot_esp in gerar_slots_horario():
-                            if st.button(f"agx-esp-novo-{_slot_esp}", key=f"agx_esp_novo_{_slot_esp.replace(':', '_')}"):
-                                st.session_state["dlg_ag_hora_ini"] = _slot_esp
-                                st.session_state["dlg_ag_data_pre"] = _esp_data
-                                st.session_state["ag_abrir_novo_popup"] = True
-                                st.rerun()
+                    for _slot_esp in gerar_slots_horario():
+                        if st.button(f"agx-esp-novo-{_slot_esp}", key=f"agx_esp_novo_{_slot_esp.replace(':', '_')}"):
+                            st.session_state["dlg_ag_hora_ini"] = _slot_esp
+                            st.session_state["dlg_ag_data_pre"] = _esp_data
+                            st.session_state["ag_abrir_novo_popup"] = True
+                            st.rerun()
 
                 components.html(
                     _grid_html,
-                    height=altura_px_grade() if not _mobile_agenda else 720,
+                    height=altura_px_grade(),
                     scrolling=False,
                 )
                 if _n_blocos == 0:
