@@ -5427,19 +5427,8 @@ def tela_atendimentos():
             # Dados derivados (não-widgets): remover
             st.session_state.pop("atendimento_cliente_id", None)
             st.session_state.pop("atendimento_cliente_nome", None)
-            # WIDGETS: setar o valor padrão. Dar pop NÃO reseta o widget no
-            # navegador — o frontend devolve o valor antigo e o nome da
-            # paciente anterior continuava travando o formulário até a
-            # página ser atualizada manualmente.
-            st.session_state["atendimento_selectbox"] = "— Selecione —"
-            st.session_state["at_data"] = _hoje()
-            st.session_state["at_queixa"] = ""
-            st.session_state["at_tipo"] = "— selecione —"
-            st.session_state["at_protocolo"] = ""
-            st.session_state["at_obs"] = ""
-            st.session_state["at_pacote_sel"] = "— nenhum —"
-            st.session_state["at_linhas"] = 0
-            # Linhas de material voltam do zero quando a quantidade zera
+            # Limpa da memória os widgets de material de versões anteriores
+            # (NUNCA apagar at_v: é a contagem que versiona as chaves)
             for _k_atendimento in [
                 _k for _k in list(st.session_state)
                 if _k.startswith(("at_prod_", "at_lote_", "at_qtd_"))
@@ -5452,6 +5441,13 @@ def tela_atendimentos():
             st.info(f"📦 {_msg_pac_at}")
         if st.session_state.pop("at_salvo_ok", False):
             st.success("✅ Atendimento salvo com sucesso!")
+
+        # Versão do formulário: após cada salvamento o número sobe e TODOS os
+        # widgets ganham chaves novas (_at0, _at1, ...). Widgets com chave nova
+        # são recriados do zero no navegador — garante que o nome da paciente
+        # anterior não fique travado no formulário (inclusive no PWA/celular).
+        _v_at = st.session_state.get("at_v", 0)
+        _sf = f"_at{_v_at}"
 
         st.markdown("### Cliente")
 
@@ -5470,7 +5466,7 @@ def tela_atendimentos():
         sel_at = st.selectbox(
             "Selecione a cliente",
             options=options_cli,
-            key="atendimento_selectbox",
+            key=f"atendimento_selectbox{_sf}",
         )
 
         cliente_at_id = None
@@ -5534,7 +5530,7 @@ def tela_atendimentos():
                     _sel_pac = st.selectbox(
                         "Pacote ativo (descontar sessão ao salvar)",
                         list(_mapa_pac.keys()),
-                        key="at_pacote_sel",
+                        key=f"at_pacote_sel{_sf}",
                     )
                     pacote_sel_item_id = _mapa_pac.get(_sel_pac)
                     if pacote_sel_item_id:
@@ -5561,18 +5557,18 @@ def tela_atendimentos():
 
         col1, col2 = st.columns(2)
         with col1:
-            data_at = st.date_input("Data", value=_hoje(), format="DD/MM/YYYY", key="at_data")
-            queixa = st.text_area("Queixa da consulta", key="at_queixa")
+            data_at = st.date_input("Data", value=_hoje(), format="DD/MM/YYYY", key=f"at_data{_sf}")
+            queixa = st.text_area("Queixa da consulta", key=f"at_queixa{_sf}")
         with col2:
             # Lista suspensa de tratamentos cadastrados
             tratamentos_lista = db.query(Tratamento).filter(Tratamento.ativo == True).order_by(Tratamento.nome.asc()).all()
             opcoes_trat = ["— selecione —"] + [t.nome for t in tratamentos_lista]
-            tipo = st.selectbox("Tipo de tratamento realizado", opcoes_trat, key="at_tipo")
+            tipo = st.selectbox("Tipo de tratamento realizado", opcoes_trat, key=f"at_tipo{_sf}")
             if tipo == "— selecione —":
                 tipo = ""
-            protocolo = st.text_area("Protocolo de atendimento", key="at_protocolo")
+            protocolo = st.text_area("Protocolo de atendimento", key=f"at_protocolo{_sf}")
 
-        obs = st.text_area("Observações", key="at_obs")
+        obs = st.text_area("Observações", key=f"at_obs{_sf}")
 
         st.markdown("---")
         st.markdown("#### Materiais usados")
@@ -5581,7 +5577,7 @@ def tela_atendimentos():
         # para atualizar dinamicamente as linhas de seleção.
         linhas = st.number_input(
             "Quantos produtos diferentes foram usados?",
-            min_value=0, step=1, key="at_linhas",
+            min_value=0, step=1, key=f"at_linhas{_sf}",
         )
 
         # Buscar materiais cadastrados + produtos do estoque
@@ -5603,7 +5599,7 @@ def tela_atendimentos():
                 prod_nome = st.selectbox(
                     f"Material {i + 1}",
                     ["— selecione —"] + nomes_materiais,
-                    key=f"at_prod_{i}",
+                    key=f"at_prod_{i}{_sf}",
                 )
             with c2:
                 lote_opcoes = ["— selecione —"]
@@ -5632,9 +5628,9 @@ def tela_atendimentos():
                         label = f"Lote: {lt.lote or 'S/N'} | Qtd: {saldo_real}"
                         lote_opcoes.append(label)
                         lote_map[label] = (lt.id, saldo_real)
-                lote_sel = st.selectbox(f"Lote {i + 1}", lote_opcoes, key=f"at_lote_{i}")
+                lote_sel = st.selectbox(f"Lote {i + 1}", lote_opcoes, key=f"at_lote_{i}{_sf}")
             with c3:
-                qtd = st.number_input("Qtd", min_value=0, step=1, key=f"at_qtd_{i}")
+                qtd = st.number_input("Qtd", min_value=0, step=1, key=f"at_qtd_{i}{_sf}")
 
             if (
                 prod_nome and prod_nome != "— selecione —"
@@ -5690,7 +5686,10 @@ def tela_atendimentos():
 
                     st.session_state.pop("atendimento_cliente_id", None)
                     st.session_state.pop("atendimento_cliente_nome", None)
-                    # Descontar sessão de pacote (seleção manual tem prioridade)
+                    # Nova versão do formulário: todos os widgets ganham chaves
+                    # novas no próximo rerun e o navegador mostra campos limpos.
+                    st.session_state["at_v"] = _v_at + 1
+                    st.session_state["atendimento_reset_pendente"] = True
                     try:
                         from models.sale import Sale, SaleItem, SessionUsage
                         _pacote_item = None
