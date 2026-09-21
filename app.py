@@ -1897,6 +1897,42 @@ def tela_dashboard():
 
 
 # ====== TELA: AGENDA ======
+def _viewport_estreita():
+    """Detecta se o navegador está em largura de celular (<= 768px).
+
+    Usa uma ponte JS leve: a primeira execução seta o cookie 'vw_estreita'
+    via components.html; nas execuções seguintes, st.context.cookies indica
+    a largura. Fallback para False se o navegador não reportar.
+    """
+    try:
+        import streamlit as st
+        ck = st.context.cookies.get("vw_estreita", "")
+        if ck == "1":
+            return True
+        if ck == "0":
+            return False
+    except Exception:
+        pass
+    return False
+
+
+def _detectar_viewport():
+    """Renderiza o script que detecta largura e grava cookie para o rerun."""
+    try:
+        components.html(
+            """<script>
+(function(){
+    var w = window.innerWidth || document.documentElement.clientWidth || 768;
+    document.cookie = 'vw_estreita=' + (w <= 768 ? '1' : '0') +
+                      '; path=/; max-age=86400; SameSite=Lax';
+})();
+            </script>""",
+            height=0,
+        )
+    except Exception:
+        pass
+
+
 def _init_agenda_state():
     defaults = {
         "ag_edit_id": None,
@@ -1935,6 +1971,7 @@ def tela_agenda():
 
     header_titulo("🕐 Agenda", "Agendamentos e calendário diário")
     _init_agenda_state()
+    _detectar_viewport()
 
     # Aplica pending edit ANTES de qualquer widget ser renderizado
     if "ag_pending_edit" in st.session_state:
@@ -1958,7 +1995,7 @@ def tela_agenda():
 
     db = SessionLocal()
     try:
-        # Processa ações vindas do FullCalendar (clique, arraste, novo)
+        # Mantém compatibilidade com URL legada (clique via FullCalendar antigo)
         _qp = st.query_params
         if _qp.get("agenda_action"):
             _ag_action = _qp.get("agenda_action")
@@ -2088,8 +2125,6 @@ def tela_agenda():
 
         # ── Espelho do Google Calendar (visual estilo Google) ───────────────
         if _perfil_gc in ("admin", "recepcao") and gcal.conectado(db):
-            from ui.google_mirror import render_espelho_google, listar_blocos_editaveis, altura_px_grade
-
             # Aplica a navegação ANTES do widget de data existir
             if "espelho_data_pendente" in st.session_state:
                 st.session_state["espelho_data"] = st.session_state.pop(
@@ -2119,13 +2154,23 @@ def tela_agenda():
 
             _esp_data = st.session_state.get("espelho_data") or _hoje()
 
-            _esp = render_espelho_google(db, _esp_data)
+            # Escolhe visual: celular = lista do dia; desktop = espelho do Google
+            _mobile_agenda = _viewport_estreita()
+            if _mobile_agenda:
+                from ui.google_mirror import render_lista_mobile
+
+                _esp = render_lista_mobile(db, _esp_data)
+            else:
+                from ui.google_mirror import render_espelho_google
+
+                _esp = render_espelho_google(db, _esp_data)
             if _esp:
                 _grid_html, _n_blocos = _esp
 
                 # ── ponte de cliques: botões ocultos acionados pelo iframe ──
-                # Clicar num bloco da grade clica no botão correspondente
-                # aqui — navegar por URL derrubaria o login.
+                # Clicar num bloco (grade ou lista) abre o popup de edição.
+                from ui.google_mirror import listar_blocos_editaveis, altura_px_grade
+
                 _blocos_ponte = listar_blocos_editaveis(db, _esp_data)
                 try:
                     _ponte_esp = st.container(key="esp_ponte")
@@ -2142,20 +2187,18 @@ def tela_agenda():
                             st.session_state["espelho_editar"] = True
                             st.session_state.pop("espm_del_confirma", None)
                             st.rerun()
-                    # clique em espaço vazio da grade: um botão oculto por
-                    # horário (07:00–20:00, de 15 em 15 min). O JS do espelho
-                    # calcula o horário clicado e aciona o botão — mesmo
-                    # mecanismo comprovado dos blocos.
-                    for _slot_esp in gerar_slots_horario():
-                        if st.button(f"agx-esp-novo-{_slot_esp}", key=f"agx_esp_novo_{_slot_esp.replace(':', '_')}"):
-                            st.session_state["dlg_ag_hora_ini"] = _slot_esp
-                            st.session_state["dlg_ag_data_pre"] = _esp_data
-                            st.session_state["ag_abrir_novo_popup"] = True
-                            st.rerun()
+                    # clique em espaço vazio da grade (desktop): botão por slot
+                    if not _mobile_agenda:
+                        for _slot_esp in gerar_slots_horario():
+                            if st.button(f"agx-esp-novo-{_slot_esp}", key=f"agx_esp_novo_{_slot_esp.replace(':', '_')}"):
+                                st.session_state["dlg_ag_hora_ini"] = _slot_esp
+                                st.session_state["dlg_ag_data_pre"] = _esp_data
+                                st.session_state["ag_abrir_novo_popup"] = True
+                                st.rerun()
 
                 components.html(
                     _grid_html,
-                    height=altura_px_grade(),
+                    height=altura_px_grade() if not _mobile_agenda else 720,
                     scrolling=False,
                 )
                 if _n_blocos == 0:
@@ -2345,15 +2388,20 @@ def tela_agenda():
                                 st.session_state["espelho_excluir"] = True
                                 st.rerun()
 
-                if st.session_state.get("espelho_editar"):
-                    _dialog_espelho_editar()
-                if st.session_state.get("espelho_excluir"):
-                    _dialog_espelho_excluir()
+                    if st.session_state.get("espelho_editar"):
+                        _dialog_espelho_editar()
+                    if st.session_state.get("espelho_excluir"):
+                        _dialog_espelho_excluir()
+                else:
+                    st.info(
+                        "Nenhum evento do Google neste dia para editar. "
+                        "Sincronize ou crie um agendamento na grade."
+                    )
+
             else:
                 st.info(
-                    "Nenhum calendário do Google vinculado ainda. Cadastre o "
-                    "Google Calendar ID em Profissionais e Salas, ou aguarde a "
-                    "descoberta automática na próxima sincronização."
+                    "Nenhum calendário do Google vinculado aos profissionais/salas. "
+                    "Conecte o Google Calendar no painel acima."
                 )
 
         slots = gerar_slots_horario()
@@ -3283,112 +3331,11 @@ def tela_agenda():
 
         st.markdown("---")
 
-        # Calendário interativo com FullCalendar
-        if tipo_visual == "Grade":
-            # Inicia em vista de semana; usuario muda entre Dia/Semana/Mes
-            # pelos botoes internos do calendario.
-            fc_view = "timeGridWeek"
-            data_inicial = _hoje().strftime("%Y-%m-%d")
-
-            # ── Ponte de ações da grade ──
-            # A grade roda dentro de um iframe. Navegar por URL recarregaria a
-            # página e derrubaria o login, então o iframe aciona estes botões
-            # ocultos, mantendo a sessão viva.
-            try:
-                _ponte = st.container(key="agx_ponte")
-            except TypeError:
-                _ponte = st.container()
-            st.markdown(
-                "<style>.st-key-agx_ponte { display:none !important; }</style>",
-                unsafe_allow_html=True,
-            )
-
-            with _ponte:
-                for _ag_p in ags_periodo:
-                    if st.button(f"agx-edit-{_ag_p.id}", key=f"agx_edit_{_ag_p.id}"):
-                        st.session_state["ag_popup_edit_id"] = _ag_p.id
-                        st.rerun()
-                    if st.button(f"agx-delete-{_ag_p.id}", key=f"agx_del_{_ag_p.id}"):
-                        st.session_state["ag_excluir_id"] = _ag_p.id
-                        st.rerun()
-
-                if st.button("agx-new-0", key="agx_novo"):
-                    st.session_state["ag_abrir_novo_popup"] = True
-                    st.rerun()
-
-                _payload = st.text_input("agx-payload", value="", key="agx_payload")
-                _btn_move = st.button("agx-move", key="agx_move")
-
-            # Aplica o arraste assim que o payload chega, sem depender do
-            # clique no botão oculto (que nem sempre acontecia a tempo).
-            _pay = (st.session_state.get("agx_payload") or "").strip()
-            if _pay and _pay != st.session_state.get("agx_payload_done"):
-                st.session_state["agx_payload_done"] = _pay
-                try:
-                    _pid, _pdata, _phora = _pay.split("|")
-                    _ag_mv = db.get(ScheduledAppointment, int(_pid))
-                    if _ag_mv:
-                        _antes_mv = {
-                            "data": str(_ag_mv.data),
-                            "hora_inicio": _ag_mv.hora_inicio,
-                        }
-                        _ag_mv.data = datetime.strptime(_pdata, "%Y-%m-%d").date()
-                        _ag_mv.hora_inicio = _phora
-                        _ag_mv.hora_fim = calcular_hora_fim(_phora, _ag_mv.duracao_min or 60)
-                        db.commit()
-                        sincronizar_datas_pacote(db, getattr(_ag_mv, "sale_item_id", None))
-                        try:
-                            _ulog = st.session_state.get("user", {}) or {}
-                            db.add(AgendaLog(
-                                agendamento_id=_ag_mv.id,
-                                acao="movido",
-                                usuario_id=_ulog.get("id"),
-                                usuario_nome=_ulog.get("nome", ""),
-                                dados_antes=__import__("json").dumps(_antes_mv, ensure_ascii=False),
-                                dados_depois=__import__("json").dumps({
-                                    "data": str(_ag_mv.data),
-                                    "hora_inicio": _ag_mv.hora_inicio,
-                                }, ensure_ascii=False),
-                            ))
-                            db.commit()
-                        except Exception:
-                            db.rollback()
-                        st.toast(
-                            f"{_ag_mv.cliente_nome or 'Agendamento'} movido para "
-                            f"{_ag_mv.data.strftime('%d/%m')} às {_phora}"
-                        )
-                except Exception as _e:
-                    db.rollback()
-                    st.warning(f"Não foi possível mover o agendamento: {_e}")
-                st.rerun()
-            elif _btn_move:
-                st.rerun()
-
-            # Divide os eventos: esquerda (Ju/Kauane/Salas), direita (Gabi)
-            # e renderiza um unico calendario visualmente dividido, igual ao
-            # Google Calendar, usando apenas o bundle gratuito do FullCalendar.
-            def _eh_gabi(nome_prof):
-                pn = _normalizar_nome(nome_prof)
-                return "gabi" in pn or "gabriela" in pn
-
-            _events = agenda_to_events(ags_periodo, series_map=series_map, cores_prof=cores_prof_normalizado, cores_sala=cores_sala_normalizado)
-            _ev_esq = [e for e in _events if not _eh_gabi(e.get("extendedProps", {}).get("profissional", ""))]
-            _ev_dir = [e for e in _events if _eh_gabi(e.get("extendedProps", {}).get("profissional", ""))]
-
-            components.html(
-                render_fullcalendar_split(
-                    groups=[
-                        {"title": "Ju / Kauane / Salas", "events": _ev_esq},
-                        {"title": "Gabi", "events": _ev_dir},
-                    ],
-                    view=st.session_state["ag_cal_view"],
-                    date_str=st.session_state["ag_cal_date"],
-                    height="700px",
-                ),
-                height=740,
-                scrolling=True,
-            )
-
+        # A grade antiga (FullCalendar lado-a-lado) foi removida.
+        # A Agenda agora usa exclusivamente o espelho da API do
+        # Google Calendar: grade no desktop, lista do dia no celular.
+        # A edição, exclusão e novo agendamento continuam disponíveis
+        # por toque/clique nos mesmos blocos.
         # ── Pop-up de edição rápida ──────────────────────────────────────────
         # Fica fora do if/elif da visualização: antes só abria na Lista.
         if "ag_popup_edit_id" in st.session_state:

@@ -265,3 +265,133 @@ def listar_blocos_editaveis(db, data):
             partes.append(a.procedimento)
         saida.append((a.id, " · ".join(p for p in partes if p)))
     return saida
+
+
+def render_lista_mobile(db, data, hoje=None):
+    """Versão celular da agenda: lista do dia, blocos em linha cheia.
+
+    Cada agendamento vira um card colorido (cor do profissional/sala),
+    ordenado por horário. Toque abre o popup de edição (mesma ponte
+    agx-esp-{id}). Botão flutuante '+' abre novo agendamento.
+    """
+    from models.professional import Professional
+    from models.room import Room
+    from models.schedule import ScheduledAppointment
+    from models.google_sync import GoogleEvento
+
+    # cor por calendar_id
+    cores = {}
+    nomes = {}
+    for p in db.query(Professional).all():
+        if p.google_calendar_id:
+            cores[p.google_calendar_id] = p.cor or "#E3A5C7"
+            nomes[p.google_calendar_id] = p.nome
+    for r in db.query(Room).all():
+        if r.google_calendar_id:
+            cores[r.google_calendar_id] = r.cor or "#E3A5C7"
+            nomes[r.google_calendar_id] = r.nome
+
+    if not cores:
+        return None, 0
+
+    links = (
+        db.query(GoogleEvento, ScheduledAppointment)
+        .join(ScheduledAppointment, GoogleEvento.agendamento_id == ScheduledAppointment.id)
+        .filter(ScheduledAppointment.data == data)
+        .all()
+    )
+
+    blocos = []
+    for link, ag in links:
+        cal_id = link.calendar_id
+        if cal_id not in cores:
+            continue
+        cor = cores[cal_id]
+        titulo = (ag.cliente_nome or "").strip() or "(sem título)"
+        sub = []
+        if ag.procedimento:
+            sub.append(ag.procedimento)
+        if ag.sala:
+            sub.append(ag.sala)
+        dica = f"{ag.hora_inicio}–{ag.hora_fim} · {titulo}"
+        if ag.sala:
+            dica += f" · {ag.sala}"
+        if getattr(ag, "pre_agendamento", False):
+            dica += " · pré-agendamento"
+        elif ag.confirmado:
+            dica += " · confirmado"
+        blocos.append({
+            "ag_id": ag.id,
+            "titulo": html.escape(titulo),
+            "sub": html.escape(" · ".join(sub)),
+            "hora": f"{ag.hora_inicio or ''}–{ag.hora_fim or ''}",
+            "prof": html.escape(nomes.get(cal_id, "")),
+            "cor": cor,
+            "dica": html.escape(dica),
+        })
+
+    blocos.sort(key=lambda b: b["hora"])
+
+    if hoje is None:
+        hoje = datetime.now(BR_TZ).date()
+    if data == hoje:
+        linha_hoje = f'<div style="font-size:12px;color:#d93025;font-weight:600;margin-bottom:8px;">Hoje · {data.strftime("%d/%m/%Y")}</div>'
+    else:
+        dias = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
+        dia_sem = dias[data.weekday()]
+        linha_hoje = f'<div style="font-size:12px;color:#5a4038;font-weight:600;margin-bottom:8px;">{dia_sem} · {data.strftime("%d/%m/%Y")}</div>'
+
+    if not blocos:
+        lista_html = (
+            '<div style="text-align:center;padding:40px 20px;color:#999;font-size:14px;">'
+            'Nenhum agendamento para este dia.</div>'
+        )
+    else:
+        cards = []
+        for b in blocos:
+            sub_html = f'<div style="font-size:12px;opacity:.92;line-height:1.3;">{b["sub"]}</div>' if b["sub"] else ""
+            prof_html = f'<div style="font-size:11px;opacity:.85;margin-top:3px;">{b["prof"]}</div>' if b["prof"] else ""
+            cards.append(
+                f'<div title="{b["dica"]}" '
+                f'onclick="acionar(\'agx-esp-{b["ag_id"]}\')" '
+                'style="background:{cor};border-radius:10px;padding:12px 14px;'
+                'margin-bottom:10px;color:#fff;box-shadow:0 2px 4px rgba(0,0,0,.2);'
+                'cursor:pointer;position:relative;overflow:hidden;">'
+                '<div style="display:flex;justify-content:space-between;align-items:flex-start;">'
+                '<div style="font-size:15px;font-weight:700;line-height:1.25;'
+                'word-break:break-word;flex:1;padding-right:8px;">{titulo}</div>'
+                '<div style="font-size:13px;font-weight:600;white-space:nowrap;">{hora}</div>'
+                '</div>'
+                '{sub}{prof}'
+                '</div>'.format(
+                    cor=b["cor"], titulo=b["titulo"], hora=b["hora"],
+                    sub=sub_html, prof=prof_html
+                )
+            )
+        lista_html = "".join(cards)
+
+    total_blocos = len(blocos)
+    doc = f"""<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<style>
+    html, body {{ margin:0; padding:0; background:#fff;
+        font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }}
+    .fab {{ position:fixed; bottom:22px; right:18px; width:56px; height:56px;
+            border-radius:50%; background:#5a4038; color:#fff; font-size:32px;
+            line-height:56px; text-align:center; box-shadow:0 4px 10px rgba(0,0,0,.35);
+            cursor:pointer; z-index:100; border:none; -webkit-tap-highlight-color:transparent; }}
+</style>
+</head>
+<body>
+<div style="padding:12px 14px 90px 14px;">
+    {linha_hoje}
+    {lista_html}
+</div>
+<div class="fab" onclick="acionar('agx-esp-novo-08:00')" title="Novo agendamento">+</div>
+<script>{_JS_PONTE}</script>
+</body>
+</html>"""
+    return doc, total_blocos
