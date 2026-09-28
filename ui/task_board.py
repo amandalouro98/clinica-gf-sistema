@@ -180,36 +180,39 @@ def render_task_board(db, perfil):
         .task-board-heading { margin: 0.2rem 0 0.45rem; color: #684848; font-size: 1.2rem; font-weight: 650; }
         .task-board-shell { background: #ffffff; border: 1px solid #eee5e2; border-radius: 12px; padding: 0.4rem 0.6rem; box-shadow: 0 2px 10px rgba(91, 64, 53, 0.06); }
         .task-board-header { color: #8b6a6a; font-size: 0.82rem; font-weight: 650; padding: 0.25rem 0 0.45rem; }
-        .task-board-title { color: #4a3030; font-size: 0.95rem; font-weight: 550; overflow-wrap: anywhere; min-height: 2.8rem; display: flex; align-items: center; }
-        .task-board-owner { color: #674f4f; font-size: 0.9rem; overflow-wrap: anywhere; min-height: 2.8rem; display: flex; align-items: center; }
-        .task-board-status { min-height: 2.8rem; display: flex; align-items: center; }
-        .task-board-status [data-baseweb="select"] { font-size: 0.95rem !important; font-weight: 650 !important; }
+        .task-board-title { color: #4a3030; font-size: 0.88rem; font-weight: 550; overflow-wrap: anywhere; min-height: 2.25rem; display: flex; align-items: center; }
+        .task-board-owner { color: #674f4f; font-size: 0.84rem; overflow-wrap: anywhere; min-height: 2.25rem; display: flex; align-items: center; }
+        .task-board-status { min-height: 2.25rem; display: flex; align-items: center; }
+        .task-board-status [data-baseweb="select"] { font-size: 0.88rem !important; font-weight: 650 !important; }
         .task-board-status [data-testid="stMarkdownContainer"] { width: 100%; }
         .task-board-status .stSelectbox { width: 100%; }
         .task-board-row-separator { height: 1px; background: #eee5e2; margin: 0.2rem 0; }
-        .task-board-shell [data-testid="stPopover"] button { min-height: 2.8rem !important; }
+        .stPopover button, [data-testid="stPopover"] button { min-height: 2.25rem !important; }
         </style>
         <div class="task-board-heading">Quadro de tarefas</div>
         """,
         unsafe_allow_html=True,
     )
 
-    header = st.columns([2.0, 1.55, 1.45], gap="small")
-    for coluna, rotulo in zip(header, ("Tarefa", "Status", "Responsável")):
+    header = st.columns([2.15, 0.45, 1.45, 1.35], gap="small")
+    for coluna, rotulo in zip(header, ("Tarefa", "", "Status", "Responsável")):
         coluna.markdown(f"<div class='task-board-header'>{rotulo}</div>", unsafe_allow_html=True)
 
-    with st.container(height=350, border=True):
+    with st.container(height=300, border=True):
         if not tarefas:
             st.caption("Nenhuma tarefa cadastrada.")
         for tarefa, responsavel_nome in tarefas:
-            col_tarefa, col_status, col_resp = st.columns([2.0, 1.55, 1.45], gap="small", vertical_alignment="center")
+            col_tarefa, col_editar, col_status, col_resp = st.columns(
+                [2.15, 0.45, 1.45, 1.35],
+                gap="small",
+                vertical_alignment="center",
+            )
             if pode_editar and responsaveis:
-                titulo_col, editar_col = col_tarefa.columns([5, 0.5], gap="small", vertical_alignment="center")
-                titulo_col.markdown(
+                col_tarefa.markdown(
                     f"<div class='task-board-title'>{html.escape(tarefa.titulo)}</div>",
                     unsafe_allow_html=True,
                 )
-                with editar_col:
+                with col_editar:
                     _render_editar_tarefa(tarefa, responsaveis, perfil)
             else:
                 col_tarefa.markdown(
