@@ -110,6 +110,8 @@ from ui.calendar_component import (
     _cor_final_agendamento,
     CORES_PROFISSIONAIS,
 )
+from models.task import Task
+from ui.task_board import render_task_board
 
 # ====== CRIA O BANCO (SE NÃO EXISTIR) E SEED DO ADMIN ======
 Base.metadata.create_all(bind=engine)
@@ -1963,6 +1965,7 @@ def tela_agenda():
     _ordem_dialogs = [
         "ag_popup_edit_id", "ag_excluir_id", "ag_menu_id",
         "espelho_editar", "espelho_excluir", "ag_abrir_novo_popup",
+        "task_dialog_open",
     ]
     _ja_tem = False
     for _k_dlg in _ordem_dialogs:
@@ -2102,8 +2105,10 @@ def tela_agenda():
                         "(no máximo uma vez a cada 3 minutos)."
                     )
 
+        render_task_board(db, _perfil_gc)
+
         # ── Espelho do Google Calendar (visual estilo Google) ───────────────
-        if _perfil_gc in ("admin", "recepcao") and gcal.conectado(db):
+        if _perfil_gc in ("admin", "recepcao", "profissional") and gcal.conectado(db):
             # Aplica a navegação ANTES do widget de data existir
             if "espelho_data_pendente" in st.session_state:
                 st.session_state["espelho_data"] = st.session_state.pop(
