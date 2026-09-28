@@ -5,6 +5,7 @@ import streamlit as st
 from services.tasks import (
     STATUS_TAREFA,
     atualizar_tarefa,
+    atualizar_status_tarefa,
     criar_tarefa,
     listar_responsaveis,
     listar_tarefas,
@@ -147,18 +148,40 @@ def _render_editar_tarefa(tarefa, responsaveis, perfil):
                 db_edit.close()
 
 
+def _salvar_status_direto(tarefa_id):
+    status = st.session_state.get(f"task_status_{tarefa_id}")
+    db_status = SessionLocal()
+    try:
+        atualizar_status_tarefa(
+            db=db_status,
+            perfil=st.session_state.get("user", {}).get("perfil", ""),
+            tarefa_id=tarefa_id,
+            status=status,
+        )
+        st.toast("Status atualizado.")
+    except (ValueError, PermissionError):
+        db_status.rollback()
+    finally:
+        db_status.close()
+
+
 def render_task_board(db, perfil):
     pode_editar = pode_gerenciar_tarefas(perfil)
     tarefas = listar_tarefas(db)
-    responsaveis = listar_responsaveis(db) if pode_editar else []
+    responsaveis = _responsaveis_disponiveis(db) if pode_editar else []
 
     st.markdown(
         """
         <style>
         .task-board-heading { margin: 0.2rem 0 0.45rem; color: #684848; font-size: 1.2rem; font-weight: 650; }
-        .task-board-header { color: #8b6a6a; font-size: 0.82rem; font-weight: 650; padding-bottom: 0.35rem; border-bottom: 1px solid #f0d5ce; }
-        .task-board-title { color: #4a3030; font-size: 0.92rem; font-weight: 550; overflow-wrap: anywhere; min-height: 2.8rem; display: flex; align-items: center; }
-        .task-board-owner { color: #674f4f; font-size: 0.86rem; overflow-wrap: anywhere; min-height: 2.8rem; display: flex; align-items: center; }
+        .task-board-shell { background: #ffffff; border: 1px solid #eee5e2; border-radius: 12px; padding: 0.4rem 0.6rem; box-shadow: 0 2px 10px rgba(91, 64, 53, 0.06); }
+        .task-board-header { color: #8b6a6a; font-size: 0.82rem; font-weight: 650; padding: 0.25rem 0 0.45rem; }
+        .task-board-title { color: #4a3030; font-size: 0.95rem; font-weight: 550; overflow-wrap: anywhere; min-height: 2.8rem; display: flex; align-items: center; }
+        .task-board-owner { color: #674f4f; font-size: 0.9rem; overflow-wrap: anywhere; min-height: 2.8rem; display: flex; align-items: center; }
+        .task-board-status { min-height: 2.8rem; display: flex; align-items: center; }
+        .task-board-status [data-baseweb="select"] { font-size: 0.95rem !important; font-weight: 650 !important; }
+        .task-board-status [data-testid="stMarkdownContainer"] { width: 100%; }
+        .task-board-status .stSelectbox { width: 100%; }
         </style>
         <div class="task-board-heading">Quadro de tarefas</div>
         """,
@@ -173,6 +196,7 @@ def render_task_board(db, perfil):
         if not tarefas:
             st.caption("Nenhuma tarefa cadastrada.")
         for tarefa, responsavel_nome in tarefas:
+            st.markdown("<div class='task-board-shell'>", unsafe_allow_html=True)
             col_tarefa, col_status, col_resp = st.columns([2.0, 1.55, 1.45], gap="small", vertical_alignment="center")
             if pode_editar and responsaveis:
                 titulo_col, editar_col = col_tarefa.columns([5, 0.5], gap="small", vertical_alignment="center")
@@ -187,17 +211,31 @@ def render_task_board(db, perfil):
                     f"<div class='task-board-title'>{html.escape(tarefa.titulo)}</div>",
                     unsafe_allow_html=True,
                 )
-            col_status.markdown(_badge_status(tarefa.status), unsafe_allow_html=True)
+            with col_status:
+                st.markdown(
+                    f"<div class='task-board-status'>{_badge_status(tarefa.status)}</div>",
+                    unsafe_allow_html=True,
+                )
+                if pode_editar and responsaveis:
+                    st.selectbox(
+                        "Status",
+                        STATUS_TAREFA,
+                        index=STATUS_TAREFA.index(tarefa.status) if tarefa.status in STATUS_TAREFA else 0,
+                        key=f"task_status_{tarefa.id}",
+                        label_visibility="collapsed",
+                        on_change=_salvar_status_direto,
+                        args=(tarefa.id,),
+                    )
             col_resp.markdown(
                 f"<div class='task-board-owner'>{html.escape(responsavel_nome or 'Sem responsável')}</div>",
                 unsafe_allow_html=True,
             )
-            st.divider()
+            st.markdown("</div>", unsafe_allow_html=True)
 
     if pode_editar:
         colunas_botao = st.columns([1, 1, 1])
         with colunas_botao[1]:
-            if st.button("+", key="task_open_create", help="Cadastrar nova tarefa", use_container_width=True, type="primary"):
+            if st.button("NOVA TAREFA", key="task_open_create", help="Cadastrar nova tarefa", use_container_width=True, type="primary"):
                 st.session_state["task_dialog_open"] = True
                 st.rerun()
         if st.session_state.get("task_dialog_open"):

@@ -65,3 +65,16 @@ def atualizar_tarefa(db, perfil, tarefa_id, titulo, status, responsavel_id):
     tarefa.responsavel_id = responsavel.id
     db.commit()
     return tarefa
+
+
+def atualizar_status_tarefa(db, perfil, tarefa_id, status):
+    if not pode_gerenciar_tarefas(perfil):
+        raise PermissionError("Seu perfil não pode alterar tarefas.")
+    if status not in STATUS_TAREFA:
+        raise ValueError("Selecione um status válido.")
+    tarefa = db.get(Task, tarefa_id)
+    if tarefa is None:
+        raise ValueError("Esta tarefa não existe mais.")
+    tarefa.status = status
+    db.commit()
+    return tarefa
