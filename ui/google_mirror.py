@@ -169,6 +169,34 @@ def _carregar_blocos(db, data):
     return blocos, cores, nomes, len(blocos)
 
 
+def _distribuir_sobrepostos(blocos):
+    """Divide blocos simultâneos em sub-colunas lado a lado.
+
+    Dois agendamentos no mesmo horário e profissional eram renderizados
+    um exatamente sobre o outro (mesmo top/left) e o segundo ficava
+    invisível. Agora cada bloco do grupo ganha col_idx/col_total e a
+    grade os exibe lado a lado, como o Google Calendar.
+    """
+    ordenados = sorted(blocos, key=lambda b: (b["ini"], b["ini"] + b["dur"]))
+    grupos = []
+    for b in ordenados:
+        fim_b = b["ini"] + b["dur"]
+        encaixou = None
+        for g in grupos:
+            if any(b["ini"] < (o["ini"] + o["dur"]) and fim_b > o["ini"] for o in g):
+                encaixou = g
+                break
+        if encaixou is not None:
+            encaixou.append(b)
+        else:
+            grupos.append([b])
+    for g in grupos:
+        g.sort(key=lambda b: (b["ini"], b["titulo"]))
+        for idx, b in enumerate(g):
+            b["col_idx"], b["col_total"] = idx, len(g)
+    return blocos
+
+
 def _html_grade(db, data, blocos, cores):
     """Retorna HTML interno da visão em grade (desktop)."""
     from models.professional import Professional
@@ -220,16 +248,30 @@ def _html_grade(db, data, blocos, cores):
     total = (HORA_FIM - HORA_INI) * 60
     html_cols = []
     for cal_id, nome, cor, _tipo in colunas:
+        blocos_col = blocos_por_col.get(cal_id, [])
+        _distribuir_sobrepostos(blocos_col)
         blocos_html = []
-        for b in blocos_por_col.get(cal_id, []):
+        for b in blocos_col:
             top_pct = max(0.0, (b["ini"] - HORA_INI * 60) / total * 100)
             alt_pct = b["dur"] / total * 100
+            col_total = b.get("col_total", 1)
+            if col_total > 1:
+                col_idx = b.get("col_idx", 0)
+                left_pct = (col_idx / col_total) * 100
+                width_pct = 100.0 / col_total
+                pos_style = (
+                    f"left:calc({left_pct:.2f}% + 2px);"
+                    f"width:calc({width_pct:.2f}% - 4px);"
+                )
+            else:
+                pos_style = "left:2px;right:2px;"
             blocos_html.append(
                 f'<div title="{b["dica"]} — clique para editar" '
                 f'onclick="event.stopPropagation();acionar(\'agx-esp-{b["ag_id"]}\')" '
                 f'style="position:absolute;'
                 f'top:calc({top_pct:.3f}% + 1px);height:calc({alt_pct:.3f}% - 2px);'
-                f'left:2px;right:2px;background:{cor};border-radius:6px;'
+                f'{pos_style}background:{cor};border:1.5px solid #fff;'
+                f'box-sizing:border-box;border-radius:6px;'
                 'padding:3px 5px;overflow:hidden;color:#fff;z-index:3;'
                 'box-shadow:0 1px 2px rgba(0,0,0,.25);cursor:pointer;">'
                 f'<div style="font-size:11px;font-weight:600;line-height:1.2;'

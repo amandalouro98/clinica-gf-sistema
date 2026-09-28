@@ -190,6 +190,13 @@ def calcular_hora_fim(hora_inicio: str, duracao_min: int) -> str:
         return ""
 
 
+def rotulo_sala(nome_sala: str) -> str:
+    """Rótulo exibido nos seletores de sala (o valor salvo continua o nome puro)."""
+    if nome_sala in ("Sala 4", "Sala 5"):
+        return f"{nome_sala} (salas alugadas)"
+    return nome_sala
+
+
 # ── Calendário proporcional (estilo Google) ──────────────────────────────────
 PX_PER_MIN = 1.5
 CAL_START = 7 * 60   # 07:00 em minutos
@@ -2557,7 +2564,7 @@ def tela_agenda():
                     if not (proc_dlg or "").strip() and st.session_state.get("dlg_ag_pkg_proc"):
                         proc_dlg = st.session_state["dlg_ag_pkg_proc"]
 
-                    sala_dlg = st.selectbox("Sala", OPCOES_SALA, key="dlg_ag_sala")
+                    sala_dlg = st.selectbox("Sala", OPCOES_SALA, format_func=rotulo_sala, key="dlg_ag_sala")
 
                     hora_ini_dlg = st.selectbox("Hora início", slots, index=slots.index("08:00") if "08:00" in slots else 0, key="dlg_ag_hora_ini")
                     duracao_dlg = st.selectbox("Duração (min)", duracoes, index=duracoes.index(60), key="dlg_ag_duracao")
@@ -2618,7 +2625,7 @@ def tela_agenda():
 
                 with aba_sala_dlg:
                     resp_sala_dlg = st.text_input("Nome do responsável", key="dlg_ag_resp_sala")
-                    sala_sel_dlg = st.selectbox("Sala", OPCOES_SALA, key="dlg_ag_sala_sala")
+                    sala_sel_dlg = st.selectbox("Sala", OPCOES_SALA, format_func=rotulo_sala, key="dlg_ag_sala_sala")
                     data_sala_dlg = st.date_input("Data", value=_hoje(), format="DD/MM/YYYY", key="dlg_ag_data_sala")
 
                     if nomes_prof:
@@ -3393,7 +3400,7 @@ def tela_agenda():
 
                         OPCOES_SALA_DLG = ["— nenhuma —", "Sala 1", "Sala 2", "Sala 3", "Sala 4", "Sala 5", "Soroterapia"]
                         _sala_idx = OPCOES_SALA_DLG.index(_ag2.sala) if _ag2.sala in OPCOES_SALA_DLG else 0
-                        _ed_sala = st.selectbox("Sala", OPCOES_SALA_DLG, index=_sala_idx, key="dlg_ag_sala")
+                        _ed_sala = st.selectbox("Sala", OPCOES_SALA_DLG, index=_sala_idx, format_func=rotulo_sala, key="dlg_ag_sala")
 
                         _ed_proc = st.text_input("Procedimento", value=_ag2.procedimento or "", key="dlg_ag_proc")
                         _ed_obs = st.text_area("Observações", value=_ag2.observacoes or "", key="dlg_ag_obs")
