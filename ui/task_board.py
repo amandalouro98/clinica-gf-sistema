@@ -219,21 +219,6 @@ def render_task_board(db, perfil):
             with col_status:
                 if pode_editar and responsaveis:
                     status_bg = _cor_fundo_status(tarefa.status)
-                    st.markdown(
-                        f"""
-                        <style>
-                        .st-key-task_status_{tarefa.id} [data-baseweb="select"] {{
-                            background: {status_bg} !important;
-                            border: 0 !important;
-                            border-radius: 7px !important;
-                        }}
-                        .st-key-task_status_{tarefa.id} [data-baseweb="select"] * {{
-                            font-weight: 650 !important;
-                        }}
-                        </style>
-                        """,
-                        unsafe_allow_html=True,
-                    )
                     st.selectbox(
                         "Status",
                         STATUS_TAREFA,
@@ -242,6 +227,25 @@ def render_task_board(db, perfil):
                         label_visibility="collapsed",
                         on_change=_salvar_status_direto,
                         args=(tarefa.id,),
+                    )
+                    # O componente BaseWeb usa um div interno para o campo.
+                    # Aplicamos a cor depois de renderizá-lo para funcionar
+                    # também nas versões do Streamlit usadas no servidor.
+                    st.markdown(
+                        f"""
+                        <style>
+                        .st-key-task_status_{tarefa.id} [data-testid="stSelectbox"] [data-baseweb="select"],
+                        .st-key-task_status_{tarefa.id} [data-testid="stSelectbox"] [data-baseweb="select"] > div {{
+                            background-color: {status_bg} !important;
+                            border-color: {status_bg} !important;
+                            border-radius: 7px !important;
+                        }}
+                        .st-key-task_status_{tarefa.id} [data-testid="stSelectbox"] [data-baseweb="select"] * {{
+                            font-weight: 650 !important;
+                        }}
+                        </style>
+                        """,
+                        unsafe_allow_html=True,
                     )
                 else:
                     st.markdown(
