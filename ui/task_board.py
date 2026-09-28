@@ -32,6 +32,10 @@ def _badge_status(status):
     )
 
 
+def _cor_fundo_status(status):
+    return _CORES_STATUS.get(status, _CORES_STATUS["A fazer"])[1]
+
+
 def _responsaveis_disponiveis(db):
     responsaveis = listar_responsaveis(db)
     if not responsaveis and st.session_state.get("db_demo"):
@@ -182,6 +186,8 @@ def render_task_board(db, perfil):
         .task-board-status [data-baseweb="select"] { font-size: 0.95rem !important; font-weight: 650 !important; }
         .task-board-status [data-testid="stMarkdownContainer"] { width: 100%; }
         .task-board-status .stSelectbox { width: 100%; }
+        .task-board-row-separator { height: 1px; background: #eee5e2; margin: 0.2rem 0; }
+        .task-board-shell [data-testid="stPopover"] button { min-height: 2.8rem !important; }
         </style>
         <div class="task-board-heading">Quadro de tarefas</div>
         """,
@@ -196,7 +202,6 @@ def render_task_board(db, perfil):
         if not tarefas:
             st.caption("Nenhuma tarefa cadastrada.")
         for tarefa, responsavel_nome in tarefas:
-            st.markdown("<div class='task-board-shell'>", unsafe_allow_html=True)
             col_tarefa, col_status, col_resp = st.columns([2.0, 1.55, 1.45], gap="small", vertical_alignment="center")
             if pode_editar and responsaveis:
                 titulo_col, editar_col = col_tarefa.columns([5, 0.5], gap="small", vertical_alignment="center")
@@ -212,11 +217,23 @@ def render_task_board(db, perfil):
                     unsafe_allow_html=True,
                 )
             with col_status:
-                st.markdown(
-                    f"<div class='task-board-status'>{_badge_status(tarefa.status)}</div>",
-                    unsafe_allow_html=True,
-                )
                 if pode_editar and responsaveis:
+                    status_bg = _cor_fundo_status(tarefa.status)
+                    st.markdown(
+                        f"""
+                        <style>
+                        .st-key-task_status_{tarefa.id} [data-baseweb="select"] {{
+                            background: {status_bg} !important;
+                            border: 0 !important;
+                            border-radius: 7px !important;
+                        }}
+                        .st-key-task_status_{tarefa.id} [data-baseweb="select"] * {{
+                            font-weight: 650 !important;
+                        }}
+                        </style>
+                        """,
+                        unsafe_allow_html=True,
+                    )
                     st.selectbox(
                         "Status",
                         STATUS_TAREFA,
@@ -226,11 +243,16 @@ def render_task_board(db, perfil):
                         on_change=_salvar_status_direto,
                         args=(tarefa.id,),
                     )
+                else:
+                    st.markdown(
+                        f"<div class='task-board-status'>{_badge_status(tarefa.status)}</div>",
+                        unsafe_allow_html=True,
+                    )
             col_resp.markdown(
                 f"<div class='task-board-owner'>{html.escape(responsavel_nome or 'Sem responsável')}</div>",
                 unsafe_allow_html=True,
             )
-            st.markdown("</div>", unsafe_allow_html=True)
+            st.markdown("<div class='task-board-row-separator'></div>", unsafe_allow_html=True)
 
     if pode_editar:
         colunas_botao = st.columns([1, 1, 1])
