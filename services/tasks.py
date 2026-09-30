@@ -78,3 +78,13 @@ def atualizar_status_tarefa(db, perfil, tarefa_id, status):
     tarefa.status = status
     db.commit()
     return tarefa
+
+
+def excluir_tarefa(db, perfil, tarefa_id):
+    if not pode_gerenciar_tarefas(perfil):
+        raise PermissionError("Seu perfil não pode excluir tarefas.")
+    tarefa = db.get(Task, tarefa_id)
+    if tarefa is None:
+        raise ValueError("Esta tarefa não existe mais.")
+    db.delete(tarefa)
+    db.commit()
