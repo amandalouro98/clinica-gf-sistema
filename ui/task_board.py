@@ -182,82 +182,98 @@ def _salvar_status_direto(tarefa_id):
 
 
 def render_task_board(db, perfil):
-    pode_editar = pode_gerenciar_tarefas(perfil)
-    tarefas = listar_tarefas(db)
-    responsaveis = _responsaveis_disponiveis(db) if pode_editar else []
+    """Ponto de entrada chamado pela Agenda.
 
-    # Regras de cor do campo de status — um único bloco de CSS para todas as tarefas
-    regras_status = ""
-    if pode_editar:
-        for tarefa, _ in tarefas:
-            status_bg = _cor_fundo_status(tarefa.status)
-            regras_status += (
-                f".st-key-task_status_{tarefa.id} [data-baseweb='select'] > div:first-child,"
-                f".st-key-task_status_{tarefa.id} [data-baseweb='select'] > div:first-child > div"
-                f"{{background-color:{status_bg} !important;border-color:{status_bg} !important;"
-                f"border-radius:7px !important;}}"
-            )
+    O quadro roda num fragmento isolado: clicar em status, editar, excluir
+    ou cadastrar re-renderiza APENAS o quadro, sem reexecutar a Agenda
+    inteira (era isso que travava a página e misturava conteúdo de outras
+    telas durante a navegação).
+    """
+    _quadro_fragment(perfil)
 
-    st.markdown(
-        f"""
-        <style>
-        .task-board-heading {{ margin: 0.2rem 0 0.45rem; color: #684848; font-size: 1.15rem; font-weight: 650; }}
-        .task-board-header {{ color: #8b6a6a; font-size: 0.8rem; font-weight: 650; padding: 0.25rem 0 0.4rem; }}
-        .task-board-title {{ color: #4a3030; font-size: 0.88rem; font-weight: 550; overflow-wrap: anywhere; min-height: 2.25rem; display: flex; align-items: center; }}
-        .task-board-owner {{ color: #674f4f; font-size: 0.84rem; overflow-wrap: anywhere; min-height: 2.25rem; display: flex; align-items: center; }}
-        .task-board-status {{ min-height: 2.25rem; display: flex; align-items: center; }}
-        .task-board-status [data-baseweb="select"] {{ font-size: 0.88rem !important; font-weight: 650 !important; }}
-        .task-board-status .stSelectbox {{ width: 100%; }}
-        .task-board-row-separator {{ height: 1px; background: #eee5e2; margin: 0.15rem 0; }}
-        {regras_status}
-        </style>
-        <div class="task-board-heading">Quadro de tarefas</div>
-        """,
-        unsafe_allow_html=True,
-    )
 
-    header = st.columns([2.15, 0.45, 1.45, 1.35], gap="small")
-    for coluna, rotulo in zip(header, ("Tarefa", "", "Status", "Responsável")):
-        coluna.markdown(f"<div class='task-board-header'>{rotulo}</div>", unsafe_allow_html=True)
+@st.fragment
+def _quadro_fragment(perfil):
+    db = SessionLocal()
+    try:
+        pode_editar = pode_gerenciar_tarefas(perfil)
+        tarefas = listar_tarefas(db)
+        responsaveis = _responsaveis_disponiveis(db) if pode_editar else []
 
-    with st.container(height=290, border=True):
-        if not tarefas:
-            st.caption("Nenhuma tarefa cadastrada.")
-        for tarefa, responsavel_nome in tarefas:
-            col_tarefa, col_editar, col_status, col_resp = st.columns(
-                [2.15, 0.45, 1.45, 1.35],
-                gap="small",
-                vertical_alignment="center",
-            )
-            col_tarefa.markdown(
-                f"<div class='task-board-title'>{html.escape(tarefa.titulo)}</div>",
-                unsafe_allow_html=True,
-            )
-            if pode_editar and responsaveis:
-                with col_editar:
-                    _render_editar_tarefa(tarefa, responsaveis, perfil)
-                with col_status:
-                    st.selectbox(
-                        "Status",
-                        STATUS_TAREFA,
-                        index=STATUS_TAREFA.index(tarefa.status) if tarefa.status in STATUS_TAREFA else 0,
-                        key=f"task_status_{tarefa.id}",
-                        label_visibility="collapsed",
-                        on_change=_salvar_status_direto,
-                        args=(tarefa.id,),
-                    )
-            else:
-                with col_status:
-                    st.markdown(
-                        f"<div class='task-board-status'>{_badge_status(tarefa.status)}</div>",
-                        unsafe_allow_html=True,
-                    )
-            col_resp.markdown(
-                f"<div class='task-board-owner'>{html.escape(responsavel_nome or 'Sem responsável')}</div>",
-                unsafe_allow_html=True,
-            )
-            st.markdown("<div class='task-board-row-separator'></div>", unsafe_allow_html=True)
+        # Regras de cor do campo de status — um único bloco de CSS para todas as tarefas
+        regras_status = ""
+        if pode_editar:
+            for tarefa, _ in tarefas:
+                status_bg = _cor_fundo_status(tarefa.status)
+                regras_status += (
+                    f".st-key-task_status_{tarefa.id} [data-baseweb='select'] > div:first-child,"
+                    f".st-key-task_status_{tarefa.id} [data-baseweb='select'] > div:first-child > div"
+                    f"{{background-color:{status_bg} !important;border-color:{status_bg} !important;"
+                    f"border-radius:7px !important;}}"
+                )
 
-    if pode_editar:
-        with st.popover("NOVA TAREFA", use_container_width=True):
-            _form_nova_tarefa(perfil)
+        st.markdown(
+            f"""
+            <style>
+            .task-board-heading {{ margin: 0.2rem 0 0.45rem; color: #684848; font-size: 1.15rem; font-weight: 650; }}
+            .task-board-header {{ color: #8b6a6a; font-size: 0.8rem; font-weight: 650; padding: 0.25rem 0 0.4rem; }}
+            .task-board-title {{ color: #4a3030; font-size: 0.88rem; font-weight: 550; overflow-wrap: anywhere; min-height: 2.25rem; display: flex; align-items: center; }}
+            .task-board-owner {{ color: #674f4f; font-size: 0.84rem; overflow-wrap: anywhere; min-height: 2.25rem; display: flex; align-items: center; }}
+            .task-board-status {{ min-height: 2.25rem; display: flex; align-items: center; }}
+            .task-board-status [data-baseweb="select"] {{ font-size: 0.88rem !important; font-weight: 650 !important; }}
+            .task-board-status .stSelectbox {{ width: 100%; }}
+            .task-board-row-separator {{ height: 1px; background: #eee5e2; margin: 0.15rem 0; }}
+            {regras_status}
+            </style>
+            <div class="task-board-heading">Quadro de tarefas</div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        header = st.columns([2.15, 0.45, 1.45, 1.35], gap="small")
+        for coluna, rotulo in zip(header, ("Tarefa", "", "Status", "Responsável")):
+            coluna.markdown(f"<div class='task-board-header'>{rotulo}</div>", unsafe_allow_html=True)
+
+        with st.container(height=290, border=True):
+            if not tarefas:
+                st.caption("Nenhuma tarefa cadastrada.")
+            for tarefa, responsavel_nome in tarefas:
+                col_tarefa, col_editar, col_status, col_resp = st.columns(
+                    [2.15, 0.45, 1.45, 1.35],
+                    gap="small",
+                    vertical_alignment="center",
+                )
+                col_tarefa.markdown(
+                    f"<div class='task-board-title'>{html.escape(tarefa.titulo)}</div>",
+                    unsafe_allow_html=True,
+                )
+                if pode_editar and responsaveis:
+                    with col_editar:
+                        _render_editar_tarefa(tarefa, responsaveis, perfil)
+                    with col_status:
+                        st.selectbox(
+                            "Status",
+                            STATUS_TAREFA,
+                            index=STATUS_TAREFA.index(tarefa.status) if tarefa.status in STATUS_TAREFA else 0,
+                            key=f"task_status_{tarefa.id}",
+                            label_visibility="collapsed",
+                            on_change=_salvar_status_direto,
+                            args=(tarefa.id,),
+                        )
+                else:
+                    with col_status:
+                        st.markdown(
+                            f"<div class='task-board-status'>{_badge_status(tarefa.status)}</div>",
+                            unsafe_allow_html=True,
+                        )
+                col_resp.markdown(
+                    f"<div class='task-board-owner'>{html.escape(responsavel_nome or 'Sem responsável')}</div>",
+                    unsafe_allow_html=True,
+                )
+                st.markdown("<div class='task-board-row-separator'></div>", unsafe_allow_html=True)
+
+        if pode_editar:
+            with st.popover("NOVA TAREFA", use_container_width=True):
+                _form_nova_tarefa(perfil)
+    finally:
+        db.close()
