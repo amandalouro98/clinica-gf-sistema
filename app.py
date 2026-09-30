@@ -1972,7 +1972,6 @@ def tela_agenda():
     _ordem_dialogs = [
         "ag_popup_edit_id", "ag_excluir_id", "ag_menu_id",
         "espelho_editar", "espelho_excluir", "ag_abrir_novo_popup",
-        "task_dialog_open",
     ]
     _ja_tem = False
     for _k_dlg in _ordem_dialogs:

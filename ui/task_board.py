@@ -7,6 +7,7 @@ from services.tasks import (
     atualizar_tarefa,
     atualizar_status_tarefa,
     criar_tarefa,
+    excluir_tarefa,
     listar_responsaveis,
     listar_tarefas,
     pode_gerenciar_tarefas,
@@ -56,18 +57,12 @@ def _responsaveis_disponiveis(db):
     return responsaveis
 
 
-@st.dialog("Nova tarefa")
-def _dialog_nova_tarefa():
-    user = st.session_state.get("user") or {}
-    perfil = user.get("perfil", "")
+def _form_nova_tarefa(perfil):
     db = SessionLocal()
     try:
         responsaveis = _responsaveis_disponiveis(db)
         if not responsaveis:
             st.warning("Cadastre um usuário ativo para atribuir uma tarefa.")
-            if st.button("Fechar", key="task_new_close_empty"):
-                st.session_state["task_dialog_open"] = False
-                st.rerun()
             return
 
         versao = st.session_state.get("task_new_version", 0)
@@ -83,18 +78,12 @@ def _dialog_nova_tarefa():
             )
             status = st.selectbox("Status", STATUS_TAREFA, key=f"task_new_status_{versao}")
             salvar = st.form_submit_button("Salvar tarefa", type="primary", use_container_width=True)
-
-        cancelar = st.button("Cancelar", key=f"task_new_cancel_{versao}", use_container_width=True)
-        if cancelar:
-            st.session_state["task_dialog_open"] = False
-            st.rerun()
         if salvar:
             try:
                 criar_tarefa(db, perfil, titulo, status, responsavel_id)
             except (ValueError, PermissionError) as erro:
                 st.error(str(erro))
             else:
-                st.session_state["task_dialog_open"] = False
                 st.session_state["task_new_version"] = versao + 1
                 st.toast("Tarefa cadastrada.")
                 st.rerun()
@@ -109,7 +98,7 @@ def _render_editar_tarefa(tarefa, responsaveis, perfil):
     if tarefa.responsavel_id not in ids:
         ids.append(responsaveis[0].id)
     owner_index = ids.index(tarefa.responsavel_id) if tarefa.responsavel_id in ids else 0
-    with st.popover("✎", help="Editar tarefa"):
+    with st.popover("✎", help="Editar ou excluir tarefa"):
         with st.form(f"task_edit_form_{tarefa.id}_{versao}"):
             titulo = st.text_input(
                 "Tarefa",
@@ -151,6 +140,29 @@ def _render_editar_tarefa(tarefa, responsaveis, perfil):
             finally:
                 db_edit.close()
 
+        st.divider()
+        confirmar = st.checkbox(
+            "Confirmar exclusão",
+            key=f"task_del_check_{tarefa.id}",
+        )
+        if st.button(
+            "🗑 Excluir tarefa",
+            key=f"task_del_btn_{tarefa.id}",
+            disabled=not confirmar,
+            use_container_width=True,
+        ):
+            db_del = SessionLocal()
+            try:
+                excluir_tarefa(db_del, perfil, tarefa.id)
+            except (ValueError, PermissionError) as erro:
+                st.error(str(erro))
+            else:
+                st.session_state.pop(f"task_del_check_{tarefa.id}", None)
+                st.toast("Tarefa excluída.")
+                st.rerun()
+            finally:
+                db_del.close()
+
 
 def _salvar_status_direto(tarefa_id):
     status = st.session_state.get(f"task_status_{tarefa_id}")
@@ -174,20 +186,30 @@ def render_task_board(db, perfil):
     tarefas = listar_tarefas(db)
     responsaveis = _responsaveis_disponiveis(db) if pode_editar else []
 
+    # Regras de cor do campo de status — um único bloco de CSS para todas as tarefas
+    regras_status = ""
+    if pode_editar:
+        for tarefa, _ in tarefas:
+            status_bg = _cor_fundo_status(tarefa.status)
+            regras_status += (
+                f".st-key-task_status_{tarefa.id} [data-baseweb='select'] > div:first-child,"
+                f".st-key-task_status_{tarefa.id} [data-baseweb='select'] > div:first-child > div"
+                f"{{background-color:{status_bg} !important;border-color:{status_bg} !important;"
+                f"border-radius:7px !important;}}"
+            )
+
     st.markdown(
-        """
+        f"""
         <style>
-        .task-board-heading { margin: 0.2rem 0 0.45rem; color: #684848; font-size: 1.2rem; font-weight: 650; }
-        .task-board-shell { background: #ffffff; border: 1px solid #eee5e2; border-radius: 12px; padding: 0.4rem 0.6rem; box-shadow: 0 2px 10px rgba(91, 64, 53, 0.06); }
-        .task-board-header { color: #8b6a6a; font-size: 0.82rem; font-weight: 650; padding: 0.25rem 0 0.45rem; }
-        .task-board-title { color: #4a3030; font-size: 0.88rem; font-weight: 550; overflow-wrap: anywhere; min-height: 2.25rem; display: flex; align-items: center; }
-        .task-board-owner { color: #674f4f; font-size: 0.84rem; overflow-wrap: anywhere; min-height: 2.25rem; display: flex; align-items: center; }
-        .task-board-status { min-height: 2.25rem; display: flex; align-items: center; }
-        .task-board-status [data-baseweb="select"] { font-size: 0.88rem !important; font-weight: 650 !important; }
-        .task-board-status [data-testid="stMarkdownContainer"] { width: 100%; }
-        .task-board-status .stSelectbox { width: 100%; }
-        .task-board-row-separator { height: 1px; background: #eee5e2; margin: 0.2rem 0; }
-        .stPopover button, [data-testid="stPopover"] button { min-height: 2.25rem !important; }
+        .task-board-heading {{ margin: 0.2rem 0 0.45rem; color: #684848; font-size: 1.15rem; font-weight: 650; }}
+        .task-board-header {{ color: #8b6a6a; font-size: 0.8rem; font-weight: 650; padding: 0.25rem 0 0.4rem; }}
+        .task-board-title {{ color: #4a3030; font-size: 0.88rem; font-weight: 550; overflow-wrap: anywhere; min-height: 2.25rem; display: flex; align-items: center; }}
+        .task-board-owner {{ color: #674f4f; font-size: 0.84rem; overflow-wrap: anywhere; min-height: 2.25rem; display: flex; align-items: center; }}
+        .task-board-status {{ min-height: 2.25rem; display: flex; align-items: center; }}
+        .task-board-status [data-baseweb="select"] {{ font-size: 0.88rem !important; font-weight: 650 !important; }}
+        .task-board-status .stSelectbox {{ width: 100%; }}
+        .task-board-row-separator {{ height: 1px; background: #eee5e2; margin: 0.15rem 0; }}
+        {regras_status}
         </style>
         <div class="task-board-heading">Quadro de tarefas</div>
         """,
@@ -198,7 +220,7 @@ def render_task_board(db, perfil):
     for coluna, rotulo in zip(header, ("Tarefa", "", "Status", "Responsável")):
         coluna.markdown(f"<div class='task-board-header'>{rotulo}</div>", unsafe_allow_html=True)
 
-    with st.container(height=300, border=True):
+    with st.container(height=290, border=True):
         if not tarefas:
             st.caption("Nenhuma tarefa cadastrada.")
         for tarefa, responsavel_nome in tarefas:
@@ -207,21 +229,14 @@ def render_task_board(db, perfil):
                 gap="small",
                 vertical_alignment="center",
             )
+            col_tarefa.markdown(
+                f"<div class='task-board-title'>{html.escape(tarefa.titulo)}</div>",
+                unsafe_allow_html=True,
+            )
             if pode_editar and responsaveis:
-                col_tarefa.markdown(
-                    f"<div class='task-board-title'>{html.escape(tarefa.titulo)}</div>",
-                    unsafe_allow_html=True,
-                )
                 with col_editar:
                     _render_editar_tarefa(tarefa, responsaveis, perfil)
-            else:
-                col_tarefa.markdown(
-                    f"<div class='task-board-title'>{html.escape(tarefa.titulo)}</div>",
-                    unsafe_allow_html=True,
-                )
-            with col_status:
-                if pode_editar and responsaveis:
-                    status_bg = _cor_fundo_status(tarefa.status)
+                with col_status:
                     st.selectbox(
                         "Status",
                         STATUS_TAREFA,
@@ -231,26 +246,8 @@ def render_task_board(db, perfil):
                         on_change=_salvar_status_direto,
                         args=(tarefa.id,),
                     )
-                    # O componente BaseWeb usa um div interno para o campo.
-                    # Aplicamos a cor depois de renderizá-lo para funcionar
-                    # também nas versões do Streamlit usadas no servidor.
-                    st.markdown(
-                        f"""
-                        <style>
-                        .st-key-task_status_{tarefa.id} [data-testid="stSelectbox"] [data-baseweb="select"],
-                        .st-key-task_status_{tarefa.id} [data-testid="stSelectbox"] [data-baseweb="select"] > div {{
-                            background-color: {status_bg} !important;
-                            border-color: {status_bg} !important;
-                            border-radius: 7px !important;
-                        }}
-                        .st-key-task_status_{tarefa.id} [data-testid="stSelectbox"] [data-baseweb="select"] * {{
-                            font-weight: 650 !important;
-                        }}
-                        </style>
-                        """,
-                        unsafe_allow_html=True,
-                    )
-                else:
+            else:
+                with col_status:
                     st.markdown(
                         f"<div class='task-board-status'>{_badge_status(tarefa.status)}</div>",
                         unsafe_allow_html=True,
@@ -262,10 +259,5 @@ def render_task_board(db, perfil):
             st.markdown("<div class='task-board-row-separator'></div>", unsafe_allow_html=True)
 
     if pode_editar:
-        colunas_botao = st.columns([1, 1, 1])
-        with colunas_botao[1]:
-            if st.button("NOVA TAREFA", key="task_open_create", help="Cadastrar nova tarefa", use_container_width=True, type="primary"):
-                st.session_state["task_dialog_open"] = True
-                st.rerun()
-        if st.session_state.get("task_dialog_open"):
-            _dialog_nova_tarefa()
+        with st.popover("NOVA TAREFA", use_container_width=True):
+            _form_nova_tarefa(perfil)

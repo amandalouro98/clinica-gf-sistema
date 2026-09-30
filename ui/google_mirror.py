@@ -170,30 +170,41 @@ def _carregar_blocos(db, data):
 
 
 def _distribuir_sobrepostos(blocos):
-    """Divide blocos simultâneos em sub-colunas lado a lado.
+    """Divide blocos simultâneos em faixas lado a lado.
 
     Dois agendamentos no mesmo horário e profissional eram renderizados
     um exatamente sobre o outro (mesmo top/left) e o segundo ficava
-    invisível. Agora cada bloco do grupo ganha col_idx/col_total e a
-    grade os exibe lado a lado, como o Google Calendar.
+    invisível. Cada bloco ganha col_idx/col_total; blocos que NÃO se
+    sobrepõem dentro do mesmo grupo reutilizam a mesma faixa (coloração
+    de intervalos), então só agendamentos realmente simultâneos ficam
+    estreitos — como no Google Calendar.
     """
-    ordenados = sorted(blocos, key=lambda b: (b["ini"], b["ini"] + b["dur"]))
+    ordenados = sorted(blocos, key=lambda b: (b["ini"], b["ini"] + b["dur"], b["titulo"]))
     grupos = []
+    grupo_atual = []
+    fim_grupo = -1
     for b in ordenados:
-        fim_b = b["ini"] + b["dur"]
-        encaixou = None
-        for g in grupos:
-            if any(b["ini"] < (o["ini"] + o["dur"]) and fim_b > o["ini"] for o in g):
-                encaixou = g
-                break
-        if encaixou is not None:
-            encaixou.append(b)
-        else:
-            grupos.append([b])
+        if grupo_atual and b["ini"] >= fim_grupo:
+            grupos.append(grupo_atual)
+            grupo_atual = []
+        grupo_atual.append(b)
+        fim_grupo = max(fim_grupo, b["ini"] + b["dur"])
+    if grupo_atual:
+        grupos.append(grupo_atual)
     for g in grupos:
-        g.sort(key=lambda b: (b["ini"], b["titulo"]))
-        for idx, b in enumerate(g):
-            b["col_idx"], b["col_total"] = idx, len(g)
+        faixas = []  # fim do último bloco de cada faixa
+        for b in g:
+            fim_b = b["ini"] + b["dur"]
+            for i, fim_faixa in enumerate(faixas):
+                if fim_faixa <= b["ini"]:
+                    faixas[i] = fim_b
+                    b["col_idx"] = i
+                    break
+            else:
+                b["col_idx"] = len(faixas)
+                faixas.append(fim_b)
+        for b in g:
+            b["col_total"] = len(faixas)
     return blocos
 
 
