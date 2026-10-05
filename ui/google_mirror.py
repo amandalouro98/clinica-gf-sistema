@@ -276,6 +276,25 @@ def _html_grade(db, data, blocos, cores):
                 )
             else:
                 pos_style = "left:2px;right:2px;"
+            # Legibilidade: o texto quebra em varias linhas conforme a altura
+            # do bloco, em vez de cortar com "...". Quanto maior o
+            # agendamento, mais linhas do nome/procedimento aparecem.
+            dur = b["dur"]
+            if dur >= 90:
+                clamp, mostra_hora = 5, True
+            elif dur >= 60:
+                clamp, mostra_hora = 4, True
+            elif dur >= 45:
+                clamp, mostra_hora = 3, True
+            elif dur >= 30:
+                clamp, mostra_hora = 2, False
+            else:
+                clamp, mostra_hora = 1, False
+            hora_html = (
+                f'<div style="font-size:10px;opacity:.9;line-height:1.2;">{b["hora"]}</div>'
+                if mostra_hora
+                else ""
+            )
             blocos_html.append(
                 f'<div title="{b["dica"]} — clique para editar" '
                 f'onclick="event.stopPropagation();acionar(\'agx-esp-{b["ag_id"]}\')" '
@@ -285,9 +304,11 @@ def _html_grade(db, data, blocos, cores):
                 f'box-sizing:border-box;border-radius:6px;'
                 'padding:3px 5px;overflow:hidden;color:#fff;z-index:3;'
                 'box-shadow:0 1px 2px rgba(0,0,0,.25);cursor:pointer;">'
-                f'<div style="font-size:11px;font-weight:600;line-height:1.2;'
-                f'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{b["titulo"]}</div>'
-                f'<div style="font-size:10px;opacity:.9;">{b["hora"]}</div>'
+                f'<div style="font-size:11.5px;font-weight:600;line-height:1.25;'
+                f'white-space:normal;overflow-wrap:anywhere;overflow:hidden;'
+                f'display:-webkit-box;-webkit-line-clamp:{clamp};'
+                f'-webkit-box-orient:vertical;">{b["titulo"]}</div>'
+                f'{hora_html}'
                 '</div>'
             )
         html_cols.append(
