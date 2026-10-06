@@ -224,10 +224,33 @@ def _html_grade(db, data, blocos, cores):
     if not colunas:
         return ""
 
-    blocos_por_col = {c[0]: [] for c in colunas}
+    tipo_por_cal = {c[0]: c[3] for c in colunas}
+    gabi_ids = {
+        c[0] for c in colunas
+        if c[3] == "prof" and "gabriela franco" in c[1].strip().lower()
+    }
+    if not gabi_ids:
+        primeira_prof = next((c for c in colunas if c[3] == "prof"), None)
+        if primeira_prof:
+            gabi_ids = {primeira_prof[0]}
+
+    # Coluna da esquerda: agenda da Gabriela Franco.
+    # Coluna da direita: todo o resto (outras profissionais e salas),
+    # empilhado na mesma coluna — sem duplicar quem já aparece à esquerda
+    # e sem repetir o mesmo agendamento (link prof + sala vindo do Google).
+    ids_esq = {b["ag_id"] for b in blocos if b["cal_id"] in gabi_ids}
+    esq_blocos = [b for b in blocos if b["cal_id"] in gabi_ids]
+    dir_por_ag = {}
     for b in blocos:
-        if b["cal_id"] in blocos_por_col:
-            blocos_por_col[b["cal_id"]].append(b)
+        if b["cal_id"] in gabi_ids or b["ag_id"] in ids_esq:
+            continue
+        atual = dir_por_ag.get(b["ag_id"])
+        if atual is None or (
+            tipo_por_cal.get(b["cal_id"]) == "prof"
+            and tipo_por_cal.get(atual["cal_id"]) != "prof"
+        ):
+            dir_por_ag[b["ag_id"]] = b
+    dir_blocos = sorted(dir_por_ag.values(), key=lambda b: (b["ini"], b["titulo"]))
 
     # linha do horário atual
     agora = datetime.now(BR_TZ)
@@ -257,9 +280,8 @@ def _html_grade(db, data, blocos, cores):
         )
 
     total = (HORA_FIM - HORA_INI) * 60
-    html_cols = []
-    for cal_id, nome, cor, _tipo in colunas:
-        blocos_col = blocos_por_col.get(cal_id, [])
+
+    def _coluna_html(blocos_col):
         _distribuir_sobrepostos(blocos_col)
         blocos_html = []
         for b in blocos_col:
@@ -300,7 +322,7 @@ def _html_grade(db, data, blocos, cores):
                 f'onclick="event.stopPropagation();acionar(\'agx-esp-{b["ag_id"]}\')" '
                 f'style="position:absolute;'
                 f'top:calc({top_pct:.3f}% + 1px);height:calc({alt_pct:.3f}% - 2px);'
-                f'{pos_style}background:{cor};border:1.5px solid #fff;'
+                f'{pos_style}background:{b["cor"]};border:1.5px solid #fff;'
                 f'box-sizing:border-box;border-radius:6px;'
                 'padding:3px 5px;overflow:hidden;color:#fff;z-index:3;'
                 'box-shadow:0 1px 2px rgba(0,0,0,.25);cursor:pointer;">'
@@ -311,27 +333,35 @@ def _html_grade(db, data, blocos, cores):
                 f'{hora_html}'
                 '</div>'
             )
-        html_cols.append(
-            f'<div onclick="clicouFundo(event)" '
-            f'title="Clique para criar um agendamento neste horário" '
-            f'style="flex:1;min-width:130px;position:relative;'
-            f'border-left:1px solid #eee;cursor:copy;">{linha_agora}{"".join(blocos_html)}</div>'
-        )
+        return "".join(blocos_html)
 
-    cabecalhos = "".join(
-        f'<div style="flex:1;min-width:130px;padding:6px 4px;text-align:center;">'
+    col_esq = (
+        '<div onclick="clicouFundo(event)" '
+        'title="Clique para criar um agendamento neste horário" '
+        'style="flex:1;min-width:220px;position:relative;'
+        f'border-left:1px solid #eee;cursor:copy;">{linha_agora}{_coluna_html(esq_blocos)}</div>'
+    )
+    col_dir = (
+        '<div onclick="clicouFundo(event)" '
+        'title="Clique para criar um agendamento neste horário" '
+        'style="flex:1;min-width:220px;position:relative;'
+        f'border-left:1px solid #eee;cursor:copy;">{linha_agora}{_coluna_html(dir_blocos)}</div>'
+    )
+
+    # Legenda de cores (profissionais e salas) — substitui os nomes no topo
+    legenda = "".join(
+        f'<span style="display:inline-flex;align-items:center;margin:2px 14px 2px 0;">'
         f'<span style="display:inline-block;width:10px;height:10px;'
         f'border-radius:50%;background:{cor};margin-right:5px;"></span>'
         f'<span style="font-size:12px;font-weight:600;color:#5a4038;">{html.escape(nome)}</span>'
-        f'</div>'
+        '</span>'
         for _cal, nome, cor, _t in colunas
     )
 
     return f"""<div class="gf-view-desktop">
 <div style="border:1px solid #f0d5ce;border-radius:12px;overflow:hidden;background:#fff;">
-    <div style="display:flex;border-bottom:1px solid #f0d5ce;background:#fdf6f4;">
-        <div style="width:52px;flex:none;"></div>{cabecalhos}
-    </div>
+    <div style="padding:5px 10px;border-bottom:1px solid #f0d5ce;background:#fdf6f4;
+        display:flex;flex-wrap:wrap;">{legenda}</div>
     <div style="overflow-x:auto;">
         <div style="display:flex;min-width:100%;">
             <div style="width:52px;flex:none;position:relative;height:{altura}px;
@@ -339,7 +369,7 @@ def _html_grade(db, data, blocos, cores):
             <div style="flex:1;position:relative;height:{altura}px;">
                 <div style="position:absolute;inset:0;z-index:1;">{"".join(marcas)}</div>
                 <div style="display:flex;position:absolute;inset:0;z-index:2;">
-                    {"".join(html_cols)}
+                    {col_esq}{col_dir}
                 </div>
             </div>
         </div>
