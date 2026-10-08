@@ -131,32 +131,56 @@ def main():
             print("Pulado (--rapido).")
             orfaos_google = []
         else:
-            orfaos_google = []
+            # Verificação paralela (só HTTP, sem tocar no banco): ~1500 GETs
+            # sequenciais levavam >10 min e a conexão SSH caía no meio.
+            from concurrent.futures import ThreadPoolExecutor
+
             total = len(links)
-            for i, l in enumerate(links, 1):
-                if i % 100 == 0:
-                    print(f"  ... verificando {i}/{total}", flush=True)
+            orfaos_google = []
+            avisos = []
+
+            def _verificar(l):
                 try:
                     g._api_get(
                         access,
                         f"/calendars/{g._cal_path(l.calendar_id)}/events/"
                         f"{g.quote(l.event_id, safe='')}",
                     )
+                    return None
                 except g._EventoNaoEncontrado:
-                    orfaos_google.append(l)
+                    return l
                 except Exception as ex:
-                    print(f"  [aviso] falha ao verificar evento "
-                          f"{l.event_id[:12]}: {ex}")
+                    avisos.append(f"  [aviso] falha ao verificar evento "
+                                  f"{l.event_id[:12]}: {ex}")
+                    return None
+
+            verificados = 0
+            with ThreadPoolExecutor(max_workers=10) as ex:
+                for resultado in ex.map(_verificar, links):
+                    verificados += 1
+                    if verificados % 200 == 0:
+                        print(f"  ... verificados {verificados}/{total}", flush=True)
+                    if resultado is not None:
+                        orfaos_google.append(resultado)
+            for aviso in avisos:
+                print(aviso)
             if not orfaos_google:
                 print("Nenhum órfão: todos os vínculos existem no Google.")
-            for l in orfaos_google:
-                ag = db.get(ScheduledAppointment, l.agendamento_id)
-                desc = (
-                    f"{ag.cliente_nome} em {_fmt_data(ag.data)} {ag.hora_inicio}"
-                    if ag else f"agendamento_id={l.agendamento_id} (inexistente)"
-                )
-                print(f"  {desc} | cal={l.calendar_id.split('@')[0]} | "
-                      f"evento={l.event_id[:14]}...")
+            else:
+                def _chave(l):
+                    ag = db.get(ScheduledAppointment, l.agendamento_id)
+                    if ag is None:
+                        return (datetime.max.date(), "99:99", l.id)
+                    return (ag.data, ag.hora_inicio or "", l.id)
+
+                for l in sorted(orfaos_google, key=_chave):
+                    ag = db.get(ScheduledAppointment, l.agendamento_id)
+                    desc = (
+                        f"{ag.cliente_nome} em {_fmt_data(ag.data)} {ag.hora_inicio}"
+                        if ag else f"agendamento_id={l.agendamento_id} (inexistente)"
+                    )
+                    print(f"  {desc} | cal={l.calendar_id.split('@')[0]} | "
+                          f"evento={l.event_id[:14]}...")
 
         # ── 4) eventos no Google sem agendamento no sistema ───────────────
         bloco("4) EVENTOS NO GOOGLE SEM AGENDAMENTO NO SISTEMA")
