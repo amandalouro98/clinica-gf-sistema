@@ -2119,20 +2119,20 @@ def tela_agenda():
                         .all()
                     )
                     if _sync_logs:
-                        with st.expander("📋 Últimas operações da sincronização", expanded=False):
-                            for _lg in _sync_logs:
-                                _icone = {
-                                    "criado": "➕", "atualizado": "✏️",
-                                    "excluido": "🗑", "erro": "⚠️",
-                                }.get(_lg.operacao, "ℹ️")
-                                _quando = (
-                                    _lg.criado_em.strftime("%d/%m %H:%M")
-                                    if _lg.criado_em else ""
-                                )
-                                _linha = f"{_icone} {_lg.direcao} · {_lg.operacao} · {_quando}"
-                                if _lg.detalhe:
-                                    _linha += f" — {str(_lg.detalhe)[:140]}"
-                                st.caption(_linha)
+                        st.markdown("**📋 Últimas operações da sincronização**")
+                        for _lg in _sync_logs:
+                            _icone = {
+                                "criado": "➕", "atualizado": "✏️",
+                                "excluido": "🗑", "erro": "⚠️",
+                            }.get(_lg.operacao, "ℹ️")
+                            _quando = (
+                                _lg.criado_em.strftime("%d/%m %H:%M")
+                                if _lg.criado_em else ""
+                            )
+                            _linha = f"{_icone} {_lg.direcao} · {_lg.operacao} · {_quando}"
+                            if _lg.detalhe:
+                                _linha += f" — {str(_lg.detalhe)[:140]}"
+                            st.caption(_linha)
 
         render_task_board(db, _perfil_gc)
 
