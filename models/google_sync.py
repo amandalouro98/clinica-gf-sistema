@@ -42,3 +42,21 @@ class GoogleSyncState(Base):
     calendar_id = Column(String, nullable=False, unique=True, index=True)
     sync_token = Column(Text, nullable=True)
     ultimo_sync = Column(DateTime(timezone=True), nullable=True)
+
+
+class GoogleSyncLog(Base):
+    """Auditoria de tudo que a sincronização faz (entrada e saída).
+
+    Cada operação de espelhamento — criação, atualização, exclusão ou erro,
+    nas duas direções — fica registrada aqui para rastreabilidade.
+    """
+    __tablename__ = "google_sync_log"
+
+    id = Column(Integer, primary_key=True, index=True)
+    direcao = Column(String, nullable=False)        # "entrada" (Google->sistema) / "saida" (sistema->Google)
+    operacao = Column(String, nullable=False)       # "criado" / "atualizado" / "excluido" / "erro" / "info"
+    calendar_id = Column(String, nullable=True, index=True)
+    event_id = Column(String, nullable=True)
+    agendamento_id = Column(Integer, nullable=True, index=True)
+    detalhe = Column(Text, nullable=True)
+    criado_em = Column(DateTime(timezone=True), server_default=func.now(), index=True)

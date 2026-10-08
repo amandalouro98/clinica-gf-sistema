@@ -15,6 +15,8 @@ O evento no Google guarda o mesmo conteúdo do quadradinho da agenda:
 import os
 import json
 import hashlib
+import re
+import threading
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone, date, time as dtime
 from urllib.parse import urlencode, quote
@@ -44,6 +46,33 @@ class _EventoNaoEncontrado(Exception):
     """Evento/calendário não encontrado no Google (404)."""
     def __init__(self, msg="não encontrado no Google (404)"):
         super().__init__(msg)
+
+
+# Trava global: impede que duas sessões sincronizem ao mesmo tempo
+# (duas corridas paralelas importavam o mesmo evento duas vezes).
+_SYNC_LOCK = threading.Lock()
+
+# Separador aceito entre nome e procedimento no título do evento:
+# o sistema grava " — ", mas eventos antigos/manuais usam " - " ou " – ".
+_SEP_TITULO = re.compile(r"\s+[—–-]\s+")
+
+
+def _log_sync(db, direcao, operacao, calendar_id=None, event_id=None,
+              agendamento_id=None, detalhe=None):
+    """Registra a operação de espelhamento na auditoria.
+
+    Nunca interrompe a sincronização: qualquer falha ao gravar o log
+    é ignorada de propósito.
+    """
+    try:
+        from models.google_sync import GoogleSyncLog
+        db.add(GoogleSyncLog(
+            direcao=direcao, operacao=operacao,
+            calendar_id=calendar_id, event_id=event_id,
+            agendamento_id=agendamento_id, detalhe=detalhe,
+        ))
+    except Exception:
+        pass
 
 
 # ────────────────────────── credenciais do app ──────────────────────────
@@ -415,12 +444,17 @@ def _corpo_evento(ag):
     fim = datetime.combine(ag.data, _parse_hora(ag.hora_fim), tzinfo=BR_TZ)
     if fim <= ini:
         fim = fim + timedelta(days=1)
-    return {
+    corpo = {
         "summary": titulo,
         "description": ag.observacoes or "",
         "start": {"dateTime": ini.isoformat(), "timeZone": "America/Sao_Paulo"},
         "end": {"dateTime": fim.isoformat(), "timeZone": "America/Sao_Paulo"},
     }
+    if ag.id is not None:
+        # Vínculo durável: o pull casa por este ID antes de tentar o nome,
+        # então regravação de título não gera mais duplicado.
+        corpo["extendedProperties"] = {"private": {"gf_ag_id": str(ag.id)}}
+    return corpo
 
 
 def _parse_evento(ev):
@@ -451,8 +485,9 @@ def _parse_evento(ev):
         conf = True
         titulo = titulo[:-1].strip()
     nome, proc = titulo, None
-    if " — " in nome:
-        nome, proc = [p.strip() for p in nome.split(" — ", 1)]
+    partes = _SEP_TITULO.split(titulo, maxsplit=1)
+    if len(partes) == 2:
+        nome, proc = partes[0].strip(), partes[1].strip()
     return (
         dt.date(), dt.strftime("%H:%M"), dtf.strftime("%H:%M"), dur,
         nome, proc, (ev.get("description") or "").strip(), pre, conf,
@@ -507,6 +542,17 @@ def _aplicar_evento(db, cal_id, tipo_cal, nome_cal, ev, stats):
     )
     ag = db.get(ScheduledAppointment, link.agendamento_id) if link else None
 
+    # Vínculo durável gravado no próprio evento (criado pelo sistema):
+    # casa pelo ID antes de tentar adivinhar pelo nome do título.
+    if ag is None:
+        priv = (ev.get("extendedProperties") or {}).get("private") or {}
+        gid = priv.get("gf_ag_id")
+        if gid:
+            try:
+                ag = db.get(ScheduledAppointment, int(gid))
+            except (TypeError, ValueError):
+                ag = None
+
     # Evento que já existia no Google: casa com agendamento equivalente
     # (mesma data/hora e mesmo nome) para não duplicar.
     if not ag:
@@ -528,7 +574,10 @@ def _aplicar_evento(db, cal_id, tipo_cal, nome_cal, ev, stats):
         ag.hora_inicio = hora_ini
         ag.hora_fim = hora_fim
         ag.duracao_min = dur
-        if not reserva:
+        # O calendário da profissional é a fonte do nome/procedimento —
+        # o da sala só confirma a sala, para um título diferente não
+        # sobrescrever os dados do paciente.
+        if not reserva and tipo_cal == "profissional":
             ag.cliente_nome = nome
             ag.procedimento = proc
         if obs:
@@ -576,6 +625,17 @@ def _aplicar_evento(db, cal_id, tipo_cal, nome_cal, ev, stats):
 
 
 def _aplicar_cancelamento(db, access, cal_id, ev, stats):
+    """Aplica um evento cancelado que veio do Google.
+
+    Segurança: o agendamento (e os espelhos nos outros calendários) só são
+    apagados quando o evento não existe mais em NENHUM calendário — verificado
+    via GET. Um cancelamento em um calendário só (ex.: série de recorrência
+    editada, que o Google devolve como "apagar antigo + criar novo") remove
+    apenas o vínculo daquele calendário e preserva todo o resto.
+    Em caso de dúvida (falha de rede/permissão na verificação), NADA é
+    apagado: levanta erro para o sync_token não avançar e a próxima
+    sincronização retentar.
+    """
     from models.schedule import ScheduledAppointment
     from models.google_sync import GoogleEvento
 
@@ -587,26 +647,45 @@ def _aplicar_cancelamento(db, access, cal_id, ev, stats):
     if not link:
         return  # já foi reciclado (ex.: recorrência editada no Google)
     ag = db.get(ScheduledAppointment, link.agendamento_id)
+    ag_id = link.agendamento_id
+    evento_id = ev.get("id")
     db.delete(link)
+    db.flush()
     if ag is None:
+        _log_sync(db, "entrada", "excluido", cal_id, evento_id, ag_id,
+                  "vínculo órfão removido (agendamento já não existia)")
         db.commit()
         return
-    # Apaga também o espelho no outro calendário (profissional <-> sala)
-    for outro in (
-        db.query(GoogleEvento)
-        .filter(
-            GoogleEvento.agendamento_id == ag.id,
-            GoogleEvento.id != link.id,
-        )
-        .all()
-    ):
+
+    # Verifica se o evento ainda existe nos OUTROS calendários vinculados.
+    outros = db.query(GoogleEvento).filter(GoogleEvento.agendamento_id == ag.id).all()
+    espelho_vivo = False
+    for outro in outros:
         try:
-            _api_delete(access, outro.calendar_id, outro.event_id)
-        except (_EventoNaoEncontrado, RuntimeError):
-            pass
-        db.delete(outro)
+            _api_get(
+                access,
+                f"/calendars/{_cal_path(outro.calendar_id)}/events/"
+                f"{quote(outro.event_id, safe='')}",
+            )
+            espelho_vivo = True
+            break
+        except _EventoNaoEncontrado:
+            # o espelho realmente não existe mais no Google: limpa o vínculo
+            db.delete(outro)
+        # qualquer outro erro (rede/permissão) propaga -> erro registrado
+        # no stats -> sync_token não avança -> a exclusão é retentada depois
+
+    if espelho_vivo:
+        # Removido apenas deste calendário: preserva agendamento e espelhos.
+        _log_sync(db, "entrada", "excluido", cal_id, evento_id, ag.id,
+                  "removido apenas deste calendário — agendamento e espelhos preservados")
+        db.commit()
+        return
+
     db.delete(ag)
     stats["excluidos"] += 1
+    _log_sync(db, "entrada", "excluido", cal_id, evento_id, ag_id,
+              "evento removido em todos os calendários — agendamento excluído")
     db.commit()
 
 
@@ -622,8 +701,17 @@ def _pull_calendario(db, access, cal_id, tipo_cal, nome_cal, stats):
 
 
 def _aplicar_eventos_calendario(db, access, cal_id, tipo_cal, nome_cal, eventos, novo_token, stats):
-    """Grava no banco os eventos baixados de UM calendário (fase sequencial)."""
+    """Grava no banco os eventos baixados de UM calendário (fase sequencial).
+
+    O sync_token SÓ avança se TODOS os eventos foram aplicados com sucesso.
+    Com qualquer erro, o token antigo é mantido e a próxima sincronização
+    baixa e retenta os mesmos eventos — antes disso, uma exclusão que
+    falhasse era perdida para sempre (o token já tinha avançado).
+    """
     from models.google_sync import GoogleSyncState
+    from sqlalchemy.exc import SQLAlchemyError
+
+    erros_antes = len(stats["erros"])
 
     # 1) cria/atualiza; 2) cancelamentos por último (a recorrência editada no
     #    Google chega como "apague o evento antigo + crie o novo" — nessa ordem
@@ -635,18 +723,29 @@ def _aplicar_eventos_calendario(db, access, cal_id, tipo_cal, nome_cal, eventos,
                 _aplicar_evento(db, cal_id, tipo_cal, nome_cal, ev, stats)
             except Exception as ex:
                 stats["erros"].append(f"{nome_cal}: {ex}")
+                if isinstance(ex, SQLAlchemyError):
+                    db.rollback()  # libera a sessão para os próximos eventos
+                _log_sync(db, "entrada", "erro", cal_id, ev.get("id"), None,
+                          f"{type(ex).__name__}: {ex}")
     db.commit()
     for ev in cancelados:
         try:
             _aplicar_cancelamento(db, access, cal_id, ev, stats)
         except Exception as ex:
             stats["erros"].append(f"{nome_cal}: {ex}")
+            if isinstance(ex, SQLAlchemyError):
+                db.rollback()
+            _log_sync(db, "entrada", "erro", cal_id, ev.get("id"), None,
+                      f"{type(ex).__name__}: {ex}")
 
     state = db.query(GoogleSyncState).filter_by(calendar_id=cal_id).first()
     if state is None:
         state = GoogleSyncState(calendar_id=cal_id)
         db.add(state)
-    state.sync_token = novo_token
+    if len(stats["erros"]) == erros_antes:
+        state.sync_token = novo_token
+    # Houve erro ao aplicar: o token antigo é mantido e tudo é retentado
+    # na próxima sincronização.
     state.ultimo_sync = datetime.now(BR_TZ)
     db.commit()
 
@@ -681,6 +780,9 @@ def _push(db, access, stats):
                 stats["erros"].append(f"apagar espelho: {ex}")
                 continue
             db.delete(l)
+            _log_sync(db, "saida", "excluido", l.calendar_id, l.event_id,
+                      l.agendamento_id,
+                      "agendamento inexistente no sistema — espelho removido do Google")
     db.commit()
 
     # 2) cada agendamento da janela.
@@ -709,6 +811,8 @@ def _push(db, access, stats):
                     stats["erros"].append(f"remover de calendário antigo: {ex}")
                     continue
                 db.delete(l)
+                _log_sync(db, "saida", "excluido", cal_id, l.event_id, ag.id,
+                          "mudou de profissional/sala — removido do calendário antigo")
 
         for cal_id in desejados:
             l = atuais.get(cal_id)
@@ -722,8 +826,12 @@ def _push(db, access, stats):
                         hash_conteudo=hash_atual,
                     ))
                     stats["enviados"] += 1
+                    _log_sync(db, "saida", "criado", cal_id, ev.get("id"), ag.id,
+                              f"evento criado no Google ({ag.cliente_nome})")
                 except Exception as ex:
                     stats["erros"].append(f"enviar para o Google: {ex}")
+                    _log_sync(db, "saida", "erro", cal_id, None, ag.id,
+                              f"enviar para o Google: {type(ex).__name__}: {ex}")
             elif l.hash_conteudo != hash_atual:
                 try:
                     try:
@@ -733,8 +841,12 @@ def _push(db, access, stats):
                         l.event_id = ev.get("id")
                     l.hash_conteudo = hash_atual
                     stats["enviados"] += 1
+                    _log_sync(db, "saida", "atualizado", cal_id, l.event_id, ag.id,
+                              f"evento atualizado no Google ({ag.cliente_nome})")
                 except Exception as ex:
                     stats["erros"].append(f"atualizar no Google: {ex}")
+                    _log_sync(db, "saida", "erro", cal_id, l.event_id, ag.id,
+                              f"atualizar no Google: {type(ex).__name__}: {ex}")
         db.commit()
 
 
@@ -771,6 +883,15 @@ def sincronizar(db, forcar=False):
         return None
     if not forcar and _sync_recente(db):
         return None
+    if not _SYNC_LOCK.acquire(blocking=False):
+        return None  # outra sessão já está sincronizando neste momento
+    try:
+        return _sincronizar_ciclo(db)
+    finally:
+        _SYNC_LOCK.release()
+
+
+def _sincronizar_ciclo(db):
     access = _access_token(db)
     if not access:
         return {"erros": ["Não foi possível renovar o acesso ao Google — conecte novamente."]}
@@ -847,6 +968,11 @@ def enviar_agendamentos(db, ag_ids):
         return None
     if not configurado() or not conectado(db):
         return None
+    with _SYNC_LOCK:
+        return _enviar_agendamentos_impl(db, ag_ids)
+
+
+def _enviar_agendamentos_impl(db, ag_ids):
     access = _access_token(db)
     if not access:
         return {"erros": ["Sem acesso ao Google — reconecte."]}
@@ -880,10 +1006,14 @@ def enviar_agendamentos(db, ag_ids):
                     event_id=ev.get("id"),
                     hash_conteudo=_hash_ag(ag),
                 ))
+                _log_sync(db, "saida", "criado", cal_id, ev.get("id"), ag_id,
+                          f"evento criado no Google ({ag.cliente_nome})")
                 db.commit()
             except Exception as ex:
                 db.rollback()
                 erros.append(str(ex))
+                _log_sync(db, "saida", "erro", cal_id, None, ag_id,
+                          f"{type(ex).__name__}: {ex}")
     return {"erros": erros} if erros else None
 
 
@@ -896,6 +1026,11 @@ def sincronizar_agendamento(db, ag):
     """
     if ag is None or not configurado() or not conectado(db):
         return
+    with _SYNC_LOCK:
+        _sincronizar_agendamento_impl(db, ag)
+
+
+def _sincronizar_agendamento_impl(db, ag):
     access = _access_token(db)
     if not access:
         return
@@ -954,6 +1089,11 @@ def excluir_agendamento(db, ag):
     """
     if ag is None:
         return
+    with _SYNC_LOCK:
+        _excluir_agendamento_impl(db, ag)
+
+
+def _excluir_agendamento_impl(db, ag):
     from models.google_sync import GoogleEvento
     links = db.query(GoogleEvento).filter_by(agendamento_id=ag.id).all()
     if not links:
@@ -964,6 +1104,8 @@ def excluir_agendamento(db, ag):
             for l in links:
                 try:
                     _api_delete(access, l.calendar_id, l.event_id)
+                    _log_sync(db, "saida", "excluido", l.calendar_id, l.event_id,
+                              ag.id, f"agendamento excluído no sistema ({ag.cliente_nome})")
                 except Exception:
                     pass  # não bloqueia a exclusão local
     for l in links:
